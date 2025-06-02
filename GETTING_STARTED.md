@@ -9,9 +9,9 @@ Welcome to your new Geoforge repository! Here's how to get started:
    cd C:\Users\tlhan\Downloads\geoforge
    ```
 
-2. **Run the main example:**
+2. **Run with full export features:**
    ```bash
-   cargo run
+   cargo run --features export-full
    ```
 
 3. **Run the simple example:**
@@ -23,6 +23,23 @@ Welcome to your new Geoforge repository! Here's how to get started:
    ```bash
    cargo test
    ```
+
+## 📁 Output Organization
+
+All generated files are organized in the `outputs/` directory:
+
+```
+outputs/
+├── random_world.bin           # Different every run
+├── random_world.png
+├── random_world.tiff
+├── reproducible_world.bin      # Always same (seed 42)
+├── reproducible_world.png
+├── reproducible_world.tiff
+├── voronoi_method.bin          # Algorithm comparison
+├── region_growing_method.bin
+└── detailed_world.*            # High resolution
+```
 
 ## 📁 Project Structure
 
@@ -62,11 +79,24 @@ cargo doc --open
 
 ## 📊 Expected Output
 
-When you run `cargo run`, you should see:
+When you run `cargo run --features export-full`, you should see:
 - 4 different examples of tectonic plate generation
-- Performance comparisons between algorithms
+- Performance comparisons between algorithms  
 - Detailed world statistics
-- Export of binary data file
+- Export progress for each format
+- File organization summary
+
+## 🖼️ Viewing Results
+
+**Visual Validation:**
+- **🖼️ PNG files** - Open with any image viewer to see colored plate boundaries
+- **🗺️ TIFF files** - Import into QGIS, ArcGIS, or other GIS software
+- **📊 Binary files** - For programmatic processing (raw u16 data)
+
+**Recommended viewers:**
+- **Windows:** Photos app, Paint, or any image viewer for .png
+- **QGIS:** Free GIS software - perfect for .tiff files with coordinates
+- **Web browsers:** Can display .png files by dragging and dropping
 
 ## 🛠️ Next Steps
 

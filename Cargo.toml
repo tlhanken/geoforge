@@ -10,15 +10,15 @@ categories = ["game-development", "science", "simulation"]
 
 [dependencies]
 rand = "0.8"
+tiff = { version = "0.9", optional = true }
+image = { version = "0.24", optional = true }
 
 [features]
 default = ["tectonic"]
 tectonic = []
-parallel = ["rayon"]
-
-[dependencies.rayon]
-version = "1.7"
-optional = true
+export-tiff = ["tiff"]
+export-png = ["image"]
+export-full = ["export-tiff", "export-png"]
 
 [[bin]]
 name = "geoforge"

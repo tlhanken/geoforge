@@ -24,10 +24,12 @@
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use std::collections::{HashMap, VecDeque};
+use std::fs;
+use std::path::Path;
 
 // Constants
-const EARTH_RADIUS_KM: f64 = 6371.0;
-const EARTH_SURFACE_AREA_KM2: u64 = 510_072_000;
+const PLANET_RADIUS_KM: f64 = 6371.0;
+const PLANET_SURFACE_AREA_KM2: f64 = 4.0 * std::f64::consts::PI * PLANET_RADIUS_KM * PLANET_RADIUS_KM;
 const MIN_SEED_DISTANCE: f64 = 100.0;
 const MAX_SEED_ATTEMPTS: usize = 10000;
 
@@ -131,61 +133,28 @@ impl TectonicPlateGenerator {
         90.0 - (y as f64 / self.height as f64) * 180.0
     }
 
-    /// Convert geographic coordinates to pixel coordinates (clamped to bounds)
-    fn lon_to_x(&self, lon: f64) -> usize {
-        let x = ((lon + 180.0) / 360.0) * self.width as f64;
-        (x as usize).min(self.width - 1)
-    }
-
-    fn lat_to_y(&self, lat: f64) -> usize {
-        let y = ((90.0 - lat) / 180.0) * self.height as f64;
-        (y as usize).min(self.height - 1)
-    }
-
     /// Fast approximation of spherical distance for small distances
     /// More accurate than euclidean, much faster than full haversine
     fn fast_spherical_distance(&self, lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
         // Handle longitude wraparound
-        let mut d_lon = lon2 - lon1;
+        let mut d_lon = (lon2 - lon1).abs();
         if d_lon > 180.0 {
-            d_lon -= 360.0;
-        } else if d_lon < -180.0 {
-            d_lon += 360.0;
+            d_lon = 360.0 - d_lon;
         }
 
         let d_lat = lat2 - lat1;
         let lat_avg = (lat1 + lat2) * 0.5;
-        
-        // Approximate distance using lat/lon differences with latitude correction
-        let lat_factor = lat_avg.to_radians().cos();
-        let dx = d_lon * lat_factor;
-        let dy = d_lat;
-        
-        // Convert to km (rough approximation: 1 degree ≈ 111 km)
-        (dx * dx + dy * dy).sqrt() * 111.32
-    }
 
-    /// Full haversine distance calculation (more accurate but slower)
-    fn spherical_distance(&self, lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
-        // Handle longitude wraparound
-        let mut d_lon = lon2 - lon1;
-        if d_lon > 180.0 {
-            d_lon -= 360.0;
-        } else if d_lon < -180.0 {
-            d_lon += 360.0;
-        }
+        // Convert degree differences to radians
+        let d_lon_rad = d_lon.to_radians();
+        let d_lat_rad = d_lat.to_radians();
+        let lat_avg_rad = lat_avg.to_radians();
 
-        let d_lat = (lat2 - lat1).to_radians();
-        let d_lon = d_lon.to_radians();
-        let lat1_rad = lat1.to_radians();
-        let lat2_rad = lat2.to_radians();
-
-        let a = (d_lat * 0.5).sin().powi(2) + 
-                lat1_rad.cos() * lat2_rad.cos() * (d_lon * 0.5).sin().powi(2);
-        let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
-        
-        EARTH_RADIUS_KM * c
-    }
+        // Approximate distance using equirectangular projection
+        let x = d_lon_rad * lat_avg_rad.cos();
+        let y = d_lat_rad;
+        (x * x + y * y).sqrt() * PLANET_RADIUS_KM
+}
 
     /// Check if a point is too close to existing seeds
     fn too_close_to_existing_seed(&self, x: usize, y: usize) -> bool {
@@ -449,7 +418,7 @@ impl TectonicPlateGenerator {
         }
 
         let total_pixels = self.width * self.height;
-        let km_per_pixel = EARTH_SURFACE_AREA_KM2 as f64 / total_pixels as f64;
+        let km_per_pixel = PLANET_SURFACE_AREA_KM2 as f64 / total_pixels as f64;
 
         // Generate statistics
         let mut stats = HashMap::new();
@@ -481,6 +450,22 @@ impl TectonicPlateGenerator {
             .iter()
             .flat_map(|&value| value.to_le_bytes())
             .collect()
+    }
+
+    /// Export raw binary data to file
+    pub fn export_binary(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        fs::create_dir_all(output_dir)?;
+        let path = Path::new(output_dir).join(filename);
+        let raw_bytes = self.export_raw_u16_le();
+        fs::write(path, raw_bytes)?;
+        Ok(())
+    }
+
+    /// Export all available formats
+    pub fn export_all(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        fs::create_dir_all(output_dir)?;
+        self.export_binary(output_dir, &format!("{}.bin", base_name))?;
+        Ok(())
     }
 
     /// Get GeoTIFF geotransform parameters
@@ -540,34 +525,45 @@ mod tests {
     }
 
     #[test]
-    fn test_coordinate_conversion_bounds() {
+    fn test_coordinate_conversion() {
         let generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
 
-        // Test boundary conditions
-        assert_eq!(generator.lon_to_x(-180.0), 0);
-        assert_eq!(generator.lon_to_x(180.0), 1799); // Should be clamped
-        assert_eq!(generator.lat_to_y(90.0), 0);
-        assert_eq!(generator.lat_to_y(-90.0), 899); // Should be clamped
+        // Test coordinate conversion
+        assert_eq!(generator.x_to_lon(0), -180.0);
+        assert_eq!(generator.x_to_lon(1800), 180.0);
+        assert_eq!(generator.y_to_lat(0), 90.0);
+        assert_eq!(generator.y_to_lat(900), -90.0);
     }
 
     #[test]
     fn test_distance_calculations() {
-        let generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
+        let generator = TectonicPlateGenerator::new(3600, 1800, 5).unwrap();
 
-        // Test known distances
-        let dist = generator.spherical_distance(0.0, 0.0, 1.0, 0.0);
-        assert!((dist - 111.32).abs() < 1.0);
+        // 1 degree latitude at any longitude
+        let expected_lat = std::f64::consts::PI * PLANET_RADIUS_KM / 180.0; // ≈ 111.19 km
+        let dist_lat = generator.fast_spherical_distance(0.0, 0.0, 0.0, 1.0);
+        assert!((dist_lat - expected_lat).abs() < 0.5);
+
+        // 1 degree longitude at equator
+        let expected_lon = std::f64::consts::PI * PLANET_RADIUS_KM / 180.0; // ≈ 111.19 km
+        let dist_lon = generator.fast_spherical_distance(0.0, 0.0, 1.0, 0.0);
+        assert!((dist_lon - expected_lon).abs() < 0.5);
 
         // Test wraparound (crossing date line)
-        let dist_wrap = generator.spherical_distance(-179.0, 0.0, 179.0, 0.0);
-        let dist_no_wrap = generator.spherical_distance(-179.0, 0.0, -177.0, 0.0);
-        assert!(dist_wrap < dist_no_wrap);
+        let dist_wrap = generator.fast_spherical_distance(-179.95, 0.0, 179.95, 0.0);
+        let dist_no_wrap = generator.fast_spherical_distance(-0.05, 0.0, 0.05, 0.0);  // Same 0.1° distance
+        let diff = (dist_wrap - dist_no_wrap).abs();
+        println!("dist_wrap: {}, dist_no_wrap: {}, difference: {}", 
+                 dist_wrap, dist_no_wrap, diff);
+        assert!(diff < 0.5,
+                "Distance difference too large: wrap={}, no_wrap={}, diff={}", 
+                dist_wrap, dist_no_wrap, diff);
     }
 
     #[test]
     fn test_deterministic_generation() {
-        let mut gen1 = TectonicPlateGenerator::with_seed(100, 50, 3, 123).unwrap();
-        let mut gen2 = TectonicPlateGenerator::with_seed(100, 50, 3, 123).unwrap();
+        let mut gen1 = TectonicPlateGenerator::with_seed(3600, 1800, 3, 123).unwrap();
+        let mut gen2 = TectonicPlateGenerator::with_seed(3600, 1800, 3, 123).unwrap();
 
         let result1 = gen1.generate("region_growing", false);
         let result2 = gen2.generate("region_growing", false);
@@ -579,7 +575,7 @@ mod tests {
 
     #[test]
     fn test_validation() {
-        let mut generator = TectonicPlateGenerator::new(50, 25, 3).unwrap();
+        let mut generator = TectonicPlateGenerator::new(3600, 1800, 3).unwrap();
         let result = generator.generate("voronoi", false);
         assert!(result.is_ok());
         assert!(generator.validate().is_ok());
