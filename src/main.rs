@@ -5,9 +5,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("======================================");
 
     // Create a test world
-    let mut generator = TectonicPlateGenerator::with_seed(3600, 1800, 15, 42)?;
+    // Manual seed
+    let _seed = 42;
+    // let mut generator = TectonicPlateGenerator::with_seed(3600, 1800, 15, _seed)?;
+    // Random seed
+    let mut generator = TectonicPlateGenerator::new(3600, 1800, 15)?;
+    
     println!("✅ Generator created with seed: {}", generator.get_seed());
     
+
     // Generate plates
     generator.generate("region_growing", true)?;
     println!("✅ Plates generated successfully");
@@ -32,6 +38,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Files created in outputs/ directory:");
     println!("  • test.bin");
     println!("  • test_world.bin");
+    
+    #[cfg(feature = "export-png")]
+    println!("  • test_world.png");
+    
+    #[cfg(feature = "export-tiff")]
+    println!("  • test_world.tiff");
     
     Ok(())
 }

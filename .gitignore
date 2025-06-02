@@ -3,11 +3,7 @@
 Cargo.lock
 
 # Output files
-/outputs/
-*.bin
-*.tif
-*.tiff
-*.png
+/outputs/**
 
 # IDE
 .vscode/

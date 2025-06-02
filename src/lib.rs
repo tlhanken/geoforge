@@ -464,7 +464,68 @@ impl TectonicPlateGenerator {
     /// Export all available formats
     pub fn export_all(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(output_dir)?;
+        
+        // Always export binary
         self.export_binary(output_dir, &format!("{}.bin", base_name))?;
+        
+        #[cfg(feature = "export-png")]
+        self.export_png(output_dir, &format!("{}.png", base_name))?;
+        
+        #[cfg(feature = "export-tiff")]
+        self.export_geotiff(output_dir, &format!("{}.tiff", base_name))?;
+        
+        Ok(())
+    }
+
+    #[cfg(feature = "export-png")]
+    pub fn export_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        
+        let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+        
+        // Generate a color for each plate
+        let mut rng = StdRng::seed_from_u64(42); // Consistent colors
+        let colors: Vec<[u8; 3]> = (0..=self.num_plates).map(|_| {
+            [rng.gen(), rng.gen(), rng.gen()]
+        }).collect();
+        
+        // Draw the image
+        for (y, row) in self.plate_map.chunks(self.width).enumerate() {
+            for (x, &plate_id) in row.iter().enumerate() {
+                let color = colors[plate_id as usize];
+                img.put_pixel(x as u32, y as u32, Rgb(color));
+            }
+        }
+        
+        let path = Path::new(output_dir).join(filename);
+        img.save(path)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "export-tiff")]
+    pub fn export_geotiff(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use gdal::Dataset;
+        use gdal::Driver;
+        use gdal::spatial_ref::SpatialRef;
+        
+        let driver = Driver::get("GTiff")?;
+        let path = Path::new(output_dir).join(filename);
+        let mut ds = driver.create_with_band_type::<u16, _>(
+            path,
+            self.width as isize,
+            self.height as isize,
+            1
+        )?;
+        
+        // Set geotransform and projection
+        ds.set_geo_transform(&self.get_geotransform())?;
+        let srs = SpatialRef::from_epsg(4326)?;  // WGS84
+        ds.set_spatial_ref(&srs)?;
+        
+        // Write data
+        let band = ds.rasterband(1)?;
+        band.write_band_as_slice(0, 0, self.width as usize, self.height as usize, &self.plate_map)?;
+        
         Ok(())
     }
 
