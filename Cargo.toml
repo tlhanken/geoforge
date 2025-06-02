@@ -1,0 +1,25 @@
+[package]
+name = "geoforge"
+version = "0.1.0"
+edition = "2021"
+description = "Realistic geological and climate modeling for procedural world generation"
+authors = ["Your Name <email@example.com>"]
+license = "MIT OR Apache-2.0"
+keywords = ["worldgen", "geology", "climate", "procedural", "gis"]
+categories = ["game-development", "science", "simulation"]
+
+[dependencies]
+rand = "0.8"
+
+[features]
+default = ["tectonic"]
+tectonic = []
+parallel = ["rayon"]
+
+[dependencies.rayon]
+version = "1.7"
+optional = true
+
+[[bin]]
+name = "geoforge"
+path = "src/main.rs"
