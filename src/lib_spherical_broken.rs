@@ -82,31 +82,30 @@ impl Point3D {
     }
 }
 
-// Pixel-based growth frontier item
+// Growth frontier item for priority queue
 #[derive(Clone)]
-struct GrowthPixel {
-    x: usize,
-    y: usize,
+struct GrowthPoint {
+    point: Point3D,
     plate_id: u16,
-    distance: f64,  // Geodesic distance from seed
+    distance: f64,
 }
 
-impl PartialEq for GrowthPixel {
+impl PartialEq for GrowthPoint {
     fn eq(&self, other: &Self) -> bool {
         self.distance == other.distance
     }
 }
 
-impl Eq for GrowthPixel {}
+impl Eq for GrowthPoint {}
 
-impl PartialOrd for GrowthPixel {
+impl PartialOrd for GrowthPoint {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Reverse ordering for min-heap behavior
         other.distance.partial_cmp(&self.distance)
     }
 }
 
-impl Ord for GrowthPixel {
+impl Ord for GrowthPoint {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap_or(Ordering::Equal)
     }
@@ -387,7 +386,7 @@ impl TectonicPlateGenerator {
         }
     }
 
-    /// Generate plates using spherical region growing (FIXED)
+    /// Generate plates using spherical region growing
     pub fn generate_plates_region_growing(&mut self) -> Result<(), PlateError> {
         println!("Generating plates using spherical region growing...");
 
@@ -397,26 +396,35 @@ impl TectonicPlateGenerator {
         let mut plate_pixel_counts = vec![0usize; self.num_plates + 1];
         let total_pixels = self.width * self.height;
         
-        // Priority queue for growth frontier (pixel-based)
+        // Priority queue for growth frontier
         let mut frontier = BinaryHeap::new();
         
         // Place seeds and initialize frontier
-        for seed in &self.plate_seeds {
+        for (i, seed) in self.plate_seeds.iter().enumerate() {
             let idx = self.get_pixel_index(seed.x, seed.y);
             self.plate_map[idx] = seed.id;
             assigned_pixels.insert(idx);
             plate_pixel_counts[seed.id as usize] = 1;
             
             // Add neighbors to frontier
-            self.add_pixel_neighbors_to_frontier(seed.x, seed.y, seed.id, 
-                                               &mut frontier, &assigned_pixels);
+            self.add_neighbors_to_frontier(seed.x, seed.y, seed.id, &seed.point_3d, 
+                                         &mut frontier, &assigned_pixels);
         }
         
         // Grow regions
         let mut pixels_assigned = self.num_plates;
         
-        while let Some(growth_pixel) = frontier.pop() {
-            let idx = self.get_pixel_index(growth_pixel.x, growth_pixel.y);
+        while let Some(growth_point) = frontier.pop() {
+            // Find pixel closest to this 3D point
+            let (lat, lon) = growth_point.point.to_lat_lon();
+            let x = ((lon + 180.0) / 360.0 * self.width as f64) as usize;
+            let y = ((90.0 - lat) / 180.0 * self.height as f64) as usize;
+            
+            // Clamp to valid range
+            let x = x.min(self.width - 1);
+            let y = y.min(self.height - 1);
+            
+            let idx = self.get_pixel_index(x, y);
             
             // Skip if already assigned
             if assigned_pixels.contains(&idx) {
@@ -424,7 +432,7 @@ impl TectonicPlateGenerator {
             }
             
             // Check if this plate has reached its target size
-            let plate_idx = growth_pixel.plate_id as usize;
+            let plate_idx = growth_point.plate_id as usize;
             let current_fraction = plate_pixel_counts[plate_idx] as f64 / total_pixels as f64;
             let target_fraction = self.plate_size_targets[plate_idx - 1];
             
@@ -438,15 +446,14 @@ impl TectonicPlateGenerator {
             
             if self.rng.gen::<f64>() < growth_probability {
                 // Assign pixel
-                self.plate_map[idx] = growth_pixel.plate_id;
+                self.plate_map[idx] = growth_point.plate_id;
                 assigned_pixels.insert(idx);
                 plate_pixel_counts[plate_idx] += 1;
                 pixels_assigned += 1;
                 
                 // Add neighbors to frontier
-                self.add_pixel_neighbors_to_frontier(growth_pixel.x, growth_pixel.y, 
-                                                   growth_pixel.plate_id,
-                                                   &mut frontier, &assigned_pixels);
+                self.add_neighbors_to_frontier(x, y, growth_point.plate_id, &growth_point.point,
+                                             &mut frontier, &assigned_pixels);
             }
             
             // Progress update
@@ -461,18 +468,12 @@ impl TectonicPlateGenerator {
         Ok(())
     }
 
-    /// Add pixel neighbors to growth frontier
-    fn add_pixel_neighbors_to_frontier(&self, x: usize, y: usize, plate_id: u16, 
-                                     frontier: &mut BinaryHeap<GrowthPixel>,
-                                     assigned: &HashSet<usize>) {
-        let center_point = self.get_pixel_point(x, y);
+    /// Add neighbors to growth frontier
+    fn add_neighbors_to_frontier(&self, x: usize, y: usize, plate_id: u16, 
+                                center_point: &Point3D, frontier: &mut BinaryHeap<GrowthPoint>,
+                                assigned: &HashSet<usize>) {
+        // Get neighbors in pixel space
         let neighbors = self.get_pixel_neighbors(x, y);
-        
-        // Find the seed point for this plate to calculate distances
-        let seed_point = self.plate_seeds.iter()
-            .find(|s| s.id == plate_id)
-            .map(|s| &s.point_3d)
-            .unwrap_or(center_point);
         
         for (nx, ny) in neighbors {
             let idx = self.get_pixel_index(nx, ny);
@@ -483,11 +484,10 @@ impl TectonicPlateGenerator {
             }
             
             let neighbor_point = self.get_pixel_point(nx, ny);
-            let distance = seed_point.geodesic_distance(neighbor_point);
+            let distance = center_point.geodesic_distance(neighbor_point);
             
-            frontier.push(GrowthPixel {
-                x: nx,
-                y: ny,
+            frontier.push(GrowthPoint {
+                point: *neighbor_point,
                 plate_id,
                 distance,
             });
@@ -662,9 +662,9 @@ impl TectonicPlateGenerator {
             }
         }
         
-        // Apply changes
-        for (idx, new_plate) in changes.iter() {
-            self.plate_map[*idx] = *new_plate;
+        // Apply changes (modified to use reference)
+        for &(idx, new_plate) in &changes {
+            self.plate_map[idx] = new_plate;
         }
         
         println!("Added noise to {} boundary pixels", changes.len());
