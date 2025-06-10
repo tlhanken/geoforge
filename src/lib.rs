@@ -23,7 +23,8 @@
 
 use rand::prelude::*;
 use rand::rngs::StdRng;
-use std::collections::{HashMap, VecDeque, HashSet};
+use std::collections::{HashMap, VecDeque, HashSet, BinaryHeap};
+use std::cmp::Ordering;
 use std::fs;
 use std::path::Path;
 
@@ -33,8 +34,82 @@ const PLANET_SURFACE_AREA_KM2: f64 = 4.0 * std::f64::consts::PI * PLANET_RADIUS_
 const MIN_SEED_DISTANCE: f64 = 100.0;
 const MAX_SEED_ATTEMPTS: usize = 10000;
 
-// Define pole threshold - pixels within this many degrees of poles are treated specially
-const POLE_THRESHOLD_DEGREES: f64 = 5.0;
+// 3D point on unit sphere
+#[derive(Debug, Clone, Copy)]
+struct Point3D {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+impl Point3D {
+    fn new(x: f64, y: f64, z: f64) -> Self {
+        let len = (x * x + y * y + z * z).sqrt();
+        Point3D {
+            x: x / len,
+            y: y / len,
+            z: z / len,
+        }
+    }
+
+    fn from_lat_lon(lat: f64, lon: f64) -> Self {
+        let lat_rad = lat.to_radians();
+        let lon_rad = lon.to_radians();
+        
+        Point3D::new(
+            lat_rad.cos() * lon_rad.cos(),
+            lat_rad.cos() * lon_rad.sin(),
+            lat_rad.sin()
+        )
+    }
+
+    fn to_lat_lon(&self) -> (f64, f64) {
+        let lat = self.z.asin().to_degrees();
+        let lon = self.y.atan2(self.x).to_degrees();
+        (lat, lon)
+    }
+
+    fn geodesic_distance(&self, other: &Point3D) -> f64 {
+        // Dot product gives cos of angle between unit vectors
+        let dot = self.x * other.x + self.y * other.y + self.z * other.z;
+        // Clamp to avoid numerical errors
+        let dot = dot.max(-1.0).min(1.0);
+        dot.acos()
+    }
+
+    fn geodesic_distance_km(&self, other: &Point3D) -> f64 {
+        self.geodesic_distance(other) * PLANET_RADIUS_KM
+    }
+}
+
+// Growth frontier item for priority queue
+#[derive(Clone)]
+struct GrowthPoint {
+    point: Point3D,
+    plate_id: u16,
+    distance: f64,
+}
+
+impl PartialEq for GrowthPoint {
+    fn eq(&self, other: &Self) -> bool {
+        self.distance == other.distance
+    }
+}
+
+impl Eq for GrowthPoint {}
+
+impl PartialOrd for GrowthPoint {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // Reverse ordering for min-heap behavior
+        other.distance.partial_cmp(&self.distance)
+    }
+}
+
+impl Ord for GrowthPoint {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+}
 
 /// Represents a tectonic plate seed point with motion information
 #[derive(Debug, Clone)]
@@ -46,6 +121,7 @@ pub struct PlateSeed {
     pub lat: f64,
     pub motion_direction: f64, // degrees
     pub motion_speed: f64,     // cm/year
+    point_3d: Point3D,
 }
 
 /// Statistics about a generated tectonic plate
@@ -86,6 +162,10 @@ pub struct TectonicPlateGenerator {
     plate_seeds: Vec<PlateSeed>,
     rng: StdRng,
     current_seed: u64,
+    // Cache 3D points for each pixel
+    pixel_points: Vec<Point3D>,
+    // Variable plate sizes
+    plate_size_targets: Vec<f64>,
 }
 
 impl TectonicPlateGenerator {
@@ -103,7 +183,7 @@ impl TectonicPlateGenerator {
             return Err(PlateError::InvalidParameters("Invalid number of plates".to_string()));
         }
 
-        Ok(Self {
+        let mut generator = Self {
             width,
             height,
             num_plates,
@@ -111,7 +191,51 @@ impl TectonicPlateGenerator {
             plate_seeds: Vec::with_capacity(num_plates),
             rng: StdRng::seed_from_u64(seed),
             current_seed: seed,
-        })
+            pixel_points: Vec::with_capacity(width * height),
+            plate_size_targets: Vec::new(),
+        };
+
+        // Pre-calculate 3D points for all pixels
+        generator.calculate_pixel_points();
+        
+        Ok(generator)
+    }
+
+    /// Pre-calculate 3D points for all pixels
+    fn calculate_pixel_points(&mut self) {
+        self.pixel_points.clear();
+        
+        for y in 0..self.height {
+            let lat = self.y_to_lat(y);
+            for x in 0..self.width {
+                let lon = self.x_to_lon(x);
+                self.pixel_points.push(Point3D::from_lat_lon(lat, lon));
+            }
+        }
+    }
+
+    /// Generate varied plate sizes using power law distribution
+    fn generate_plate_sizes(&mut self) {
+        self.plate_size_targets.clear();
+        
+        // Generate sizes with power law distribution (like real Earth)
+        let mut sizes: Vec<f64> = Vec::new();
+        let alpha = 1.5; // Power law exponent
+        
+        for i in 0..self.num_plates {
+            // Power law: larger index = smaller plate
+            let size = 1.0 / ((i + 1) as f64).powf(alpha);
+            sizes.push(size);
+        }
+        
+        // Shuffle to randomize which plates get which sizes
+        sizes.shuffle(&mut self.rng);
+        
+        // Normalize so they sum to 1.0
+        let sum: f64 = sizes.iter().sum();
+        for size in sizes {
+            self.plate_size_targets.push(size / sum);
+        }
     }
 
     /// Get the current seed
@@ -125,6 +249,7 @@ impl TectonicPlateGenerator {
         self.rng = StdRng::seed_from_u64(seed);
         self.plate_map.fill(0);
         self.plate_seeds.clear();
+        self.plate_size_targets.clear();
     }
 
     /// Convert pixel coordinates to geographic coordinates
@@ -136,16 +261,9 @@ impl TectonicPlateGenerator {
         90.0 - (y as f64 / self.height as f64) * 180.0
     }
 
-    /// Check if a pixel is at or near a pole
-    fn is_near_pole(&self, y: usize) -> bool {
-        let lat = self.y_to_lat(y);
-        lat.abs() > (90.0 - POLE_THRESHOLD_DEGREES)
-    }
-
     /// Get the pixel area in km² accounting for latitude distortion
     fn get_pixel_area_km2(&self, y: usize) -> f64 {
         let lat = self.y_to_lat(y);
-        let lat_rad = lat.to_radians();
         
         // Area of a spherical rectangle
         let delta_lat = 180.0 / self.height as f64;
@@ -160,92 +278,62 @@ impl TectonicPlateGenerator {
         area
     }
 
-    /// Fast approximation of spherical distance with pole handling
-    fn fast_spherical_distance(&self, lon1: f64, lat1: f64, lon2: f64, lat2: f64) -> f64 {
-        // Special case: if both points are very close to the same pole
-        if lat1.abs() > 89.9 && lat2.abs() > 89.9 && lat1.signum() == lat2.signum() {
-            // At the poles, all longitudes converge to the same point
-            return ((lat2 - lat1).abs() / 180.0) * std::f64::consts::PI * PLANET_RADIUS_KM;
-        }
-        
-        // Handle longitude wraparound
-        let mut d_lon = (lon2 - lon1).abs();
-        if d_lon > 180.0 {
-            d_lon = 360.0 - d_lon;
-        }
-
-        let d_lat = lat2 - lat1;
-        let lat_avg = (lat1 + lat2) * 0.5;
-
-        // Convert degree differences to radians
-        let d_lon_rad = d_lon.to_radians();
-        let d_lat_rad = d_lat.to_radians();
-        let lat_avg_rad = lat_avg.to_radians();
-
-        // Approximate distance using equirectangular projection
-        let x = d_lon_rad * lat_avg_rad.cos();
-        let y = d_lat_rad;
-        (x * x + y * y).sqrt() * PLANET_RADIUS_KM
+    /// Get pixel index from coordinates
+    fn get_pixel_index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
     }
 
-    /// Check if a point is too close to existing seeds
-    fn too_close_to_existing_seed(&self, x: usize, y: usize) -> bool {
-        let lon = self.x_to_lon(x);
-        let lat = self.y_to_lat(y);
-        
-        self.plate_seeds.iter().any(|seed| {
-            let dist = self.fast_spherical_distance(lon, lat, seed.lon, seed.lat);
-            dist < MIN_SEED_DISTANCE
-        })
+    /// Get 3D point for pixel
+    fn get_pixel_point(&self, x: usize, y: usize) -> &Point3D {
+        &self.pixel_points[self.get_pixel_index(x, y)]
     }
 
     /// Generate random seed points for plates with improved distribution
     pub fn generate_seeds(&mut self) -> Result<(), PlateError> {
         self.plate_seeds.clear();
+        
+        // Generate plate sizes
+        self.generate_plate_sizes();
 
         for i in 0..self.num_plates {
             let mut attempts = 0;
-            let (x, y) = loop {
+            let (x, y, point_3d) = loop {
                 attempts += 1;
                 
                 if attempts > MAX_SEED_ATTEMPTS {
-                    // Fallback: reduce minimum distance requirement
-                    let reduced_distance = MIN_SEED_DISTANCE * 0.5;
-                    let mut fallback_found = false;
-                    let mut fallback_coords = (0, 0);
-                    
-                    for _attempt in 0..1000 {
-                        let x = self.rng.gen_range(0..self.width);
-                        let y = self.rng.gen_range(0..self.height);
-                        
-                        let lon = self.x_to_lon(x);
-                        let lat = self.y_to_lat(y);
-                        
-                        let too_close = self.plate_seeds.iter().any(|seed| {
-                            let dist = self.fast_spherical_distance(lon, lat, seed.lon, seed.lat);
-                            dist < reduced_distance
-                        });
-                        
-                        if !too_close {
-                            fallback_coords = (x, y);
-                            fallback_found = true;
-                            break;
-                        }
-                    }
-                    
-                    if fallback_found {
-                        break fallback_coords;
-                    } else {
-                        return Err(PlateError::SeedPlacementFailed);
-                    }
+                    return Err(PlateError::SeedPlacementFailed);
                 }
 
-                // Generate with latitude bias to account for pole convergence
-                let x = self.rng.gen_range(0..self.width);
-                let y = self.rng.gen_range(0..self.height);
-
-                if !self.too_close_to_existing_seed(x, y) {
-                    break (x, y);
+                // Generate random point on sphere with uniform distribution
+                // Using inverse transform sampling for uniform sphere distribution
+                let u = self.rng.gen::<f64>();
+                let v = self.rng.gen::<f64>();
+                
+                let theta = 2.0 * std::f64::consts::PI * u;
+                let phi = (2.0 * v - 1.0).acos();
+                
+                let x_3d = phi.sin() * theta.cos();
+                let y_3d = phi.sin() * theta.sin();
+                let z_3d = phi.cos();
+                
+                let point_3d = Point3D::new(x_3d, y_3d, z_3d);
+                let (lat, lon) = point_3d.to_lat_lon();
+                
+                // Convert to pixel coordinates
+                let x = ((lon + 180.0) / 360.0 * self.width as f64) as usize;
+                let y = ((90.0 - lat) / 180.0 * self.height as f64) as usize;
+                
+                // Clamp to valid range
+                let x = x.min(self.width - 1);
+                let y = y.min(self.height - 1);
+                
+                // Check minimum distance to existing seeds
+                let too_close = self.plate_seeds.iter().any(|seed| {
+                    seed.point_3d.geodesic_distance_km(&point_3d) < MIN_SEED_DISTANCE
+                });
+                
+                if !too_close {
+                    break (x, y, point_3d);
                 }
             };
 
@@ -260,79 +348,32 @@ impl TectonicPlateGenerator {
                 lat,
                 motion_direction: self.rng.gen_range(0.0..360.0),
                 motion_speed: self.rng.gen_range(2.0..10.0),
+                point_3d,
             });
         }
 
-        println!("Generated {} plate seeds", self.plate_seeds.len());
+        println!("Generated {} plate seeds with varied sizes", self.plate_seeds.len());
         Ok(())
     }
 
-    /// Generate plates using optimized Voronoi approach with pole handling
+    /// Generate plates using spherical Voronoi
     pub fn generate_plates_voronoi(&mut self) {
-        println!("Generating plates using Voronoi method with pole handling...");
-
-        // Pre-calculate seed coordinates for faster lookup
-        let seed_coords: Vec<(f64, f64, u16)> = self.plate_seeds
-            .iter()
-            .map(|seed| (seed.lon, seed.lat, seed.id))
-            .collect();
-
-        // Handle poles specially - assign entire pole to nearest plate
-        let mut north_pole_plate = 0u16;
-        let mut south_pole_plate = 0u16;
-        
-        // Find closest plate to each pole
-        let mut min_north_dist = f64::INFINITY;
-        let mut min_south_dist = f64::INFINITY;
-        
-        for seed in &self.plate_seeds {
-            let north_dist = self.fast_spherical_distance(seed.lon, seed.lat, 0.0, 90.0);
-            let south_dist = self.fast_spherical_distance(seed.lon, seed.lat, 0.0, -90.0);
-            
-            if north_dist < min_north_dist {
-                min_north_dist = north_dist;
-                north_pole_plate = seed.id;
-            }
-            
-            if south_dist < min_south_dist {
-                min_south_dist = south_dist;
-                south_pole_plate = seed.id;
-            }
-        }
+        println!("Generating plates using spherical Voronoi method...");
 
         for y in 0..self.height {
-            let lat = self.y_to_lat(y);
-            
-            // Check if we're at a pole
-            if y == 0 {
-                // North pole - assign entire row to the closest plate
-                for x in 0..self.width {
-                    let idx = y * self.width + x;
-                    self.plate_map[idx] = north_pole_plate;
-                }
-                continue;
-            } else if y == self.height - 1 {
-                // South pole - assign entire row to the closest plate
-                for x in 0..self.width {
-                    let idx = y * self.width + x;
-                    self.plate_map[idx] = south_pole_plate;
-                }
-                continue;
-            }
-            
             for x in 0..self.width {
-                let lon = self.x_to_lon(x);
-                let idx = y * self.width + x;
+                let idx = self.get_pixel_index(x, y);
+                let point = self.get_pixel_point(x, y);
 
                 let mut nearest_plate = 1;
                 let mut min_distance = f64::INFINITY;
 
-                // Find closest seed using fast distance approximation
-                for &(seed_lon, seed_lat, seed_id) in &seed_coords {
-                    let distance = self.fast_spherical_distance(lon, lat, seed_lon, seed_lat);
+                // Find closest seed using geodesic distance
+                for seed in &self.plate_seeds {
+                    let distance = point.geodesic_distance(&seed.point_3d);
                     if distance < min_distance {
                         min_distance = distance;
-                        nearest_plate = seed_id;
+                        nearest_plate = seed.id;
                     }
                 }
 
@@ -345,216 +386,291 @@ impl TectonicPlateGenerator {
         }
     }
 
-    /// Get neighbors of a pixel with pole handling
-    fn get_neighbors(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
-        let mut neighbors = Vec::new();
+    /// Generate plates using spherical region growing
+    pub fn generate_plates_region_growing(&mut self) -> Result<(), PlateError> {
+        println!("Generating plates using spherical region growing...");
+
+        // Initialize
+        self.plate_map.fill(0);
+        let mut assigned_pixels = HashSet::new();
+        let mut plate_pixel_counts = vec![0usize; self.num_plates + 1];
+        let total_pixels = self.width * self.height;
         
-        // Special handling for poles
-        if y == 0 {
-            // North pole - all pixels in the top row are neighbors
-            for nx in 0..self.width {
-                neighbors.push((nx, 0));
-            }
-            // Also add the row below
-            for nx in 0..self.width {
-                neighbors.push((nx, 1));
-            }
-            return neighbors;
-        } else if y == self.height - 1 {
-            // South pole - all pixels in the bottom row are neighbors
-            for nx in 0..self.width {
-                neighbors.push((nx, self.height - 1));
-            }
-            // Also add the row above
-            for nx in 0..self.width {
-                neighbors.push((nx, self.height - 2));
-            }
-            return neighbors;
+        // Priority queue for growth frontier
+        let mut frontier = BinaryHeap::new();
+        
+        // Place seeds and initialize frontier
+        for (i, seed) in self.plate_seeds.iter().enumerate() {
+            let idx = self.get_pixel_index(seed.x, seed.y);
+            self.plate_map[idx] = seed.id;
+            assigned_pixels.insert(idx);
+            plate_pixel_counts[seed.id as usize] = 1;
+            
+            // Add neighbors to frontier
+            self.add_neighbors_to_frontier(seed.x, seed.y, seed.id, &seed.point_3d, 
+                                         &mut frontier, &assigned_pixels);
         }
         
-        // Regular 8-connected neighbors for non-pole pixels
-        const DIRECTIONS: [(isize, isize); 8] = [
-            (-1, -1), (-1, 0), (-1, 1),
-            (0, -1),           (0, 1),
-            (1, -1),  (1, 0),  (1, 1)
-        ];
+        // Grow regions
+        let mut pixels_assigned = self.num_plates;
         
-        for &(dx, dy) in &DIRECTIONS {
-            let mut nx = x as isize + dx;
-            let ny = y as isize + dy;
-
-            // Handle longitude wraparound
-            if nx < 0 {
-                nx = self.width as isize - 1;
-            } else if nx >= self.width as isize {
-                nx = 0;
-            }
-
-            // Handle latitude bounds
-            if ny < 0 || ny >= self.height as isize {
+        while let Some(growth_point) = frontier.pop() {
+            // Find pixel closest to this 3D point
+            let (lat, lon) = growth_point.point.to_lat_lon();
+            let x = ((lon + 180.0) / 360.0 * self.width as f64) as usize;
+            let y = ((90.0 - lat) / 180.0 * self.height as f64) as usize;
+            
+            // Clamp to valid range
+            let x = x.min(self.width - 1);
+            let y = y.min(self.height - 1);
+            
+            let idx = self.get_pixel_index(x, y);
+            
+            // Skip if already assigned
+            if assigned_pixels.contains(&idx) {
                 continue;
             }
-
-            let nx = nx as usize;
-            let ny = ny as usize;
             
-            neighbors.push((nx, ny));
+            // Check if this plate has reached its target size
+            let plate_idx = growth_point.plate_id as usize;
+            let current_fraction = plate_pixel_counts[plate_idx] as f64 / total_pixels as f64;
+            let target_fraction = self.plate_size_targets[plate_idx - 1];
+            
+            // Add randomness but bias based on target size
+            let growth_probability = if current_fraction < target_fraction {
+                0.95 // High probability if under target
+            } else {
+                // Decreasing probability as we exceed target
+                0.95 * (target_fraction / current_fraction).min(1.0)
+            };
+            
+            if self.rng.gen::<f64>() < growth_probability {
+                // Assign pixel
+                self.plate_map[idx] = growth_point.plate_id;
+                assigned_pixels.insert(idx);
+                plate_pixel_counts[plate_idx] += 1;
+                pixels_assigned += 1;
+                
+                // Add neighbors to frontier
+                self.add_neighbors_to_frontier(x, y, growth_point.plate_id, &growth_point.point,
+                                             &mut frontier, &assigned_pixels);
+            }
+            
+            // Progress update
+            if pixels_assigned % 10000 == 0 {
+                println!("Progress: {:.1}%", (pixels_assigned as f64 / total_pixels as f64) * 100.0);
+            }
         }
         
-        // Near poles, add extra longitude connections
-        if self.is_near_pole(y) {
-            let lat = self.y_to_lat(y);
-            let convergence_factor = lat.to_radians().cos();
+        // Fill any remaining unassigned pixels with nearest plate
+        self.fill_unassigned_pixels();
+        
+        Ok(())
+    }
+
+    /// Add neighbors to growth frontier
+    fn add_neighbors_to_frontier(&self, x: usize, y: usize, plate_id: u16, 
+                                center_point: &Point3D, frontier: &mut BinaryHeap<GrowthPoint>,
+                                assigned: &HashSet<usize>) {
+        // Get neighbors in pixel space
+        let neighbors = self.get_pixel_neighbors(x, y);
+        
+        for (nx, ny) in neighbors {
+            let idx = self.get_pixel_index(nx, ny);
             
-            // Add connections to more distant longitude neighbors based on convergence
-            if convergence_factor < 0.5 {
-                let skip = ((1.0 / convergence_factor).max(2.0) as usize).min(self.width / 8);
-                for i in (skip..self.width).step_by(skip) {
-                    let nx = (x + i) % self.width;
-                    neighbors.push((nx, y));
+            // Skip if already assigned
+            if assigned.contains(&idx) {
+                continue;
+            }
+            
+            let neighbor_point = self.get_pixel_point(nx, ny);
+            let distance = center_point.geodesic_distance(neighbor_point);
+            
+            frontier.push(GrowthPoint {
+                point: *neighbor_point,
+                plate_id,
+                distance,
+            });
+        }
+    }
+
+    /// Get pixel neighbors with wraparound
+    fn get_pixel_neighbors(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
+        let mut neighbors = Vec::new();
+        
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
                 }
+                
+                let ny = y as i32 + dy;
+                
+                // Skip out of bounds latitude
+                if ny < 0 || ny >= self.height as i32 {
+                    continue;
+                }
+                
+                // Handle longitude wraparound
+                let mut nx = x as i32 + dx;
+                if nx < 0 {
+                    nx = self.width as i32 - 1;
+                } else if nx >= self.width as i32 {
+                    nx = 0;
+                }
+                
+                neighbors.push((nx as usize, ny as usize));
             }
         }
         
         neighbors
     }
 
-    /// Generate plates using region growing with pole handling
-    pub fn generate_plates_region_growing(&mut self) -> Result<(), PlateError> {
-        println!("Generating plates using region growing method with pole handling...");
-
-        // Initialize with seeds
-        self.plate_map.fill(0);
-        let mut queue = VecDeque::with_capacity(self.width * self.height / 4);
-
-        // Place seeds
-        for seed in &self.plate_seeds {
-            let idx = seed.y * self.width + seed.x;
-            self.plate_map[idx] = seed.id;
-            queue.push_back((seed.x, seed.y, seed.id));
-        }
-
-        // Grow regions
-        while let Some((x, y, plate_id)) = queue.pop_front() {
-            let neighbors = self.get_neighbors(x, y);
-            
-            for (nx, ny) in neighbors {
-                let idx = ny * self.width + nx;
-
-                // If unassigned, assign to current plate
+    /// Fill any remaining unassigned pixels
+    fn fill_unassigned_pixels(&mut self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = self.get_pixel_index(x, y);
+                
                 if self.plate_map[idx] == 0 {
-                    self.plate_map[idx] = plate_id;
-
-                    // Add controlled randomness for natural boundaries
-                    // Less randomness near poles for more stable boundaries
-                    let randomness_threshold = if self.is_near_pole(ny) {
-                        0.05
-                    } else {
-                        0.1
-                    };
+                    let point = self.get_pixel_point(x, y);
                     
-                    if self.rng.gen::<f64>() > randomness_threshold {
-                        queue.push_back((nx, ny, plate_id));
+                    // Find nearest plate
+                    let mut nearest_plate = 1;
+                    let mut min_distance = f64::INFINITY;
+                    
+                    for seed in &self.plate_seeds {
+                        let distance = point.geodesic_distance(&seed.point_3d);
+                        if distance < min_distance {
+                            min_distance = distance;
+                            nearest_plate = seed.id;
+                        }
                     }
+                    
+                    self.plate_map[idx] = nearest_plate;
                 }
             }
         }
-
-        // Ensure poles are fully assigned to single plates
-        self.assign_poles_to_single_plate();
-
-        Ok(())
     }
 
-    /// Ensure each pole is assigned to a single plate
-    fn assign_poles_to_single_plate(&mut self) {
-        // North pole
-        let mut north_pole_counts: HashMap<u16, usize> = HashMap::new();
-        for x in 0..self.width {
-            let plate_id = self.plate_map[x];
-            if plate_id > 0 {
-                *north_pole_counts.entry(plate_id).or_insert(0) += 1;
-            }
-        }
-        
-        if let Some((&dominant_plate, _)) = north_pole_counts.iter().max_by_key(|(_, &count)| count) {
-            for x in 0..self.width {
-                self.plate_map[x] = dominant_plate;
-            }
-        }
-        
-        // South pole
-        let mut south_pole_counts: HashMap<u16, usize> = HashMap::new();
-        let south_row = self.height - 1;
-        for x in 0..self.width {
-            let idx = south_row * self.width + x;
-            let plate_id = self.plate_map[idx];
-            if plate_id > 0 {
-                *south_pole_counts.entry(plate_id).or_insert(0) += 1;
-            }
-        }
-        
-        if let Some((&dominant_plate, _)) = south_pole_counts.iter().max_by_key(|(_, &count)| count) {
-            for x in 0..self.width {
-                let idx = south_row * self.width + x;
-                self.plate_map[idx] = dominant_plate;
-            }
-        }
-    }
-
-    /// Optimized boundary smoothing with pole handling
+    /// Smooth boundaries with geodesic-aware smoothing
     pub fn smooth_boundaries(&mut self, iterations: usize) {
-        println!("Smoothing boundaries ({} iterations) with pole handling...", iterations);
+        println!("Smoothing boundaries ({} iterations)...", iterations);
 
         for iter in 0..iterations {
             let original_map = self.plate_map.clone();
             
             for y in 0..self.height {
-                // Skip poles - they should remain uniform
-                if y == 0 || y == self.height - 1 {
-                    continue;
-                }
-                
                 for x in 0..self.width {
-                    let idx = y * self.width + x;
-                    let mut neighbor_counts = HashMap::new();
-
-                    // Get neighbors with pole-aware logic
-                    let neighbors = self.get_neighbors(x, y);
+                    let idx = self.get_pixel_index(x, y);
+                    let point = self.get_pixel_point(x, y);
+                    
+                    // Get neighbors and their weights based on geodesic distance
+                    let neighbors = self.get_pixel_neighbors(x, y);
+                    let mut weighted_counts: HashMap<u16, f64> = HashMap::new();
+                    let mut total_weight = 0.0;
                     
                     for (nx, ny) in neighbors {
-                        let neighbor_idx = ny * self.width + nx;
+                        let neighbor_idx = self.get_pixel_index(nx, ny);
+                        let neighbor_point = self.get_pixel_point(nx, ny);
                         let neighbor_plate = original_map[neighbor_idx];
-                        *neighbor_counts.entry(neighbor_plate).or_insert(0) += 1;
-                    }
-
-                    // Find most common neighbor
-                    if let Some((&most_common, &max_count)) = neighbor_counts
-                        .iter()
-                        .max_by_key(|(_, &count)| count)
-                    {
-                        // Adjust threshold based on latitude
-                        let threshold = if self.is_near_pole(y) {
-                            3  // Lower threshold near poles
-                        } else {
-                            4  // Normal threshold
-                        };
                         
-                        if max_count >= threshold {
+                        // Weight by inverse geodesic distance
+                        let distance = point.geodesic_distance(neighbor_point);
+                        let weight = 1.0 / (distance + 0.01); // Add small epsilon to avoid division by zero
+                        
+                        *weighted_counts.entry(neighbor_plate).or_insert(0.0) += weight;
+                        total_weight += weight;
+                    }
+                    
+                    // Also consider current pixel with some weight
+                    let current_plate = original_map[idx];
+                    let self_weight = total_weight * 0.5; // Current pixel has weight equal to half of all neighbors
+                    *weighted_counts.entry(current_plate).or_insert(0.0) += self_weight;
+                    total_weight += self_weight;
+                    
+                    // Find plate with highest weighted count
+                    if let Some((&most_common, &weight)) = weighted_counts
+                        .iter()
+                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    {
+                        // Only change if there's significant majority
+                        if weight / total_weight > 0.6 {
                             self.plate_map[idx] = most_common;
                         }
                     }
                 }
             }
 
-            // Ensure poles remain assigned to single plates after smoothing
-            self.assign_poles_to_single_plate();
-
             println!("Completed smoothing iteration {}/{}", iter + 1, iterations);
         }
     }
 
-    /// Main generation function with better error handling
+    /// Add realistic boundary noise using fractal patterns
+    pub fn add_boundary_noise(&mut self, noise_scale: f64) {
+        println!("Adding fractal boundary noise...");
+        
+        let mut changes = Vec::new();
+        
+        for y in 1..self.height-1 {
+            for x in 0..self.width {
+                let idx = self.get_pixel_index(x, y);
+                let current_plate = self.plate_map[idx];
+                
+                // Check if this is a boundary pixel
+                let neighbors = self.get_pixel_neighbors(x, y);
+                let is_boundary = neighbors.iter().any(|&(nx, ny)| {
+                    let n_idx = self.get_pixel_index(nx, ny);
+                    self.plate_map[n_idx] != current_plate
+                });
+                
+                if is_boundary {
+                    // Use multiple octaves of noise for fractal pattern
+                    let point = self.get_pixel_point(x, y);
+                    let (lat, lon) = point.to_lat_lon();
+                    
+                    let mut noise_value = 0.0;
+                    let mut amplitude = 1.0;
+                    let mut frequency = 1.0;
+                    
+                    for _ in 0..4 { // 4 octaves
+                        let nx = lon * frequency;
+                        let ny = lat * frequency;
+                        
+                        // Simple pseudo-random based on position
+                        let hash = ((nx * 12.9898 + ny * 78.233).sin() * 43758.5453).fract();
+                        noise_value += hash * amplitude;
+                        
+                        amplitude *= 0.5;
+                        frequency *= 2.0;
+                    }
+                    
+                    // Randomly switch to a neighboring plate based on noise
+                    if noise_value.abs() * noise_scale > self.rng.gen::<f64>() {
+                        // Find a different neighboring plate
+                        let different_plates: Vec<u16> = neighbors.iter()
+                            .map(|&(nx, ny)| self.plate_map[self.get_pixel_index(nx, ny)])
+                            .filter(|&p| p != current_plate)
+                            .collect();
+                        
+                        if !different_plates.is_empty() {
+                            let new_plate = different_plates[self.rng.gen_range(0..different_plates.len())];
+                            changes.push((idx, new_plate));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Apply changes
+        for (idx, new_plate) in changes {
+            self.plate_map[idx] = new_plate;
+        }
+        
+        println!("Added noise to {} boundary pixels", changes.len());
+    }
+
+    /// Main generation function
     pub fn generate(&mut self, method: &str, smooth: bool) -> Result<&Vec<u16>, PlateError> {
         println!("Generating {} tectonic plates using {} method... (seed: {})", 
                  self.num_plates, method, self.current_seed);
@@ -569,9 +685,12 @@ impl TectonicPlateGenerator {
             _ => return Err(PlateError::InvalidMethod(method.to_string())),
         }
 
-        // Step 3: Smooth boundaries if requested
+        // Step 3: Add boundary noise for realism
+        self.add_boundary_noise(0.3);
+
+        // Step 4: Smooth boundaries if requested
         if smooth {
-            self.smooth_boundaries(3);
+            self.smooth_boundaries(2);
         }
 
         println!("Tectonic plate generation complete!");
@@ -587,7 +706,7 @@ impl TectonicPlateGenerator {
             let pixel_area = self.get_pixel_area_km2(y);
             
             for x in 0..self.width {
-                let idx = y * self.width + x;
+                let idx = self.get_pixel_index(x, y);
                 let pixel = self.plate_map[idx];
                 
                 if pixel > 0 {
@@ -597,8 +716,6 @@ impl TectonicPlateGenerator {
                 }
             }
         }
-
-        let total_pixels = self.width * self.height;
 
         // Generate statistics
         let mut stats = HashMap::new();
@@ -748,22 +865,6 @@ impl TectonicPlateGenerator {
             }
         }
 
-        // Validate poles are uniform
-        let north_pole_plate = self.plate_map[0];
-        for x in 1..self.width {
-            if self.plate_map[x] != north_pole_plate {
-                return Err(PlateError::InvalidParameters("North pole not uniform".to_string()));
-            }
-        }
-        
-        let south_idx_start = (self.height - 1) * self.width;
-        let south_pole_plate = self.plate_map[south_idx_start];
-        for x in 1..self.width {
-            if self.plate_map[south_idx_start + x] != south_pole_plate {
-                return Err(PlateError::InvalidParameters("South pole not uniform".to_string()));
-            }
-        }
-
         Ok(())
     }
 }
@@ -782,65 +883,51 @@ mod tests {
     }
 
     #[test]
-    fn test_coordinate_conversion() {
-        let generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
-
-        // Test coordinate conversion
-        assert_eq!(generator.x_to_lon(0), -180.0);
-        assert_eq!(generator.x_to_lon(1800), 180.0);
-        assert_eq!(generator.y_to_lat(0), 90.0);
-        assert_eq!(generator.y_to_lat(900), -90.0);
+    fn test_3d_point_conversion() {
+        // Test equator
+        let p1 = Point3D::from_lat_lon(0.0, 0.0);
+        assert!((p1.x - 1.0).abs() < 0.001);
+        assert!(p1.y.abs() < 0.001);
+        assert!(p1.z.abs() < 0.001);
+        
+        // Test north pole
+        let p2 = Point3D::from_lat_lon(90.0, 0.0);
+        assert!(p2.x.abs() < 0.001);
+        assert!(p2.y.abs() < 0.001);
+        assert!((p2.z - 1.0).abs() < 0.001);
+        
+        // Test round trip
+        let (lat, lon) = p1.to_lat_lon();
+        assert!(lat.abs() < 0.001);
+        assert!(lon.abs() < 0.001);
     }
 
     #[test]
-    fn test_pole_detection() {
-        let generator = TectonicPlateGenerator::new(3600, 1800, 5).unwrap();
+    fn test_geodesic_distance() {
+        // Same point
+        let p1 = Point3D::from_lat_lon(0.0, 0.0);
+        let p2 = Point3D::from_lat_lon(0.0, 0.0);
+        assert!(p1.geodesic_distance_km(&p2) < 0.001);
         
-        // Test pole detection
-        assert!(generator.is_near_pole(0));  // North pole
-        assert!(generator.is_near_pole(1799));  // South pole
-        assert!(!generator.is_near_pole(900));  // Equator
-    }
-
-    #[test]
-    fn test_distance_calculations() {
-        let generator = TectonicPlateGenerator::new(3600, 1800, 5).unwrap();
-
-        // Test pole distance
-        let pole_dist = generator.fast_spherical_distance(0.0, 89.95, 180.0, 89.95);
-        assert!(pole_dist < 20.0);  // Should be very small at poles
-
-        // 1 degree latitude at any longitude
-        let expected_lat = std::f64::consts::PI * PLANET_RADIUS_KM / 180.0;
-        let dist_lat = generator.fast_spherical_distance(0.0, 0.0, 0.0, 1.0);
-        assert!((dist_lat - expected_lat).abs() < 0.5);
-    }
-
-    #[test]
-    fn test_pole_uniformity() {
-        let mut generator = TectonicPlateGenerator::with_seed(3600, 1800, 5, 123).unwrap();
-        generator.generate("region_growing", false).unwrap();
+        // Opposite points on equator
+        let p3 = Point3D::from_lat_lon(0.0, 0.0);
+        let p4 = Point3D::from_lat_lon(0.0, 180.0);
+        let dist = p3.geodesic_distance_km(&p4);
+        let expected = std::f64::consts::PI * PLANET_RADIUS_KM; // Half circumference
+        assert!((dist - expected).abs() < 1.0);
         
-        // Check north pole uniformity
-        let north_pole_plate = generator.plate_map[0];
-        for x in 0..generator.width {
-            assert_eq!(generator.plate_map[x], north_pole_plate, 
-                      "North pole not uniform at x={}", x);
-        }
-        
-        // Check south pole uniformity
-        let south_idx = (generator.height - 1) * generator.width;
-        let south_pole_plate = generator.plate_map[south_idx];
-        for x in 0..generator.width {
-            assert_eq!(generator.plate_map[south_idx + x], south_pole_plate,
-                      "South pole not uniform at x={}", x);
-        }
+        // Pole to equator
+        let p5 = Point3D::from_lat_lon(90.0, 0.0);
+        let p6 = Point3D::from_lat_lon(0.0, 0.0);
+        let dist2 = p5.geodesic_distance_km(&p6);
+        let expected2 = std::f64::consts::PI * PLANET_RADIUS_KM / 2.0; // Quarter circumference
+        assert!((dist2 - expected2).abs() < 1.0);
     }
 
     #[test]
     fn test_deterministic_generation() {
-        let mut gen1 = TectonicPlateGenerator::with_seed(3600, 1800, 3, 123).unwrap();
-        let mut gen2 = TectonicPlateGenerator::with_seed(3600, 1800, 3, 123).unwrap();
+        let mut gen1 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
+        let mut gen2 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
 
         let result1 = gen1.generate("region_growing", false);
         let result2 = gen2.generate("region_growing", false);
@@ -852,7 +939,7 @@ mod tests {
 
     #[test]
     fn test_validation() {
-        let mut generator = TectonicPlateGenerator::new(3600, 1800, 3).unwrap();
+        let mut generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
         let result = generator.generate("voronoi", false);
         assert!(result.is_ok());
         assert!(generator.validate().is_ok());
