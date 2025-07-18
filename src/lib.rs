@@ -25,8 +25,10 @@
 pub mod map;
 pub mod spherical;
 pub mod tectonics;
+pub mod worldmap;
 
 // Re-export main types for convenience
 pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap};
 pub use spherical::{SphericalPoint, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
 pub use tectonics::{TectonicPlateGenerator, PlateSeed, PlateStats, PlateError};
+pub use worldmap::{WorldMap, LayerType};

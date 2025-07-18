@@ -313,4 +313,80 @@ mod tests {
         let force_magnitude = (force.0.powi(2) + force.1.powi(2) + force.2.powi(2)).sqrt();
         assert!(force_magnitude > 0.0);
     }
+    
+    #[test]
+    fn test_coincident_charges() {
+        let pos = SphericalPoint::from_lat_lon(45.0, -120.0);
+        let charge1 = PointCharge::new(pos, 1.0, 1);
+        let charge2 = PointCharge::new(pos, 1.0, 2);
+        
+        let force = charge1.force_from(&charge2);
+        
+        // Force should be zero for coincident charges
+        let force_magnitude = (force.0.powi(2) + force.1.powi(2) + force.2.powi(2)).sqrt();
+        assert!(force_magnitude < 1e-9);
+    }
+    
+    #[test]
+    fn test_power_law_distribution() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let config = ElectrostaticConfig::default();
+        let charges = generate_random_charges(20, &mut rng, &config).unwrap();
+        
+        let mut charge_values: Vec<f64> = charges.iter().map(|c| c.charge).collect();
+        charge_values.sort_by(|a, b| b.partial_cmp(a).unwrap());
+        
+        // Should have significant size variety
+        let largest = charge_values[0];
+        let smallest = charge_values[charge_values.len() - 1];
+        let ratio = largest / smallest;
+        
+        // Should achieve Earth-like ratios (hundreds to thousands)
+        assert!(ratio > 100.0);
+        println!("Charge ratio: {:.1}x", ratio);
+    }
+    
+    #[test]
+    fn test_seed_reproducibility() {
+        let mut rng1 = StdRng::seed_from_u64(12345);
+        let mut rng2 = StdRng::seed_from_u64(12345);
+        let config = ElectrostaticConfig::default();
+        
+        let charges1 = generate_random_charges(10, &mut rng1, &config).unwrap();
+        let charges2 = generate_random_charges(10, &mut rng2, &config).unwrap();
+        
+        // Should produce identical results with same seed
+        assert_eq!(charges1.len(), charges2.len());
+        for (c1, c2) in charges1.iter().zip(charges2.iter()) {
+            assert_eq!(c1.id, c2.id);
+            assert!((c1.charge - c2.charge).abs() < 1e-10);
+            let (lat1, lon1) = c1.position.to_lat_lon();
+            let (lat2, lon2) = c2.position.to_lat_lon();
+            assert!((lat1 - lat2).abs() < 1e-10);
+            assert!((lon1 - lon2).abs() < 1e-10);
+        }
+    }
+    
+    #[test]
+    fn test_simulation_convergence() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let config = ElectrostaticConfig {
+            max_iterations: 50,
+            convergence_threshold: 1e-3,
+            ..Default::default()
+        };
+        
+        let mut charges = generate_random_charges(5, &mut rng, &config).unwrap();
+        let result = simulate_equilibrium(&mut charges, &config);
+        
+        // Should converge or reach max iterations without error
+        assert!(result.is_ok());
+        
+        // Charges should still be on unit sphere
+        for charge in charges {
+            let (lat, lon) = charge.position.to_lat_lon();
+            assert!(lat >= -90.0 && lat <= 90.0);
+            assert!(lon >= -180.0 && lon <= 180.0);
+        }
+    }
 }

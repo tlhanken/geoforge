@@ -105,6 +105,16 @@ impl<T> TerrainMap<T> {
         }
     }
     
+    /// Create from existing data
+    pub fn from_data(width: usize, height: usize, data: Vec<T>) -> Self {
+        Self {
+            width,
+            height,
+            data,
+            projection: MapProjection::global_equirectangular(width, height),
+        }
+    }
+    
     /// Get pixel index from coordinates
     pub fn get_index(&self, x: usize, y: usize) -> usize {
         y * self.width + x

@@ -363,8 +363,8 @@ mod tests {
         let mut gen1 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
         let mut gen2 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
 
-        let result1 = gen1.generate("region_growing", false);
-        let result2 = gen2.generate("region_growing", false);
+        let result1 = gen1.generate("electrostatic", false);
+        let result2 = gen2.generate("electrostatic", false);
 
         assert!(result1.is_ok() && result2.is_ok());
         // With same seed, results should be identical
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn test_validation() {
         let mut generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
-        let result = generator.generate("voronoi", false);
+        let result = generator.generate("electrostatic", false);
         assert!(result.is_ok());
         assert!(generator.validate().is_ok());
     }
