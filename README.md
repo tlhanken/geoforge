@@ -58,14 +58,14 @@ Run the example application:
 cargo run
 ```
 
-This will generate several example worlds and show performance comparisons between different algorithms.
+This will generate a tectonic plate map with 15 plates and export it in multiple formats.
 
 ## Export Formats
 
 Geoforge supports multiple export formats for different use cases:
 
 ### 📊 **Binary Format** (.bin)
-- Raw u16 data for high-performance applications
+- Raw u16 data (little-endian) for high-performance applications
 - Always available, no feature flags required
 - Ideal for further processing or embedding in applications
 
@@ -93,19 +93,6 @@ generator.export_png("outputs", "visualization.png")?;     // if export-png enab
 generator.export_geotiff("outputs", "georef.tiff")?;       // if export-tiff enabled
 ```
 
-## Algorithms
-
-### Tectonic Plate Generation
-
-- **Voronoi Method**: Fast, clean boundaries based on distance to nearest seed point
-- **Region Growing**: More realistic, irregular boundaries with natural variation
-
-Both methods support:
-- Proper longitude wraparound at ±180°
-- Configurable resolution (default 0.2° = ~22km at equator)
-- Boundary smoothing for natural-looking edges
-- Motion vectors for each plate (direction and speed)
-
 ## World Building Pipeline
 
 The planned full pipeline:
@@ -116,18 +103,6 @@ The planned full pipeline:
 4. **🚧 Climate** - Temperature, precipitation, wind patterns
 5. **🚧 Biomes** - Ecosystems based on climate and geography
 
-## Technical Details
-
-- **Coordinate System**: WGS84 Geographic (EPSG:4326)
-- **Data Format**: 16-bit unsigned integers for plate IDs
-- **Performance**: ~3 seconds for 3600×1800 grid (0.1° resolution)
-- **Memory Usage**: ~13MB for 3600×1800 grid
-
-## Export Formats
-
-- Raw binary data (little-endian u16)
-- GeoTIFF metadata for GIS applications
-- Statistics and analysis data
 
 ## Development
 
@@ -151,8 +126,4 @@ cargo check --features export-full
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Licensed under MIT OR Apache-2.0

@@ -3,7 +3,7 @@
 use std::f64::consts::PI;
 
 /// 3D point on unit sphere
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SphericalPoint {
     pub x: f64,
     pub y: f64,
@@ -74,7 +74,7 @@ impl SphericalPoint {
         // Use rejection sampling for uniform distribution
         let z = rng.gen_range(-1.0..1.0);
         let theta = rng.gen_range(0.0..2.0 * PI);
-        let r = (1.0 - z * z).sqrt();
+        let r = (1.0f64 - z * z).sqrt();
         
         SphericalPoint {
             x: r * theta.cos(),
