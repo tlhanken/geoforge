@@ -83,6 +83,11 @@ impl SphericalPoint {
         }
     }
     
+    /// Get Cartesian coordinates (already stored)
+    pub fn to_cartesian(&self) -> (f64, f64, f64) {
+        (self.x, self.y, self.z)
+    }
+
     /// Get neighboring points at a given angular distance
     pub fn get_neighbors(&self, angular_distance: f64, num_samples: usize) -> Vec<SphericalPoint> {
         let mut neighbors = Vec::with_capacity(num_samples);

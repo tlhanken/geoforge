@@ -6,16 +6,17 @@
 Geoforge is a Rust library for generating scientifically-inspired geological features, climate patterns, and biomes for procedural world generation. It starts with tectonic plate simulation and builds up through geological domains, elevation, climate, and biomes.
 
 ## Key Features
-- Tectonic plate generation using Voronoi or region growing algorithms
+- Electrostatic physics simulation for natural plate boundaries
+- Earth-like size variety with 6000x+ ratios from superplates to micro-plates
 - Global projection support with longitude wraparound and polar regions
 - Deterministic generation with seed-based random generation
 - Multiple export formats: Binary, PNG visualization, and GeoTIFF
-- Performance optimized with fast distance calculations
+- Performance optimized with fast physics simulation
 
 ## Current Status
-- ✅ Tectonic plates implementation (foundation layer)
-- 🚧 Geological domains, elevation, climate, biomes (planned)
-- Working on spherical coordinate system improvements
+- ✅ Electrostatic physics simulation (production ready)
+- ✅ Earth-like size variety and natural boundaries
+- ✅ Clean, optimized codebase with electrostatic-only approach
 
 ## Development Commands
 ```bash

@@ -2,7 +2,7 @@
 
 use crate::map::{TerrainMap, PlateMap};
 use crate::tectonics::plates::{PlateSeed, PlateStats};
-use crate::tectonics::algorithms::*;
+use crate::tectonics::electrostatic::*;
 use crate::tectonics::PlateError;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -10,9 +10,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-const PLANET_SURFACE_AREA_KM2: f64 = 4.0 * std::f64::consts::PI * 6371.0 * 6371.0;
 
-/// Generator for realistic tectonic plates using various algorithms
+/// Generator for realistic tectonic plates using electrostatic physics simulation
 pub struct TectonicPlateGenerator {
     pub width: usize,
     pub height: usize,
@@ -67,61 +66,110 @@ impl TectonicPlateGenerator {
         self.plate_size_targets.clear();
     }
 
-    /// Generate random seed points for plates
-    pub fn generate_seeds(&mut self) -> Result<(), PlateError> {
-        self.plate_seeds.clear();
+    /// Generate plates using electrostatic simulation
+    pub fn generate_plates_electrostatic(&mut self) -> Result<(), PlateError> {
+        println!("Generating plates using electrostatic simulation...");
         
-        // Generate plate sizes
-        self.plate_size_targets = generate_plate_sizes(self.num_plates, &mut self.rng);
+        // Generate random charges
+        let config = ElectrostaticConfig::default();
+        let mut charges = generate_random_charges(self.num_plates, &mut self.rng, &config)?;
+        
+        // Simulate to equilibrium
+        simulate_equilibrium(&mut charges, &config)?;
+        
+        // Convert charges to seeds
+        self.plate_seeds = charges_to_seeds(&charges, self.width, self.height, &mut self.rng);
+        
+        // Generate plates using Voronoi from equilibrium positions
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let point = self.plate_map.get_spherical_point(x, y);
 
-        // Generate seeds
-        self.plate_seeds = generate_seeds(
-            self.width,
-            self.height,
-            self.num_plates,
-            &mut self.rng,
-            &self.plate_size_targets,
-        )?;
+                let mut nearest_plate = 1;
+                let mut min_distance = f64::INFINITY;
 
+                // Find closest seed using geodesic distance
+                for seed in &self.plate_seeds {
+                    let distance = point.distance_to(seed.spherical_point());
+                    if distance < min_distance {
+                        min_distance = distance;
+                        nearest_plate = seed.id;
+                    }
+                }
+
+                self.plate_map.set(x, y, nearest_plate);
+            }
+
+            if y % 100 == 0 {
+                println!("Progress: {:.1}%", (y as f64 / self.height as f64) * 100.0);
+            }
+        }
+        
         Ok(())
-    }
-
-    /// Generate plates using spherical Voronoi
-    pub fn generate_plates_voronoi(&mut self) {
-        generate_plates_voronoi(&mut self.plate_map, &self.plate_seeds);
-    }
-
-    /// Generate plates using spherical region growing
-    pub fn generate_plates_region_growing(&mut self) -> Result<(), PlateError> {
-        generate_plates_region_growing(
-            &mut self.plate_map,
-            &self.plate_seeds,
-            &self.plate_size_targets,
-            &mut self.rng,
-        )
     }
 
     /// Smooth boundaries with geodesic-aware smoothing
     pub fn smooth_boundaries(&mut self, iterations: usize) {
-        smooth_boundaries(&mut self.plate_map, iterations);
+        println!("Smoothing boundaries ({} iterations)...", iterations);
+
+        for iter in 0..iterations {
+            let original_data = self.plate_map.data.clone();
+            
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let idx = self.plate_map.get_index(x, y);
+                    let point = self.plate_map.get_spherical_point(x, y);
+                    
+                    // Get neighbors and their weights based on geodesic distance
+                    let neighbors = self.plate_map.get_neighbors(x, y);
+                    let mut weighted_counts: HashMap<u16, f64> = HashMap::new();
+                    let mut total_weight = 0.0;
+                    
+                    for (nx, ny) in neighbors {
+                        let neighbor_idx = self.plate_map.get_index(nx, ny);
+                        let neighbor_point = self.plate_map.get_spherical_point(nx, ny);
+                        let neighbor_plate = original_data[neighbor_idx];
+                        
+                        // Weight by inverse geodesic distance
+                        let distance = point.distance_to(&neighbor_point);
+                        let weight = 1.0 / (distance + 0.01); // Add small epsilon to avoid division by zero
+                        
+                        *weighted_counts.entry(neighbor_plate).or_insert(0.0) += weight;
+                        total_weight += weight;
+                    }
+                    
+                    // Also consider current pixel with some weight
+                    let current_plate = original_data[idx];
+                    let self_weight = total_weight * 0.5; // Current pixel has weight equal to half of all neighbors
+                    *weighted_counts.entry(current_plate).or_insert(0.0) += self_weight;
+                    total_weight += self_weight;
+                    
+                    // Find plate with highest weighted count
+                    if let Some((&most_common, &weight)) = weighted_counts
+                        .iter()
+                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    {
+                        // Only change if there's significant majority
+                        if weight / total_weight > 0.6 {
+                            self.plate_map.data[idx] = most_common;
+                        }
+                    }
+                }
+            }
+
+            println!("Completed smoothing iteration {}/{}", iter + 1, iterations);
+        }
     }
 
-    /// Main generation function
-    pub fn generate(&mut self, method: &str, smooth: bool) -> Result<&Vec<u16>, PlateError> {
-        println!("Generating {} tectonic plates using {} method... (seed: {})", 
-                 self.num_plates, method, self.current_seed);
+    /// Main generation function using electrostatic physics simulation
+    pub fn generate(&mut self, _method: &str, smooth: bool) -> Result<&Vec<u16>, PlateError> {
+        println!("Generating {} tectonic plates using electrostatic physics... (seed: {})", 
+                 self.num_plates, self.current_seed);
 
-        // Step 1: Generate seed points
-        self.generate_seeds()?;
+        // Generate plate boundaries using electrostatic simulation
+        self.generate_plates_electrostatic()?;
 
-        // Step 2: Generate plate boundaries
-        match method {
-            "voronoi" => self.generate_plates_voronoi(),
-            "region_growing" => self.generate_plates_region_growing()?,
-            _ => return Err(PlateError::InvalidMethod(method.to_string())),
-        }
-
-        // Step 3: Optional smoothing
+        // Optional smoothing for final polish
         if smooth {
             self.smooth_boundaries(2);
         }

@@ -1,16 +1,17 @@
 # Geoforge 🌍
 
-**Realistic geological and climate modeling for procedural world generation**
+**Realistic tectonic plate generation using electrostatic physics simulation**
 
-Geoforge is a Rust library for generating scientifically-inspired geological features, climate patterns, and biomes for procedural world generation. It starts with tectonic plate simulation and builds up through geological domains, elevation, climate, and biomes.
+Geoforge is a Rust library for generating scientifically-inspired tectonic plates for procedural world generation. It uses electrostatic physics simulation to create natural plate boundaries with Earth-like size variety.
 
 ## Features
 
-- 🗺️ **Tectonic Plate Generation** - Realistic plate boundaries using Voronoi or region growing algorithms
+- ⚡ **Electrostatic Physics Simulation** - Point charges reach equilibrium for natural plate spacing
+- 🌍 **Earth-like Size Variety** - 6000x+ size ratios from superplates to micro-plates
+- 🧲 **Natural Boundaries** - Clean, curved boundaries from physics-based positioning
 - 🌐 **Global Projection Support** - Proper handling of longitude wraparound and polar regions  
 - 🎲 **Deterministic Generation** - Reproducible results with seed-based random generation
-- ⚡ **Performance Optimized** - Fast distance calculations and memory-efficient algorithms
-- 🧪 **Scientifically Inspired** - Based on real geological and climate processes
+- ⚡ **Performance Optimized** - Fast physics simulation and memory-efficient algorithms
 - 📁 **Multiple Export Formats** - Binary, PNG visualization, and GeoTIFF for GIS applications
 - 🎯 **Organized Output** - Clean file organization in dedicated output directories
 
@@ -35,16 +36,16 @@ Generate your first world:
 ```rust
 use geoforge::TectonicPlateGenerator;
 
-// Generate a world with 15 tectonic plates at 0.2° resolution
-let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
-let plate_map = generator.generate("region_growing", true)?;
+// Generate a world with 20 tectonic plates at 0.2° resolution
+let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 20, 42)?;
+let plate_map = generator.generate("electrostatic", true)?;
 
 // Export in all available formats to organized directory
 generator.export_all("outputs", "my_world")?;
 
 // Get statistics about the generated plates
 let stats = generator.get_plate_stats();
-for (plate_id, stat) in stats {
+for (plate_id, stat) in stats.iter().take(5) {
     println!("Plate {}: {:.1}% of surface ({} km²)", 
              plate_id, stat.percentage, stat.area_km2);
 }
@@ -58,7 +59,7 @@ Run the example application:
 cargo run
 ```
 
-This will generate a tectonic plate map with 15 plates and export it in multiple formats.
+This will generate a realistic tectonic plate map with 20 plates using electrostatic physics simulation and export it in multiple formats.
 
 ## Export Formats
 
@@ -93,15 +94,15 @@ generator.export_png("outputs", "visualization.png")?;     // if export-png enab
 generator.export_geotiff("outputs", "georef.tiff")?;       // if export-tiff enabled
 ```
 
-## World Building Pipeline
+## How It Works
 
-The planned full pipeline:
+The electrostatic physics simulation:
 
-1. **✅ Tectonic Plates** - Foundation layer defining major crustal boundaries
-2. **🚧 Geological Domains** - Rock types, orogenies, basins based on plate interactions  
-3. **🚧 Elevation** - Height maps from geological processes
-4. **🚧 Climate** - Temperature, precipitation, wind patterns
-5. **🚧 Biomes** - Ecosystems based on climate and geography
+1. **⚡ Charge Placement** - Random point charges distributed on the sphere
+2. **🎯 Size Variety** - Power-law charge distribution creates Earth-like size hierarchy
+3. **🧲 Physics Simulation** - Charges repel until reaching equilibrium
+4. **🗺️ Boundary Generation** - Voronoi diagram from equilibrium positions
+5. **✨ Smoothing** - Optional geodesic-aware boundary smoothing
 
 
 ## Development

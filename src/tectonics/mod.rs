@@ -1,11 +1,12 @@
 //! Tectonic plate simulation and generation
 //! 
-//! This module handles the generation of realistic tectonic plates using various
-//! algorithms including Voronoi diagrams and region growing on the sphere.
+//! This module handles the generation of realistic tectonic plates using 
+//! electrostatic physics simulation on the sphere for natural boundaries
+//! and Earth-like size variety.
 
 pub mod generator;
 pub mod plates;
-pub mod algorithms;
+pub mod electrostatic;
 
 pub use generator::TectonicPlateGenerator;
 pub use plates::{PlateSeed, PlateStats};
