@@ -1,18 +1,21 @@
 # Geoforge 🌍
 
-**Realistic geological and climate modeling for procedural world generation**
+**Realistic tectonic plate generation using electrostatic physics simulation**
 
-Geoforge is a Rust library for generating scientifically-inspired geological features, climate patterns, and biomes for procedural world generation. It starts with tectonic plate simulation and builds up through geological domains, elevation, climate, and biomes.
+Geoforge is a Rust library for generating scientifically-inspired tectonic plates for procedural world generation. It uses electrostatic physics simulation to create natural plate boundaries with Earth-like size variety.
 
 ## Features
 
-- 🗺️ **Tectonic Plate Generation** - Realistic plate boundaries using Voronoi or region growing algorithms
+- ⚡ **Electrostatic Physics Simulation** - Point charges reach equilibrium for natural plate spacing
+- 🌍 **Earth-like Size Variety** - 6000x+ size ratios from superplates to micro-plates
+- 🧲 **Natural Boundaries** - Clean, curved boundaries from physics-based positioning
 - 🌐 **Global Projection Support** - Proper handling of longitude wraparound and polar regions  
 - 🎲 **Deterministic Generation** - Reproducible results with seed-based random generation
-- ⚡ **Performance Optimized** - Fast distance calculations and memory-efficient algorithms
-- 🧪 **Scientifically Inspired** - Based on real geological and climate processes
+- ⚡ **Performance Optimized** - Fast physics simulation and memory-efficient algorithms
 - 📁 **Multiple Export Formats** - Binary, PNG visualization, and GeoTIFF for GIS applications
 - 🎯 **Organized Output** - Clean file organization in dedicated output directories
+- 🪐 **Planetary Parameters** - Configurable planetary size, gravity, orbital mechanics, and stellar luminosity
+- ☀️ **Accurate Insolation** - Physics-based solar radiation calculations for climate modeling
 
 ## Quick Start
 
@@ -35,16 +38,16 @@ Generate your first world:
 ```rust
 use geoforge::TectonicPlateGenerator;
 
-// Generate a world with 15 tectonic plates at 0.2° resolution
-let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
-let plate_map = generator.generate("region_growing", true)?;
+// Generate a world with 20 tectonic plates at 0.2° resolution
+let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 20, 42)?;
+let plate_map = generator.generate("electrostatic", true)?;
 
 // Export in all available formats to organized directory
 generator.export_all("outputs", "my_world")?;
 
 // Get statistics about the generated plates
 let stats = generator.get_plate_stats();
-for (plate_id, stat) in stats {
+for (plate_id, stat) in stats.iter().take(5) {
     println!("Plate {}: {:.1}% of surface ({} km²)", 
              plate_id, stat.percentage, stat.area_km2);
 }
@@ -58,14 +61,14 @@ Run the example application:
 cargo run
 ```
 
-This will generate several example worlds and show performance comparisons between different algorithms.
+This will generate a realistic tectonic plate map with 20 plates using electrostatic physics simulation and export it in multiple formats.
 
 ## Export Formats
 
 Geoforge supports multiple export formats for different use cases:
 
 ### 📊 **Binary Format** (.bin)
-- Raw u16 data for high-performance applications
+- Raw u16 data (little-endian) for high-performance applications
 - Always available, no feature flags required
 - Ideal for further processing or embedding in applications
 
@@ -93,41 +96,31 @@ generator.export_png("outputs", "visualization.png")?;     // if export-png enab
 generator.export_geotiff("outputs", "georef.tiff")?;       // if export-tiff enabled
 ```
 
-## Algorithms
+## How It Works
 
-### Tectonic Plate Generation
+The electrostatic physics simulation:
 
-- **Voronoi Method**: Fast, clean boundaries based on distance to nearest seed point
-- **Region Growing**: More realistic, irregular boundaries with natural variation
+1. **⚡ Charge Placement** - Random point charges distributed on the sphere
+2. **🎯 Size Variety** - Power-law charge distribution creates Earth-like size hierarchy
+3. **🧲 Physics Simulation** - Charges repel until reaching equilibrium
+4. **🗺️ Boundary Generation** - Voronoi diagram from equilibrium positions
+5. **✨ Smoothing** - Optional geodesic-aware boundary smoothing
 
-Both methods support:
-- Proper longitude wraparound at ±180°
-- Configurable resolution (default 0.2° = ~22km at equator)
-- Boundary smoothing for natural-looking edges
-- Motion vectors for each plate (direction and speed)
+## Pipeline Overview
 
-## World Building Pipeline
+Geoforge implements a scientifically-grounded generation pipeline:
 
-The planned full pipeline:
+- **⭐ Stage 0: Stellar Systems** ⏳ - Star generation, luminosity, habitable zones (defaults to Sun-like)
+- **🔥 Stage 1: Tectonic Foundation** ✅ - Realistic plate boundaries using electrostatic physics
+- **🏔️ Stage 2: Geologic Provinces** 🔄 - Orogenic belts, LIPs, cratons, oceanic domains
+- **⛰️ Stage 3: Elevation Generation** ⏳ - Mountains, ocean floors, continental margins  
+- **🌤️ Stage 4: Climate Modeling** ⏳ - Trade winds, temperature, precipitation patterns
+- **🌿 Stage 5: Biome Generation** ⏳ - Realistic biome distribution from climate data
+- **🏞️ Stage 6: Hydrological Systems** ⏳ - Rivers, lakes, watersheds from elevation
+- **🔮 Stage 7: Advanced Features** ⏳ - Resources, hazards, settlement patterns
 
-1. **✅ Tectonic Plates** - Foundation layer defining major crustal boundaries
-2. **🚧 Geological Domains** - Rock types, orogenies, basins based on plate interactions  
-3. **🚧 Elevation** - Height maps from geological processes
-4. **🚧 Climate** - Temperature, precipitation, wind patterns
-5. **🚧 Biomes** - Ecosystems based on climate and geography
+*See CLAUDE.md for detailed roadmap and geological specifications*
 
-## Technical Details
-
-- **Coordinate System**: WGS84 Geographic (EPSG:4326)
-- **Data Format**: 16-bit unsigned integers for plate IDs
-- **Performance**: ~3 seconds for 3600×1800 grid (0.1° resolution)
-- **Memory Usage**: ~13MB for 3600×1800 grid
-
-## Export Formats
-
-- Raw binary data (little-endian u16)
-- GeoTIFF metadata for GIS applications
-- Statistics and analysis data
 
 ## Development
 
@@ -151,8 +144,4 @@ cargo check --features export-full
 
 ## License
 
-Licensed under either of Apache License, Version 2.0 or MIT license at your option.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Licensed under MIT OR Apache-2.0
