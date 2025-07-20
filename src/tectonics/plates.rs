@@ -1,6 +1,6 @@
 //! Tectonic plate data structures and utilities
 
-use crate::spherical::SphericalPoint;
+use crate::map::spherical::SphericalPoint;
 
 /// Represents a tectonic plate seed point with motion information
 #[derive(Debug, Clone)]

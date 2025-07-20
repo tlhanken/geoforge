@@ -1,8 +1,14 @@
-use geoforge::{WorldMap, LayerType};
+use geoforge::WorldMap;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Realistic World Generation");
     println!("=====================================");
+
+    // Check for PNG import argument
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 3 && args[1] == "--import-png" {
+        return import_png_mode(&args[2]);
+    }
 
     // Create a new world map
     let seed = 097243067;
@@ -43,19 +49,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     #[cfg(feature = "export-png")]
     {
-        world.export_layer_png(LayerType::Tectonics, "outputs", "tectonics.png")?;
+        world.export_tectonics_png("outputs", "tectonics.png")?;
         println!("✅ Tectonics layer exported as PNG");
     }
     
     // Save complete world map to binary file
     world.save_to_file("outputs/world.map")?;
     println!("✅ Complete world map saved to binary file");
-    
-    // Demonstrate loading
-    println!("\n🔄 Testing world map loading...");
-    let loaded_world = WorldMap::load_from_file("outputs/world.map")?;
-    println!("✅ World map loaded successfully ({}x{}, seed: {})", 
-             loaded_world.width, loaded_world.height, loaded_world.seed);
     
     println!("\n🎉 WORLD GENERATION COMPLETE!");
     println!("Files created in outputs/ directory:");
@@ -64,5 +64,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "export-png")]
     println!("  • tectonics.png - Tectonic plates visualization");
     
+    Ok(())
+}
+
+#[cfg(feature = "export-png")]
+fn import_png_mode(png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🖼️ PNG Import Mode");
+    println!("=================");
+    
+    // Try to determine dimensions from the PNG file
+    use image::io::Reader as ImageReader;
+    use image::GenericImageView;
+    let img = ImageReader::open(png_path)?.decode()?;
+    let (width, height) = img.dimensions();
+    
+    println!("📐 Detected PNG dimensions: {}×{}", width, height);
+    
+    // Create world map with matching dimensions
+    let mut world = WorldMap::new(width as usize, height as usize, 0)?;
+    
+    // Import the PNG
+    world.import_tectonics_png(png_path)?;
+    
+    // Show statistics
+    if let Some(stats) = world.get_tectonic_stats() {
+        println!("\n📊 Imported {} plates:", stats.len());
+        
+        let mut sorted_stats: Vec<_> = stats.iter().collect();
+        sorted_stats.sort_by(|a, b| b.1.area_km2.cmp(&a.1.area_km2));
+        
+        for (i, (plate_id, stat)) in sorted_stats.iter().enumerate().take(10) {
+            let category = match i {
+                0 => "🌍 Largest",
+                1 => "🏔️  2nd largest",
+                2 => "⛰️  3rd largest",
+                _ => "🗻 Plate",
+            };
+            println!("  {} {}: {:.1}% ({} km²)", 
+                     category, plate_id, stat.percentage, stat.area_km2);
+        }
+        
+        if sorted_stats.len() > 10 {
+            println!("  ... and {} more plates", sorted_stats.len() - 10);
+        }
+    }
+    
+    // Export results
+    std::fs::create_dir_all("outputs/imported")?;
+    world.save_to_file("outputs/imported/world.map")?;
+    println!("\n💾 Saved imported world to: outputs/imported/world.map");
+    
+    world.export_tectonics_png("outputs/imported", "plates.png")?;
+    println!("🎨 Exported visualization: outputs/imported/plates.png");
+    
+    println!("\n🎉 PNG import completed successfully!");
+    println!("\n💡 Usage: geoforge --import-png <path-to-png>");
+    
+    Ok(())
+}
+
+#[cfg(not(feature = "export-png"))]
+fn import_png_mode(_png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("❌ PNG import requires --features export-png");
+    println!("   Run: cargo run --features export-png -- --import-png <path>");
     Ok(())
 }

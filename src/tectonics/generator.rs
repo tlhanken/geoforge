@@ -1,6 +1,6 @@
 //! Main tectonic plate generator
 
-use crate::map::{TerrainMap, PlateMap};
+use crate::map::terrain::{TerrainMap, PlateMap};
 use crate::tectonics::plates::{PlateSeed, PlateStats};
 use crate::tectonics::electrostatic::*;
 use crate::tectonics::PlateError;
@@ -369,6 +369,19 @@ mod tests {
         assert!(result1.is_ok() && result2.is_ok());
         // With same seed, results should be identical
         assert_eq!(result1.unwrap(), result2.unwrap());
+    }
+
+    #[test]
+    fn test_different_seeds_produce_different_maps() {
+        let mut gen1 = TectonicPlateGenerator::with_seed(180, 90, 5, 123).unwrap();
+        let mut gen2 = TectonicPlateGenerator::with_seed(180, 90, 5, 456).unwrap();
+
+        let result1 = gen1.generate("electrostatic", false);
+        let result2 = gen2.generate("electrostatic", false);
+
+        assert!(result1.is_ok() && result2.is_ok());
+        // With different seeds, results should be different
+        assert_ne!(result1.unwrap(), result2.unwrap());
     }
 
     #[test]

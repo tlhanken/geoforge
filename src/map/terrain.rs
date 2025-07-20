@@ -3,7 +3,7 @@
 //! This module provides the fundamental data types and utilities for representing
 //! geographic data across different terrain generation stages.
 
-use crate::spherical::SphericalPoint;
+use crate::map::spherical::SphericalPoint;
 
 /// Core map data structure for all terrain generation steps
 #[derive(Debug, Clone)]
@@ -301,7 +301,7 @@ mod tests {
         assert!((lon - 0.5).abs() < 1.0); // Should be close to prime meridian
         
         // Test north pole
-        let (lat, lon) = projection.pixel_to_coords(180, 0);
+        let (lat, _lon) = projection.pixel_to_coords(180, 0);
         assert!((lat - 89.5).abs() < 1.0); // Near north pole
         
         // Test roundtrip

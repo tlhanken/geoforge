@@ -4,7 +4,7 @@
 //! to generate natural tectonic plate boundaries. Point charges are placed
 //! randomly and allowed to reach equilibrium through mutual repulsion.
 
-use crate::spherical::SphericalPoint;
+use crate::map::spherical::SphericalPoint;
 use crate::tectonics::plates::PlateSeed;
 use crate::tectonics::PlateError;
 use rand::prelude::*;
