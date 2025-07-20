@@ -9,7 +9,7 @@ pub mod plates;
 pub mod electrostatic;
 
 pub use generator::TectonicPlateGenerator;
-pub use plates::{PlateSeed, PlateStats};
+pub use plates::{PlateSeed, PlateStats, PlateInteraction};
 
 
 /// Errors that can occur during plate generation

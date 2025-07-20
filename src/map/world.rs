@@ -20,6 +20,7 @@ pub struct WorldMap {
     
     // World generation layers
     pub tectonics: Option<TerrainMap<u16>>,
+    pub geology: Option<TerrainMap<crate::geology::GeologicDomain>>,
     pub elevation: Option<TerrainMap<f32>>,
     pub temperature: Option<TerrainMap<f32>>,
     pub precipitation: Option<TerrainMap<f32>>,
@@ -53,6 +54,7 @@ impl WorldMap {
             seed,
             planetary_params,
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,
@@ -174,6 +176,27 @@ impl WorldMap {
         Ok(())
     }
     
+    /// Generate geology domains based on tectonic plates
+    pub fn generate_geology(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Ensure we have tectonic data first
+        if self.tectonics.is_none() || self.plate_seeds.is_none() {
+            return Err("Must generate tectonics before geology".into());
+        }
+        
+        // Create geology domain generator
+        let generator = crate::geology::GeologicDomainGenerator::new(
+            self.width,
+            self.height,
+            self.plate_seeds.as_ref().unwrap().clone(),
+        );
+        
+        // For now, generate a simple demonstration pattern
+        // TODO: Implement full geology generation based on plate boundaries and interactions
+        let geology_map = generator.generate_simple_map();
+        self.geology = Some(geology_map);
+        
+        Ok(())
+    }
     
     /// Generate plate seeds from imported plate data by finding centroids
     fn generate_seeds_from_plate_data(&self, plate_data: &[u16]) -> Result<Vec<PlateSeed>, Box<dyn std::error::Error>> {
@@ -308,6 +331,12 @@ impl WorldMap {
             println!("✅ Exported tectonics: {}/{}_tectonics.png", output_dir, base_name);
         }
         
+        // Export geology if available
+        if let Some(ref geology) = self.geology {
+            geology.export_png(output_dir, &format!("{}_geology.png", base_name))?;
+            println!("✅ Exported geology: {}/{}_geology.png", output_dir, base_name);
+        }
+        
         // Export elevation if available (placeholder for future implementation)
         if self.elevation.is_some() {
             // TODO: Implement export_elevation_png
@@ -332,7 +361,7 @@ impl WorldMap {
             println!("⚠️ Biomes export not yet implemented");
         }
         
-        if self.tectonics.is_none() && self.elevation.is_none() && 
+        if self.tectonics.is_none() && self.geology.is_none() && self.elevation.is_none() && 
            self.temperature.is_none() && self.precipitation.is_none() && 
            self.biomes.is_none() {
             println!("⚠️ No layers available to export");
@@ -456,6 +485,7 @@ impl WorldMap {
             seed,
             planetary_params: PlanetaryParams::earth(), // Default to Earth parameters for loaded files
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,

@@ -280,6 +280,45 @@ pub type ElevationMap = TerrainMap<f32>;
 pub type TemperatureMap = TerrainMap<f32>;
 pub type PrecipitationMap = TerrainMap<f32>;
 pub type BiomeMap = TerrainMap<u8>;
+pub type GeologyMap = TerrainMap<crate::geology::GeologicDomain>;
+
+/// PNG export functionality for GeologyMap
+impl GeologyMap {
+    /// Export geology domains as PNG with domain-specific colors
+    #[cfg(feature = "export-png")]
+    pub fn export_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        use std::fs;
+        use std::path::Path;
+        
+        fs::create_dir_all(output_dir)?;
+        let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+        
+        // Draw the image using domain-specific colors
+        for (y, row) in self.data.chunks(self.width).enumerate() {
+            for (x, domain) in row.iter().enumerate() {
+                let color = domain.color();
+                img.put_pixel(x as u32, y as u32, Rgb(color));
+            }
+        }
+        
+        let path = Path::new(output_dir).join(filename);
+        img.save(path)?;
+        Ok(())
+    }
+    
+    /// Export all available geology formats  
+    pub fn export_all(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use std::fs;
+        
+        fs::create_dir_all(output_dir)?;
+        
+        #[cfg(feature = "export-png")]
+        self.export_png(output_dir, &format!("{}.png", base_name))?;
+        
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -11,7 +11,7 @@ pub mod spherical;
 // Re-export main types for convenience
 pub use terrain::{
     TerrainMap, MapProjection, MapStats,
-    PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap
+    PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap, GeologyMap
 };
 pub use world::WorldMap;
 pub use spherical::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};

@@ -19,6 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n⚡ Generating tectonic layer...");
     world.generate_tectonics(20, true)?;
     
+    // Generate geology domains based on tectonics
+    println!("\n🗻 Generating geology layer...");
+    world.generate_geology()?;
+    
     // Show statistics
     if let Some(stats) = world.get_tectonic_stats() {
         println!("\n📊 Generated {} plates with realistic size distribution:", stats.len());
@@ -49,8 +53,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     #[cfg(feature = "export-png")]
     {
-        world.export_tectonics_png("outputs", "tectonics.png")?;
-        println!("✅ Tectonics layer exported as PNG");
+        world.export_all_png("outputs", "world")?;
+        println!("✅ All layers exported as PNG files");
+    }
+    
+    #[cfg(not(feature = "export-png"))]
+    {
+        println!("⚠️ PNG export disabled. Use --features export-png for visualization files");
     }
     
     // Save complete world map to binary file
@@ -62,7 +71,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  • world.map - Complete world data (binary)");
     
     #[cfg(feature = "export-png")]
-    println!("  • tectonics.png - Tectonic plates visualization");
+    {
+        println!("  • world_tectonics.png - Tectonic plates visualization");
+        println!("  • world_geology.png - Geological domains visualization");
+    }
     
     Ok(())
 }

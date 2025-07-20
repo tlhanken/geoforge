@@ -24,9 +24,11 @@
 // Core modules
 pub mod map;
 pub mod tectonics;
+pub mod geology;
 
 // Re-export main types for convenience
-pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap};
+pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap, GeologyMap};
 pub use map::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
 pub use map::WorldMap;
 pub use tectonics::{TectonicPlateGenerator, PlateSeed, PlateStats, PlateError};
+pub use geology::{GeologicDomain, GeologicDomainGenerator, DomainInfo, GeologyError};
