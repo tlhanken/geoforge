@@ -190,9 +190,8 @@ impl WorldMap {
             self.plate_seeds.as_ref().unwrap().clone(),
         );
         
-        // For now, generate a simple demonstration pattern
-        // TODO: Implement full geology generation based on plate boundaries and interactions
-        let geology_map = generator.generate_simple_map();
+        // Generate realistic geology based on tectonic plate analysis
+        let geology_map = generator.generate_geology_map(self.tectonics.as_ref().unwrap());
         self.geology = Some(geology_map);
         
         Ok(())
