@@ -14,6 +14,8 @@ Geoforge is a Rust library for generating scientifically-inspired tectonic plate
 - ⚡ **Performance Optimized** - Fast physics simulation and memory-efficient algorithms
 - 📁 **Multiple Export Formats** - Binary, PNG visualization, and GeoTIFF for GIS applications
 - 🎯 **Organized Output** - Clean file organization in dedicated output directories
+- 🪐 **Planetary Parameters** - Configurable planetary size, gravity, orbital mechanics, and stellar luminosity
+- ☀️ **Accurate Insolation** - Physics-based solar radiation calculations for climate modeling
 
 ## Quick Start
 
@@ -103,6 +105,21 @@ The electrostatic physics simulation:
 3. **🧲 Physics Simulation** - Charges repel until reaching equilibrium
 4. **🗺️ Boundary Generation** - Voronoi diagram from equilibrium positions
 5. **✨ Smoothing** - Optional geodesic-aware boundary smoothing
+
+## Pipeline Overview
+
+Geoforge implements a scientifically-grounded generation pipeline:
+
+- **⭐ Stage 0: Stellar Systems** ⏳ - Star generation, luminosity, habitable zones (defaults to Sun-like)
+- **🔥 Stage 1: Tectonic Foundation** ✅ - Realistic plate boundaries using electrostatic physics
+- **🏔️ Stage 2: Geologic Provinces** 🔄 - Orogenic belts, LIPs, cratons, oceanic domains
+- **⛰️ Stage 3: Elevation Generation** ⏳ - Mountains, ocean floors, continental margins  
+- **🌤️ Stage 4: Climate Modeling** ⏳ - Trade winds, temperature, precipitation patterns
+- **🌿 Stage 5: Biome Generation** ⏳ - Realistic biome distribution from climate data
+- **🏞️ Stage 6: Hydrological Systems** ⏳ - Rivers, lakes, watersheds from elevation
+- **🔮 Stage 7: Advanced Features** ⏳ - Resources, hazards, settlement patterns
+
+*See CLAUDE.md for detailed roadmap and geological specifications*
 
 
 ## Development

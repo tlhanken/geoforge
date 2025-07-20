@@ -4,6 +4,7 @@
 //! (tectonics, elevation, climate, biomes) and handles serialization/export.
 
 use crate::map::terrain::TerrainMap;
+use crate::map::spherical::PlanetaryParams;
 use crate::tectonics::TectonicPlateGenerator;
 use crate::tectonics::plates::{PlateSeed, PlateStats};
 use std::collections::HashMap;
@@ -15,6 +16,7 @@ pub struct WorldMap {
     pub width: usize,
     pub height: usize,
     pub seed: u64,
+    pub planetary_params: PlanetaryParams,
     
     // World generation layers
     pub tectonics: Option<TerrainMap<u16>>,
@@ -29,8 +31,18 @@ pub struct WorldMap {
 }
 
 impl WorldMap {
-    /// Create a new WorldMap with specified dimensions and seed
+    /// Create a new WorldMap with specified dimensions and seed (using Earth-like parameters)
     pub fn new(width: usize, height: usize, seed: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_params(width, height, seed, PlanetaryParams::earth())
+    }
+    
+    /// Create a new WorldMap with specified dimensions, seed, and planetary parameters
+    pub fn new_with_params(
+        width: usize, 
+        height: usize, 
+        seed: u64, 
+        planetary_params: PlanetaryParams
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         if width == 0 || height == 0 {
             return Err("Width and height must be > 0".into());
         }
@@ -39,6 +51,7 @@ impl WorldMap {
             width,
             height,
             seed,
+            planetary_params,
             tectonics: None,
             elevation: None,
             temperature: None,
@@ -47,6 +60,16 @@ impl WorldMap {
             plate_seeds: None,
             plate_stats: None,
         })
+    }
+    
+    /// Create a Mars-like world
+    pub fn new_mars(width: usize, height: usize, seed: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_params(width, height, seed, PlanetaryParams::mars())
+    }
+    
+    /// Create a Venus-like world
+    pub fn new_venus(width: usize, height: usize, seed: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_with_params(width, height, seed, PlanetaryParams::venus())
     }
     
     /// Create a new WorldMap with random seed
@@ -214,7 +237,7 @@ impl WorldMap {
         for y in 0..self.height {
             for x in 0..self.width {
                 let (lat, _lon) = tectonic_map.projection.pixel_to_coords(x, y);
-                let pixel_area = tectonic_map.projection.pixel_area_km2(lat);
+                let pixel_area = tectonic_map.projection.pixel_area_km2_with_radius(lat, self.planetary_params.radius_km);
                 let pixel = tectonic_map.data[tectonic_map.get_index(x, y)];
                 
                 if pixel > 0 {
@@ -431,6 +454,7 @@ impl WorldMap {
             width,
             height,
             seed,
+            planetary_params: PlanetaryParams::earth(), // Default to Earth parameters for loaded files
             tectonics: None,
             elevation: None,
             temperature: None,

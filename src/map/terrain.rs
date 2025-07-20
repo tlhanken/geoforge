@@ -64,14 +64,16 @@ impl MapProjection {
     
     /// Get the area of a pixel at given latitude (km²)
     pub fn pixel_area_km2(&self, lat: f64) -> f64 {
-        const EARTH_RADIUS_KM: f64 = 6371.0;
-        
+        self.pixel_area_km2_with_radius(lat, 6371.0)
+    }
+    
+    pub fn pixel_area_km2_with_radius(&self, lat: f64, radius_km: f64) -> f64 {
         let lat_rad = lat.to_radians();
         let delta_lat_rad = self.lat_resolution.to_radians();
         let delta_lon_rad = self.lon_resolution.to_radians();
         
         // Area of spherical rectangle
-        let area = EARTH_RADIUS_KM * EARTH_RADIUS_KM * delta_lon_rad * 
+        let area = radius_km * radius_km * delta_lon_rad * 
                    (lat_rad + delta_lat_rad / 2.0).sin().abs() * delta_lat_rad.abs();
         
         area

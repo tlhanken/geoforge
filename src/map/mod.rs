@@ -14,4 +14,4 @@ pub use terrain::{
     PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap
 };
 pub use world::WorldMap;
-pub use spherical::{SphericalPoint, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
+pub use spherical::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
