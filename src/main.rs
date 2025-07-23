@@ -12,12 +12,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a new world map
     let seed = 097243067;
-    println!("\n🗺️ Creating new world map (400x200, seed: {})...", seed);
-    let mut world = WorldMap::new(400, 200, seed)?;
+    println!("\n🗺️ Creating new world map (1900x900, seed: {})...", seed);
+    let mut world = WorldMap::new(1800, 900, seed)?;
     
     // Generate tectonic plates using electrostatic physics
     println!("\n⚡ Generating tectonic layer...");
-    world.generate_tectonics(8, true)?;
+    world.generate_tectonics(20, false)?;
     
     // Generate geology domains based on tectonics
     println!("\n🗻 Generating geology layer...");

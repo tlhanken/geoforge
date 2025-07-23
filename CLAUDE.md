@@ -154,6 +154,12 @@ cargo check --features export-full
 - `export-tiff`: Enables GeoTIFF export for GIS applications
 - `export-full`: Enables all export formats
 
+## Development Philosophy
+- **Beta status:** This project is in active development - focus on getting something workable first
+- **No backward compatibility concerns:** Feel free to rewrite and refactor extensively
+- **Rapid iteration:** Don't worry about preserving old logic variations or extensive documentation of alternatives
+- **Results over process:** If the output looks wrong, fix it immediately rather than documenting why it's wrong
+
 ## Notes
 - Working on polar region handling and longitude wraparound
 - Recent commits focused on spherical coordinate improvements

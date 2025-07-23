@@ -4,7 +4,6 @@
 //! to create realistic geological domains including orogenic belts, large igneous provinces,
 //! arc systems, stable continental regions, extensional zones, and oceanic domains.
 
-use crate::map::spherical::SphericalPoint;
 use crate::tectonics::{PlateSeed, PlateInteraction};
 
 /// Major geologic domain types based on tectonic setting
@@ -162,300 +161,406 @@ impl GeologicDomainGenerator {
     }
     
     /// Generate geologic domains based on plate configuration
-    pub fn generate(&self, plate_map: &[u16]) -> Result<Vec<DomainInfo>, GeologyError> {
+    pub fn generate(&self, _plate_map: &[u16]) -> Result<Vec<DomainInfo>, GeologyError> {
         // TODO: Implement domain generation logic
         // This will analyze plate boundaries, interactions, and ages to determine domains
         Ok(vec![])
     }
     
-    /// Generate realistic geology map based on tectonic plate analysis
+    /// Generate realistic geology map based on tectonic plate analysis (optimized)
     pub fn generate_geology_map(&self, plate_map: &crate::map::terrain::PlateMap) -> crate::map::terrain::GeologyMap {
+        println!("Generating optimized geological domains...");
+        
+        // Step 1: Pre-compute plate statistics (O(plates) instead of O(pixels))
+        let plate_stats = self.compute_plate_statistics(plate_map);
+        println!("  Computed statistics for {} plates", plate_stats.len());
+        
+        // Step 2: Build efficient distance field for boundaries (O(pixels) single pass)
+        let distance_field = self.build_distance_field(plate_map);
+        println!("  Built boundary distance field");
+        
+        // Step 3: Pre-compute boundary interactions (O(boundaries) instead of O(pixels))
+        let boundary_interactions = self.compute_boundary_interactions(plate_map, &plate_stats);
+        println!("  Computed boundary interactions");
+        
+        // Step 4: Generate domains using cached data (O(pixels) single pass)
         let mut geology_map = crate::map::terrain::TerrainMap::new(
             self.width, 
             self.height, 
             GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
         );
         
-        // First pass: Detect plate boundaries and classify pixels
-        let boundary_info = self.detect_plate_boundaries(plate_map);
-        
-        // Generate domains with progress indication
-        println!("Classifying geological domains...");
-        let total_pixels = self.width * self.height;
-        let progress_interval = total_pixels / 10; // 10% intervals
-        let mut processed = 0;
-        
         for y in 0..self.height {
             for x in 0..self.width {
-                let domain = self.classify_pixel_domain(x, y, plate_map, &boundary_info);
+                let domain = self.classify_pixel_optimized(
+                    x, y, plate_map, &distance_field, &plate_stats, &boundary_interactions
+                );
                 geology_map.set(x, y, domain);
-                
-                processed += 1;
-                if processed % progress_interval == 0 {
-                    let progress = (processed * 100) / total_pixels;
-                    println!("  Progress: {}%", progress);
-                }
             }
         }
         
+        println!("  Geological domain generation complete");
         geology_map
     }
     
-    /// Detect plate boundaries and classify them
-    fn detect_plate_boundaries(&self, plate_map: &crate::map::terrain::PlateMap) -> BoundaryInfo {
-        let mut boundary_pixels = std::collections::HashSet::new();
-        let mut boundary_types = std::collections::HashMap::new();
+    
+    /// Pre-compute plate statistics for efficient domain classification
+    fn compute_plate_statistics(&self, plate_map: &crate::map::terrain::PlateMap) -> std::collections::HashMap<u16, PlateStatistics> {
+        let mut stats = std::collections::HashMap::new();
+        let mut plate_pixels: std::collections::HashMap<u16, Vec<(usize, usize)>> = std::collections::HashMap::new();
+        
+        // Count pixels per plate
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if let Some(&plate_id) = plate_map.get(x, y) {
+                    plate_pixels.entry(plate_id).or_insert_with(Vec::new).push((x, y));
+                }
+            }
+        }
+        
+        // Calculate statistics for each plate
+        for (plate_id, pixels) in plate_pixels {
+            let size_ratio = pixels.len() as f64 / (self.width * self.height) as f64;
+            let age = self.calculate_realistic_plate_age(plate_id, size_ratio);
+            let motion = self.get_plate_motion(plate_id);
+            
+            stats.insert(plate_id, PlateStatistics {
+                size_ratio,
+                age_ma: age,
+                motion_direction: motion.0,
+                motion_speed: motion.1,
+                center: self.calculate_plate_center(&pixels),
+                is_oceanic: age < 800.0 || size_ratio < 0.03, // More oceanic classification
+            });
+        }
+        
+        stats
+    }
+    
+    /// Build distance field using efficient flood-fill algorithm with expanded ranges
+    fn build_distance_field(&self, plate_map: &crate::map::terrain::PlateMap) -> Vec<Vec<u8>> {
+        let mut distance_field = vec![vec![255u8; self.width]; self.height];
+        let mut queue = std::collections::VecDeque::new();
+        
+        // Find all boundary pixels and set them to distance 0
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.is_boundary_pixel(x, y, plate_map) {
+                    distance_field[y][x] = 0;
+                    queue.push_back((x, y, 0u8));
+                }
+            }
+        }
+        
+        // Flood-fill to compute distances (much larger range for realistic provinces)
+        while let Some((x, y, dist)) = queue.pop_front() {
+            if dist >= 80 { continue; } // Expanded from 20 to 80 for larger provinces
+            
+            for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let nx = (x as i32 + dx) as usize;
+                let ny = (y as i32 + dy) as usize;
+                
+                if nx < self.width && ny < self.height {
+                    let new_dist = dist + 1;
+                    if distance_field[ny][nx] > new_dist {
+                        distance_field[ny][nx] = new_dist;
+                        queue.push_back((nx, ny, new_dist));
+                    }
+                }
+            }
+        }
+        
+        distance_field
+    }
+    
+    /// Check if a pixel is on a plate boundary
+    fn is_boundary_pixel(&self, x: usize, y: usize, plate_map: &crate::map::terrain::PlateMap) -> bool {
+        let current_plate = plate_map.get(x, y).copied().unwrap_or(0);
+        
+        for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+            let nx = (x as i32 + dx) as usize;
+            let ny = (y as i32 + dy) as usize;
+            
+            if nx < self.width && ny < self.height {
+                if let Some(&neighbor_plate) = plate_map.get(nx, ny) {
+                    if neighbor_plate != current_plate {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    
+    /// Pre-compute boundary interactions for efficient lookup
+    fn compute_boundary_interactions(
+        &self, 
+        plate_map: &crate::map::terrain::PlateMap,
+        plate_stats: &std::collections::HashMap<u16, PlateStatistics>
+    ) -> std::collections::HashMap<(u16, u16), PlateInteraction> {
+        let mut interactions = std::collections::HashMap::new();
         
         for y in 0..self.height {
             for x in 0..self.width {
-                let current_plate = plate_map.get(x, y).copied().unwrap_or(0);
-                let neighbors = plate_map.get_neighbors(x, y);
-                
-                // Check if this pixel is on a plate boundary
-                for (nx, ny) in neighbors {
-                    if let Some(neighbor_plate) = plate_map.get(nx, ny) {
-                        if *neighbor_plate != current_plate {
-                            boundary_pixels.insert((x, y));
-                            
-                            // Classify boundary type based on plate motion
-                            let boundary_type = self.classify_boundary_interaction(
-                                current_plate, *neighbor_plate
-                            );
-                            boundary_types.insert((x, y), boundary_type);
-                            break;
+                if self.is_boundary_pixel(x, y, plate_map) {
+                    let current_plate = plate_map.get(x, y).copied().unwrap_or(0);
+                    
+                    for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                        let nx = (x as i32 + dx) as usize;
+                        let ny = (y as i32 + dy) as usize;
+                        
+                        if nx < self.width && ny < self.height {
+                            if let Some(&neighbor_plate) = plate_map.get(nx, ny) {
+                                if neighbor_plate != current_plate {
+                                    let key = if current_plate < neighbor_plate {
+                                        (current_plate, neighbor_plate)
+                                    } else {
+                                        (neighbor_plate, current_plate)
+                                    };
+                                    
+                                    if !interactions.contains_key(&key) {
+                                        let interaction = self.determine_plate_interaction(
+                                            current_plate, neighbor_plate, plate_stats
+                                        );
+                                        interactions.insert(key, interaction);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
         
-        BoundaryInfo {
-            boundary_pixels,
-            boundary_types,
+        interactions
+    }
+    
+    /// Classify pixels into large coherent geological regions
+    fn classify_pixel_optimized(
+        &self,
+        x: usize,
+        y: usize,
+        plate_map: &crate::map::terrain::PlateMap,
+        distance_field: &[Vec<u8>],
+        plate_stats: &std::collections::HashMap<u16, PlateStatistics>,
+        boundary_interactions: &std::collections::HashMap<(u16, u16), PlateInteraction>,
+    ) -> GeologicDomain {
+        let plate_id = plate_map.get(x, y).copied().unwrap_or(0);
+        let distance_to_boundary = distance_field[y][x];
+        let plate_stat = plate_stats.get(&plate_id);
+        
+        match distance_to_boundary {
+            0..=2 => {
+                // Direct boundary zones
+                self.classify_active_boundary_zone(x, y, plate_map, plate_stats, boundary_interactions)
+            }
+            3..=20 => {
+                // Near boundary zones
+                self.classify_near_boundary(plate_id, plate_stat)
+            }
+            _ => {
+                // Plate interior - large coherent regions
+                self.classify_plate_interior(plate_id, plate_stat)
+            }
         }
     }
     
-    /// Classify the geological domain for a specific pixel
-    fn classify_pixel_domain(
-        &self, 
-        x: usize, 
-        y: usize, 
+    /// Clean near-boundary classification
+    fn classify_near_boundary(
+        &self,
+        _plate_id: u16,
+        plate_stat: Option<&PlateStatistics>,
+    ) -> GeologicDomain {
+        match plate_stat {
+            Some(stat) => {
+                if stat.is_oceanic {
+                    GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
+                } else if stat.age_ma > 1500.0 {
+                    GeologicDomain::StableContinental(StableType::Platform)
+                } else {
+                    GeologicDomain::Extensional(ExtensionalType::ExtendedCrust)
+                }
+            }
+            None => GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
+        }
+    }
+    
+    /// Clean plate interior classification
+    fn classify_plate_interior(
+        &self,
+        _plate_id: u16,
+        plate_stat: Option<&PlateStatistics>,
+    ) -> GeologicDomain {
+        match plate_stat {
+            Some(stat) => {
+                if stat.is_oceanic {
+                    GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
+                } else if stat.age_ma > 2500.0 && stat.size_ratio > 0.08 {
+                    GeologicDomain::StableContinental(StableType::Craton)
+                } else if stat.age_ma > 1000.0 {
+                    GeologicDomain::StableContinental(StableType::Platform)
+                } else {
+                    GeologicDomain::StableContinental(StableType::Platform)
+                }
+            }
+            None => GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
+        }
+    }
+    
+    /// Classify active boundary zones with realistic geological features
+    fn classify_active_boundary_zone(
+        &self,
+        x: usize,
+        y: usize,
         plate_map: &crate::map::terrain::PlateMap,
-        boundary_info: &BoundaryInfo
+        plate_stats: &std::collections::HashMap<u16, PlateStatistics>,
+        boundary_interactions: &std::collections::HashMap<(u16, u16), PlateInteraction>,
     ) -> GeologicDomain {
         let plate_id = plate_map.get(x, y).copied().unwrap_or(0);
         
-        // Distance to nearest boundary (simplified)
-        let distance_to_boundary = self.distance_to_nearest_boundary(x, y, &boundary_info.boundary_pixels);
-        
-        // Classify based on location relative to boundaries
-        if boundary_info.boundary_pixels.contains(&(x, y)) {
-            // This pixel is on a plate boundary
-            if let Some(boundary_type) = boundary_info.boundary_types.get(&(x, y)) {
-                self.classify_boundary_domain(*boundary_type, plate_id)
-            } else {
-                GeologicDomain::Oceanic(OceanicType::FractureZone)
-            }
-        } else if distance_to_boundary < 5 {
-            // Near boundary - create transitional zones
-            self.classify_near_boundary_domain(x, y, plate_id, distance_to_boundary, boundary_info)
-        } else {
-            // Interior of plate - stable regions
-            self.classify_plate_interior_domain(plate_id, distance_to_boundary)
-        }
-    }
-    
-    /// Classify boundary interaction type between two plates
-    fn classify_boundary_interaction(&self, plate_a: u16, plate_b: u16) -> PlateInteraction {
-        // Find the seeds for these plates
-        let seed_a = self.plate_seeds.iter().find(|s| s.id == plate_a);
-        let seed_b = self.plate_seeds.iter().find(|s| s.id == plate_b);
-        
-        match (seed_a, seed_b) {
-            (Some(a), Some(b)) => {
-                // Calculate relative motion vectors
-                let motion_diff = (a.motion_direction - b.motion_direction).abs();
-                let motion_diff = if motion_diff > 180.0 { 360.0 - motion_diff } else { motion_diff };
-                
-                // Classify based on motion direction difference
-                if motion_diff < 45.0 {
-                    // Similar directions - transform boundary
-                    PlateInteraction::Transform
-                } else if motion_diff > 135.0 {
-                    // Opposite directions - convergent boundary
-                    PlateInteraction::Convergent
-                } else {
-                    // Perpendicular - divergent boundary
-                    PlateInteraction::Divergent
-                }
-            }
-            _ => PlateInteraction::Transform // Default fallback
-        }
-    }
-    
-    /// Classify domain at plate boundary based on interaction type
-    fn classify_boundary_domain(&self, interaction: PlateInteraction, plate_id: u16) -> GeologicDomain {
-        // Get plate characteristics
-        let plate_age = self.estimate_plate_age(plate_id);
-        let plate_size = self.estimate_plate_size(plate_id);
-        
-        match interaction {
-            PlateInteraction::Convergent => {
-                if plate_age > 1500.0 && plate_size > 0.05 {
-                    // Large, old plates - continental collision
-                    GeologicDomain::Orogenic(OrogenicType::CollisionOrogeny)
-                } else if plate_age < 200.0 {
-                    // Young oceanic plate - subduction
-                    GeologicDomain::ArcSystem(ArcType::VolcanicArc)
-                } else {
-                    // Mixed - subduction orogeny
-                    GeologicDomain::Orogenic(OrogenicType::SubductionOrogeny)
-                }
-            }
-            PlateInteraction::Divergent => {
-                if plate_age < 100.0 {
-                    // Young spreading center
-                    GeologicDomain::Oceanic(OceanicType::MidOceanRidge)
-                } else {
-                    // Continental rifting
-                    GeologicDomain::Extensional(ExtensionalType::ContinentalRift)
-                }
-            }
-            PlateInteraction::Transform => {
-                if plate_age < 500.0 {
-                    // Oceanic transform
-                    GeologicDomain::Oceanic(OceanicType::FractureZone)
-                } else {
-                    // Continental transform
-                    GeologicDomain::Extensional(ExtensionalType::ExtendedCrust)
-                }
-            }
-        }
-    }
-    
-    /// Classify domains near plate boundaries (simplified for performance)
-    fn classify_near_boundary_domain(
-        &self, 
-        _x: usize, 
-        _y: usize, 
-        plate_id: u16, 
-        distance: usize,
-        _boundary_info: &BoundaryInfo
-    ) -> GeologicDomain {
-        let plate_age = self.estimate_plate_age(plate_id);
-        
-        // Simplified classification based on distance and plate age
-        match distance {
-            1..=2 => {
-                if plate_age < 200.0 {
-                    GeologicDomain::ArcSystem(ArcType::VolcanicArc)
-                } else {
-                    GeologicDomain::Orogenic(OrogenicType::SubductionOrogeny)
-                }
-            }
-            3..=4 => {
-                if plate_age < 500.0 {
-                    GeologicDomain::ArcSystem(ArcType::BackarcBasin)
-                } else {
-                    GeologicDomain::Extensional(ExtensionalType::ExtendedCrust)
-                }
-            }
-            _ => {
-                GeologicDomain::Extensional(ExtensionalType::TransitionalCrust)
-            }
-        }
-    }
-    
-    /// Classify stable plate interior domains
-    fn classify_plate_interior_domain(&self, plate_id: u16, distance_to_boundary: usize) -> GeologicDomain {
-        let plate_age = self.estimate_plate_age(plate_id);
-        let plate_size = self.estimate_plate_size(plate_id);
-        
-        if plate_age > 2000.0 && plate_size > 0.03 {
-            // Ancient, large plates - cratons
-            if distance_to_boundary > 20 {
-                GeologicDomain::StableContinental(StableType::Craton)
-            } else {
-                GeologicDomain::StableContinental(StableType::Platform)
-            }
-        } else if plate_age > 500.0 {
-            // Intermediate age - platforms and basins
-            if distance_to_boundary > 15 {
-                GeologicDomain::StableContinental(StableType::IntracratonicBasin)
-            } else {
-                GeologicDomain::StableContinental(StableType::Platform)
-            }
-        } else if plate_age < 100.0 {
-            // Young oceanic plate
-            if distance_to_boundary > 10 {
-                GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
-            } else {
-                GeologicDomain::IgneousProvince(IgneousType::HotspotTrack)
-            }
-        } else {
-            // Default oceanic
-            GeologicDomain::Oceanic(OceanicType::AbyssalPlain)
-        }
-    }
-    
-    /// Estimate plate age based on its size and position
-    fn estimate_plate_age(&self, plate_id: u16) -> f64 {
-        // Larger plates tend to be older (simplified model)
-        let plate_size = self.estimate_plate_size(plate_id);
-        
-        if plate_size > 0.1 {
-            2500.0 + (plate_size * 1000.0) // Very old for large plates
-        } else if plate_size > 0.05 {
-            1000.0 + (plate_size * 500.0)  // Old for medium plates
-        } else {
-            100.0 + (plate_size * 200.0)   // Young for small plates
-        }
-    }
-    
-    /// Estimate relative plate size (0.0 to 1.0)
-    fn estimate_plate_size(&self, plate_id: u16) -> f64 {
-        // Use a pseudo-random but deterministic calculation
-        // In reality, this would come from actual plate statistics
-        let hash = ((plate_id as u64 * 2654435761u64) % 1000) as f64 / 1000.0;
-        
-        // Create realistic size distribution using power law
-        if hash < 0.1 {
-            0.1 + hash * 0.9  // 10% chance of large plates (0.1-1.0)
-        } else if hash < 0.3 {
-            0.05 + hash * 0.1 // 20% chance of medium plates (0.05-0.15)
-        } else {
-            0.001 + hash * 0.05 // 70% chance of small plates (0.001-0.051)
-        }
-    }
-    
-    /// Calculate distance to nearest boundary (optimized with early termination)
-    fn distance_to_nearest_boundary(&self, x: usize, y: usize, boundaries: &std::collections::HashSet<(usize, usize)>) -> usize {
-        let mut min_distance = 100; // Start with large distance
-        
-        // Only check nearby boundaries for efficiency
-        for radius in 1..=10 {
-            for dy in -(radius as i32)..=(radius as i32) {
-                for dx in -(radius as i32)..=(radius as i32) {
-                    let check_x = (x as i32 + dx) as usize;
-                    let check_y = (y as i32 + dy) as usize;
-                    
-                    if boundaries.contains(&(check_x, check_y)) {
-                        let distance = (dx.abs() + dy.abs()) as usize;
-                        if distance < min_distance {
-                            min_distance = distance;
-                        }
-                        if min_distance == 1 {
-                            return 1; // Early exit for immediate neighbors
+        // Find interaction with neighboring plates
+        for (dx, dy) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+            let nx = (x as i32 + dx) as usize;
+            let ny = (y as i32 + dy) as usize;
+            
+            if nx < self.width && ny < self.height {
+                if let Some(&neighbor_plate) = plate_map.get(nx, ny) {
+                    if neighbor_plate != plate_id {
+                        let key = if plate_id < neighbor_plate {
+                            (plate_id, neighbor_plate)
+                        } else {
+                            (neighbor_plate, plate_id)
+                        };
+                        
+                        if let Some(&interaction) = boundary_interactions.get(&key) {
+                            return self.interaction_to_domain(interaction, plate_id, neighbor_plate, plate_stats);
                         }
                     }
                 }
             }
-            if min_distance <= radius as usize {
-                break; // Found a boundary within current radius
-            }
         }
         
-        min_distance
+        // Fallback
+        GeologicDomain::Oceanic(OceanicType::FractureZone)
+    }
+    
+    /// Convert plate interaction to geological domain
+    fn interaction_to_domain(
+        &self,
+        interaction: PlateInteraction,
+        plate_a: u16,
+        plate_b: u16,
+        plate_stats: &std::collections::HashMap<u16, PlateStatistics>,
+    ) -> GeologicDomain {
+        let stat_a = plate_stats.get(&plate_a);
+        let stat_b = plate_stats.get(&plate_b);
+        
+        match interaction {
+            PlateInteraction::Convergent => {
+                match (stat_a, stat_b) {
+                    (Some(a), Some(b)) => {
+                        if !a.is_oceanic && !b.is_oceanic {
+                            // Continental-continental collision
+                            GeologicDomain::Orogenic(OrogenicType::CollisionOrogeny)
+                        } else if a.is_oceanic || b.is_oceanic {
+                            // Oceanic-continental subduction
+                            if a.age_ma > 100.0 || b.age_ma > 100.0 {
+                                GeologicDomain::Orogenic(OrogenicType::SubductionOrogeny)
+                            } else {
+                                GeologicDomain::ArcSystem(ArcType::VolcanicArc)
+                            }
+                        } else {
+                            GeologicDomain::Orogenic(OrogenicType::AccretionaryOrogeny)
+                        }
+                    }
+                    _ => GeologicDomain::Orogenic(OrogenicType::CollisionOrogeny)
+                }
+            }
+            PlateInteraction::Divergent => {
+                match (stat_a, stat_b) {
+                    (Some(a), Some(b)) if a.is_oceanic && b.is_oceanic => {
+                        GeologicDomain::Oceanic(OceanicType::MidOceanRidge)
+                    }
+                    _ => GeologicDomain::Extensional(ExtensionalType::ContinentalRift)
+                }
+            }
+            PlateInteraction::Transform => {
+                match (stat_a, stat_b) {
+                    (Some(a), Some(b)) if a.is_oceanic && b.is_oceanic => {
+                        GeologicDomain::Oceanic(OceanicType::FractureZone)
+                    }
+                    _ => GeologicDomain::Extensional(ExtensionalType::ExtendedCrust)
+                }
+            }
+        }
+    }
+    
+    
+    
+    /// Calculate realistic plate age with more oceanic plates
+    fn calculate_realistic_plate_age(&self, plate_id: u16, size_ratio: f64) -> f64 {
+        let base_hash = ((plate_id as u64 * 2654435761u64) % 1000) as f64 / 1000.0;
+        
+        // More oceanic plates - shifted ages younger, favoring oceanic classification
+        if size_ratio > 0.15 {
+            // Only very large plates are continental (like supercontinents)
+            1800.0 + base_hash * 1700.0 // Ancient continental cores (1.8-3.5 Ga)
+        } else if size_ratio > 0.08 {
+            // Large plates - mix of old continental and younger oceanic
+            400.0 + base_hash * 1200.0  // Mixed (400-1600 Ma) 
+        } else if size_ratio > 0.03 {
+            // Medium plates - mostly oceanic
+            50.0 + base_hash * 600.0    // Mostly oceanic (50-650 Ma)
+        } else {
+            // Small plates - almost entirely oceanic
+            5.0 + base_hash * 200.0     // Young oceanic (5-205 Ma)
+        }
+    }
+    
+    /// Get plate motion information
+    fn get_plate_motion(&self, plate_id: u16) -> (f64, f64) {
+        if let Some(seed) = self.plate_seeds.iter().find(|s| s.id == plate_id) {
+            (seed.motion_direction, seed.motion_speed)
+        } else {
+            (0.0, 0.0)
+        }
+    }
+    
+    /// Calculate plate center from pixel coordinates
+    fn calculate_plate_center(&self, pixels: &[(usize, usize)]) -> (f64, f64) {
+        if pixels.is_empty() {
+            return (0.0, 0.0);
+        }
+        
+        let sum_x: usize = pixels.iter().map(|(x, _)| x).sum();
+        let sum_y: usize = pixels.iter().map(|(_, y)| y).sum();
+        let count = pixels.len();
+        
+        (sum_x as f64 / count as f64, sum_y as f64 / count as f64)
+    }
+    
+    /// Determine interaction between two plates
+    fn determine_plate_interaction(
+        &self,
+        plate_a: u16,
+        plate_b: u16,
+        plate_stats: &std::collections::HashMap<u16, PlateStatistics>,
+    ) -> PlateInteraction {
+        match (plate_stats.get(&plate_a), plate_stats.get(&plate_b)) {
+            (Some(stat_a), Some(stat_b)) => {
+                let motion_diff = (stat_a.motion_direction - stat_b.motion_direction).abs();
+                let motion_diff = if motion_diff > 180.0 { 360.0 - motion_diff } else { motion_diff };
+                
+                if motion_diff < 30.0 {
+                    PlateInteraction::Transform
+                } else if motion_diff > 150.0 {
+                    PlateInteraction::Convergent
+                } else {
+                    PlateInteraction::Divergent
+                }
+            }
+            _ => PlateInteraction::Transform
+        }
     }
 }
 
@@ -481,11 +586,18 @@ impl std::fmt::Display for GeologyError {
 
 impl std::error::Error for GeologyError {}
 
-/// Information about plate boundaries and their characteristics
+
+/// Pre-computed statistics for efficient plate analysis
 #[derive(Debug, Clone)]
-struct BoundaryInfo {
-    boundary_pixels: std::collections::HashSet<(usize, usize)>,
-    boundary_types: std::collections::HashMap<(usize, usize), PlateInteraction>,
+struct PlateStatistics {
+    pub size_ratio: f64,           // Relative size (0.0 to 1.0)
+    pub age_ma: f64,               // Age in millions of years
+    pub motion_direction: f64,      // Motion direction in degrees
+    #[allow(dead_code)]
+    pub motion_speed: f64,          // Motion speed (future use)
+    #[allow(dead_code)]
+    pub center: (f64, f64),        // Plate center coordinates (future use)
+    pub is_oceanic: bool,          // Whether this is an oceanic plate
 }
 
 impl GeologicDomain {
