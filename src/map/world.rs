@@ -7,6 +7,7 @@ use crate::map::terrain::TerrainMap;
 use crate::map::spherical::PlanetaryParams;
 use crate::tectonics::TectonicPlateGenerator;
 use crate::tectonics::plates::{PlateSeed, PlateStats};
+use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 use std::collections::HashMap;
 use std::fs;
 
@@ -173,8 +174,53 @@ impl WorldMap {
         
         Ok(())
     }
-    
-    
+
+    /// Apply boundary refinement to add realistic irregularity to plate edges (Stage 1.2)
+    ///
+    /// This must be called after `generate_tectonics()` to post-process the boundaries.
+    /// If no configuration is provided, uses default parameters with the world seed.
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration for boundary refinement. If None, uses defaults.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{WorldMap, BoundaryRefinementConfig};
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.generate_tectonics(15, true)?;
+    ///
+    /// // Apply boundary refinement with custom settings
+    /// let config = BoundaryRefinementConfig::with_seed(42)
+    ///     .with_noise(0.1, 3.0, 3);
+    /// world.refine_boundaries(Some(config))?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn refine_boundaries(&mut self, config: Option<BoundaryRefinementConfig>) -> Result<(), Box<dyn std::error::Error>> {
+        // Ensure tectonics have been generated
+        if self.tectonics.is_none() {
+            return Err("Tectonics must be generated before refining boundaries".into());
+        }
+
+        // Use provided config or create default with world seed
+        let config = config.unwrap_or_else(|| BoundaryRefinementConfig::with_seed(self.seed));
+
+        // Apply refinement
+        let mut refiner = BoundaryRefiner::new(config);
+        let tectonics = self.tectonics.as_mut().unwrap(); // Safe because we checked above
+        refiner.refine_boundaries(tectonics);
+
+        // Recalculate plate stats after refinement
+        if let Some(ref seeds) = self.plate_seeds.clone() {
+            if let Some(ref tectonics) = self.tectonics {
+                self.plate_stats = Some(self.calculate_plate_stats_from_map(tectonics, seeds));
+            }
+        }
+
+        Ok(())
+    }
+
+
     /// Generate plate seeds from imported plate data by finding centroids
     fn generate_seeds_from_plate_data(&self, plate_data: &[u16]) -> Result<Vec<PlateSeed>, Box<dyn std::error::Error>> {
         use std::collections::HashMap;

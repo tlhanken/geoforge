@@ -35,12 +35,22 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Note:** Currently defaults to Sun-like star (G-type, 1.0 solar luminosity)
 
 ### **Stage 1: Tectonic Foundation** ✅ COMPLETE
+**1.1 Core Plate Generation** ✅ COMPLETE
 - Electrostatic physics simulation for plate generation
 - Natural plate boundaries with Earth-like size distribution
 - Export system (PNG, binary, GeoTIFF)
 - Deterministic generation with seeds
 
-### **Stage 2: Geologic Provinces** 🔄 NEXT
+**1.2 Boundary Refinement** 🔄 NEXT
+**Foundation:** Post-process Voronoi boundaries to add realistic irregularity
+- **Boundary roughening** - Add natural jaggedness to plate edges
+- **Noise-based perturbation** - Perlin/simplex noise for organic shapes
+- **Smoothing options** - Configurable smoothing to avoid over-jaggedness
+- **Boundary-type variation** - Different roughness for convergent vs divergent vs transform boundaries
+- **Seed-based consistency** - Maintain determinism in roughening process
+- **Note:** Keeps Stage 1.1 generation isolated and unaffected
+
+### **Stage 2: Geologic Provinces** ⏳ PLANNED
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces
 
 **2.1 Orogenic Belts (Mountain-building zones)**

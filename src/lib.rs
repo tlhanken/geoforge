@@ -30,3 +30,4 @@ pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationM
 pub use map::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
 pub use map::WorldMap;
 pub use tectonics::{TectonicPlateGenerator, PlateSeed, PlateStats, PlateError};
+pub use tectonics::{BoundaryRefiner, BoundaryRefinementConfig};

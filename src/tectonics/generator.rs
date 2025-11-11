@@ -3,6 +3,7 @@
 use crate::map::terrain::{TerrainMap, PlateMap};
 use crate::tectonics::plates::{PlateSeed, PlateStats};
 use crate::tectonics::electrostatic::*;
+use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 use crate::tectonics::PlateError;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -114,36 +115,36 @@ impl TectonicPlateGenerator {
 
         for iter in 0..iterations {
             let original_data = self.plate_map.data.clone();
-            
+
             for y in 0..self.height {
                 for x in 0..self.width {
                     let idx = self.plate_map.get_index(x, y);
                     let point = self.plate_map.get_spherical_point(x, y);
-                    
+
                     // Get neighbors and their weights based on geodesic distance
                     let neighbors = self.plate_map.get_neighbors(x, y);
                     let mut weighted_counts: HashMap<u16, f64> = HashMap::new();
                     let mut total_weight = 0.0;
-                    
+
                     for (nx, ny) in neighbors {
                         let neighbor_idx = self.plate_map.get_index(nx, ny);
                         let neighbor_point = self.plate_map.get_spherical_point(nx, ny);
                         let neighbor_plate = original_data[neighbor_idx];
-                        
+
                         // Weight by inverse geodesic distance
                         let distance = point.distance_to(&neighbor_point);
                         let weight = 1.0 / (distance + 0.01); // Add small epsilon to avoid division by zero
-                        
+
                         *weighted_counts.entry(neighbor_plate).or_insert(0.0) += weight;
                         total_weight += weight;
                     }
-                    
+
                     // Also consider current pixel with some weight
                     let current_plate = original_data[idx];
                     let self_weight = total_weight * 0.5; // Current pixel has weight equal to half of all neighbors
                     *weighted_counts.entry(current_plate).or_insert(0.0) += self_weight;
                     total_weight += self_weight;
-                    
+
                     // Find plate with highest weighted count
                     if let Some((&most_common, &weight)) = weighted_counts
                         .iter()
@@ -159,6 +160,33 @@ impl TectonicPlateGenerator {
 
             println!("Completed smoothing iteration {}/{}", iter + 1, iterations);
         }
+    }
+
+    /// Apply boundary refinement to add realistic irregularity to plate edges (Stage 1.2)
+    ///
+    /// This post-processes the Voronoi boundaries from Stage 1.1 to create more natural-looking
+    /// plate boundaries with roughness and variation, while keeping the core generation isolated.
+    ///
+    /// # Arguments
+    /// * `config` - Configuration for boundary refinement parameters
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{TectonicPlateGenerator, BoundaryRefinementConfig};
+    ///
+    /// let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
+    /// generator.generate("electrostatic", true)?;
+    ///
+    /// // Apply boundary refinement (Stage 1.2)
+    /// let config = BoundaryRefinementConfig::with_seed(42)
+    ///     .with_noise(0.1, 3.0, 3)
+    ///     .with_smoothing(1);
+    /// generator.refine_boundaries(config);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn refine_boundaries(&mut self, config: BoundaryRefinementConfig) {
+        let mut refiner = BoundaryRefiner::new(config);
+        refiner.refine_boundaries(&mut self.plate_map);
     }
 
     /// Main generation function using electrostatic physics simulation
