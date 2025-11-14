@@ -8,11 +8,11 @@
 //! 
 //! ```rust
 //! use geoforge::TectonicPlateGenerator;
-//! 
+//!
 //! // Generate a world with 15 tectonic plates at 0.2° resolution
 //! let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
-//! let plate_map = generator.generate("region_growing", true)?;
-//! 
+//! let plate_map = generator.generate("electrostatic")?;
+//!
 //! // Get statistics about the generated plates
 //! let stats = generator.get_plate_stats();
 //! for (plate_id, stat) in stats {

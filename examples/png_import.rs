@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--------------------------------------------");
     
     let mut world_export = WorldMap::new(180, 90, 42)?;
-    world_export.generate_tectonics(8, true)?;
+    world_export.generate_tectonics(8)?;
     
     std::fs::create_dir_all("outputs/examples/png_import")?;
     

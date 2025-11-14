@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("🎨 Part 1: Mild refinement with island removal...");
     let mut world_mild = WorldMap::new(width, height, seed)?;
-    world_mild.generate_tectonics(num_plates, true)?;
+    world_mild.generate_tectonics(num_plates)?;
 
     let mild_config = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.01, 8.0, 3)
@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("\n🎨 Part 2: Moderate refinement with island removal...");
     let mut world_moderate = WorldMap::new(width, height, seed)?;
-    world_moderate.generate_tectonics(num_plates, true)?;
+    world_moderate.generate_tectonics(num_plates)?;
 
     let moderate_config = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 80.0, 5)
@@ -81,7 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("\n🎨 Part 3: Strong refinement with island removal...");
     let mut world_strong = WorldMap::new(width, height, seed)?;
-    world_strong.generate_tectonics(num_plates, true)?;
+    world_strong.generate_tectonics(num_plates)?;
 
     let strong_config = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.025, 100.0, 5)
@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("\n🎨 Part 4: Extreme refinement with island removal...");
     let mut world_extreme = WorldMap::new(width, height, seed)?;
-    world_extreme.generate_tectonics(num_plates, true)?;
+    world_extreme.generate_tectonics(num_plates)?;
 
     let extreme_config = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.030, 120.0, 6)

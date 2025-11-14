@@ -42,7 +42,7 @@ use geoforge::WorldMap;
 let mut world = WorldMap::new(1800, 900, 42)?;
 
 // Stage 1.1: Generate tectonic plates using electrostatic physics
-world.generate_tectonics(20, true)?;
+world.generate_tectonics(20)?;
 
 // Stage 1.2: Refine boundaries for realistic irregular edges
 world.refine_boundaries(None)?;

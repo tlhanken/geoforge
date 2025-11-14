@@ -13,7 +13,7 @@ fn test_full_pipeline_integration() {
     let mut world = WorldMap::new(360, 180, 42).unwrap();
 
     // Stage 1.1: Generate plates
-    world.generate_tectonics(8, true).unwrap();
+    world.generate_tectonics(8).unwrap();
     let initial_stats = world.get_tectonic_stats().unwrap();
     assert_eq!(initial_stats.len(), 8, "Should have 8 plates after generation");
 
@@ -48,7 +48,7 @@ fn test_pipeline_preserves_plate_count() {
     // Verify that refinement and island removal don't change the number of plates
     let mut world = WorldMap::new(180, 90, 999).unwrap();
 
-    world.generate_tectonics(5, false).unwrap();
+    world.generate_tectonics(5).unwrap();
     let initial_plate_count = world.get_tectonic_stats().unwrap().len();
 
     world.refine_boundaries(None).unwrap();
@@ -67,7 +67,7 @@ fn test_pipeline_with_extreme_refinement() {
     // Test that island removal can handle aggressive refinement
     let mut world = WorldMap::new(360, 180, 12345).unwrap();
 
-    world.generate_tectonics(10, true).unwrap();
+    world.generate_tectonics(10).unwrap();
 
     // Extreme refinement to maximize island creation
     let extreme_config = BoundaryRefinementConfig::with_seed(12345)
@@ -92,7 +92,7 @@ fn test_pipeline_determinism_generation_and_refinement() {
     let seed = 54321;
 
     let mut world1 = WorldMap::new(180, 90, seed).unwrap();
-    world1.generate_tectonics(6, false).unwrap();  // Disable smoothing for exact determinism
+    world1.generate_tectonics(6).unwrap();
 
     let config1 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
@@ -100,7 +100,7 @@ fn test_pipeline_determinism_generation_and_refinement() {
     world1.refine_boundaries(Some(config1)).unwrap();
 
     let mut world2 = WorldMap::new(180, 90, seed).unwrap();
-    world2.generate_tectonics(6, false).unwrap();  // Disable smoothing for exact determinism
+    world2.generate_tectonics(6).unwrap();
 
     let config2 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
@@ -159,7 +159,7 @@ fn test_pipeline_with_minimal_refinement() {
     // Test that minimal refinement produces few or no islands
     let mut world = WorldMap::new(180, 90, 111).unwrap();
 
-    world.generate_tectonics(7, true).unwrap();
+    world.generate_tectonics(7).unwrap();
 
     // Minimal refinement
     let minimal_config = BoundaryRefinementConfig::with_seed(111)
@@ -178,7 +178,7 @@ fn test_stats_recalculation_after_stages() {
     // Verify that plate statistics are properly recalculated after each stage
     let mut world = WorldMap::new(360, 180, 777).unwrap();
 
-    world.generate_tectonics(8, true).unwrap();
+    world.generate_tectonics(8).unwrap();
     let initial_total_area: u64 = world.get_tectonic_stats().unwrap()
         .values()
         .map(|s| s.area_km2)
@@ -209,7 +209,7 @@ fn test_pipeline_with_many_plates() {
     // Test pipeline with a large number of plates
     let mut world = WorldMap::new(360, 180, 8888).unwrap();
 
-    world.generate_tectonics(30, true).unwrap();
+    world.generate_tectonics(30).unwrap();
     world.refine_boundaries(None).unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
@@ -225,7 +225,7 @@ fn test_single_plate_edge_case() {
     // Test edge case with only one plate
     let mut world = WorldMap::new(100, 50, 333).unwrap();
 
-    world.generate_tectonics(1, false).unwrap();
+    world.generate_tectonics(1).unwrap();
     world.refine_boundaries(None).unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
@@ -243,7 +243,7 @@ fn test_contiguity_guarantee() {
     use std::collections::{HashSet, VecDeque};
 
     let mut world = WorldMap::new(180, 90, 55555).unwrap();
-    world.generate_tectonics(10, true).unwrap();
+    world.generate_tectonics(10).unwrap();
     world.refine_boundaries(Some(
         BoundaryRefinementConfig::with_seed(55555)
             .with_noise(0.025, 100.0, 5)

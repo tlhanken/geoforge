@@ -197,28 +197,28 @@ impl WorldMap {
     }
 
     /// Generate tectonic plates using electrostatic physics simulation
-    pub fn generate_tectonics(&mut self, num_plates: usize, smooth: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn generate_tectonics(&mut self, num_plates: usize) -> Result<(), Box<dyn std::error::Error>> {
         // Use the dedicated TectonicPlateGenerator
         let mut generator = TectonicPlateGenerator::with_seed(
-            self.width, 
-            self.height, 
-            num_plates, 
+            self.width,
+            self.height,
+            num_plates,
             self.seed
         ).map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        
+
         // Generate the plates
-        generator.generate("electrostatic", smooth)
+        generator.generate("electrostatic")
             .map_err(|e| -> Box<dyn std::error::Error> { Box::new(e) })?;
-        
+
         // Extract data from generator
         let (width, height, plate_data, seeds) = generator.get_plate_data();
         let plate_stats = generator.get_plate_stats();
-        
+
         // Store results in WorldMap
         self.tectonics = Some(TerrainMap::from_data(width, height, plate_data.clone()));
         self.plate_seeds = Some(seeds.clone());
         self.plate_stats = Some(plate_stats);
-        
+
         Ok(())
     }
 
@@ -235,7 +235,7 @@ impl WorldMap {
     /// use geoforge::{WorldMap, BoundaryRefinementConfig};
     ///
     /// let mut world = WorldMap::new(1800, 900, 42)?;
-    /// world.generate_tectonics(15, true)?;
+    /// world.generate_tectonics(15)?;
     ///
     /// // Apply boundary refinement with custom settings
     /// let config = BoundaryRefinementConfig::with_seed(42)
@@ -284,7 +284,7 @@ impl WorldMap {
     /// use geoforge::{WorldMap, IslandRemovalConfig};
     ///
     /// let mut world = WorldMap::new(1800, 900, 42)?;
-    /// world.generate_tectonics(15, true)?;
+    /// world.generate_tectonics(15)?;
     /// world.refine_boundaries(None)?;
     ///
     /// // Remove any plate islands created by boundary refinement
@@ -429,12 +429,12 @@ impl WorldMap {
     }
 
     /// Generate all available layers in sequence
-    pub fn generate_all(&mut self, num_plates: usize, smooth: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn generate_all(&mut self, num_plates: usize) -> Result<(), Box<dyn std::error::Error>> {
         println!("🌍 Generating all world layers...");
-        
+
         // Generate tectonics (foundation layer)
         println!("⚡ Generating tectonic layer...");
-        self.generate_tectonics(num_plates, smooth)?;
+        self.generate_tectonics(num_plates)?;
         
         // Generate elevation from tectonics (placeholder for future implementation)
         println!("🏔️ Elevation generation not yet implemented");
@@ -605,7 +605,7 @@ mod tests {
     #[test]
     fn test_tectonic_generation() {
         let mut worldmap = WorldMap::new(100, 50, 123).unwrap();
-        let result = worldmap.generate_tectonics(5, true);
+        let result = worldmap.generate_tectonics(5);
         assert!(result.is_ok());
         assert!(worldmap.tectonics.is_some());
         assert!(worldmap.plate_seeds.is_some());
@@ -615,7 +615,7 @@ mod tests {
     #[test]
     fn test_serialization_roundtrip() {
         let mut worldmap = WorldMap::new(100, 50, 42).unwrap();
-        worldmap.generate_tectonics(5, false).unwrap();
+        worldmap.generate_tectonics(5).unwrap();
         
         // Save to file
         let temp_file = "test_worldmap.map";
@@ -670,8 +670,8 @@ mod tests {
         let mut worldmap1 = WorldMap::new(50, 25, 12345).unwrap();
         let mut worldmap2 = WorldMap::new(50, 25, 12345).unwrap();
         
-        worldmap1.generate_tectonics(5, false).unwrap();
-        worldmap2.generate_tectonics(5, false).unwrap();
+        worldmap1.generate_tectonics(5).unwrap();
+        worldmap2.generate_tectonics(5).unwrap();
         
         // Compare tectonic data
         let data1 = &worldmap1.tectonics.as_ref().unwrap().data;
@@ -698,14 +698,14 @@ mod tests {
         
         // Test invalid plate count
         let mut worldmap = WorldMap::new(100, 50, 42).unwrap();
-        assert!(worldmap.generate_tectonics(0, false).is_err());
-        assert!(worldmap.generate_tectonics(u16::MAX as usize + 1, false).is_err());
+        assert!(worldmap.generate_tectonics(0).is_err());
+        assert!(worldmap.generate_tectonics(u16::MAX as usize + 1).is_err());
     }
     
     #[test]
     fn test_plate_size_ratios() {
         let mut worldmap = WorldMap::new(200, 100, 42).unwrap();
-        worldmap.generate_tectonics(20, false).unwrap();
+        worldmap.generate_tectonics(20).unwrap();
         
         let stats = worldmap.get_tectonic_stats().unwrap();
         let mut areas: Vec<u64> = stats.values().map(|s| s.area_km2).collect();
@@ -736,7 +736,7 @@ mod tests {
         
         // Step 1: Generate world with seed 42 and export PNG
         let mut original_world = WorldMap::new(120, 60, 42).unwrap();
-        original_world.generate_tectonics(6, false).unwrap();
+        original_world.generate_tectonics(6).unwrap();
         
         let png_path = format!("{}/test_plates.png", test_dir);
         original_world.export_tectonics_png(test_dir, "test_plates.png").unwrap();
@@ -814,7 +814,7 @@ mod tests {
         let mut world = WorldMap::new(60, 30, 123).unwrap();
         
         // Test generate_all function
-        let result = world.generate_all(4, false);
+        let result = world.generate_all(4);
         assert!(result.is_ok());
         
         // Should have generated tectonics

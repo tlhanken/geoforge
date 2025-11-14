@@ -9,7 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut world = WorldMap::new(180, 90, 42)?;
     
     // Generate all available layers at once
-    world.generate_all(8, true)?;
+    world.generate_all(8)?;
     
     // Show what was generated
     println!("\n📊 Generated Layers:");

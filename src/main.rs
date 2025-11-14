@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Stage 1.1: Generate tectonic plates using electrostatic physics
     println!("\n⚡ Stage 1.1: Generating tectonic plates...");
-    world.generate_tectonics(20, true)?;
+    world.generate_tectonics(20)?;
 
     // Stage 1.2: Refine boundaries for realistic irregular edges
     println!("🎨 Stage 1.2: Refining plate boundaries...");
