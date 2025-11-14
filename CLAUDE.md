@@ -94,14 +94,31 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Seed-based consistency** - Maintain determinism in roughening process
 - **Note:** Keeps Stage 1.1 generation isolated and unaffected
 
-**1.3 Island Removal / Plate Contiguity** 🔄 NEXT
+**1.3 Island Removal / Plate Contiguity** ✅ COMPLETE
 **Foundation:** Ensure all plates are contiguous and remove isolated fragments
-- **Connected component analysis** - Identify non-contiguous plate regions
+- **Connected component analysis** - Identify non-contiguous plate regions using flood fill
 - **Fragment detection** - Find isolated plate "islands" separated from main body
 - **Size comparison** - Determine smaller vs larger portions of fragmented plates
-- **Smart reassignment** - Assign smaller fragments to surrounding plates
+- **Smart reassignment** - Assign smaller fragments to most common neighboring plate
 - **Deterministic processing** - Consistent behavior for reproducible results
 - **Note:** Applied after boundary refinement to clean up artifacts
+
+**1.4 Plate Motion & Boundary Classification** 🔄 NEXT
+**Foundation:** Assign motion vectors and classify boundary interactions for geology
+- **Motion vector assignment** - Each plate gets direction (azimuth) and velocity (cm/year)
+  - Use physics-based angular velocity on sphere or simplified random assignment
+  - Earth-realistic velocities: ~1-10 cm/year
+- **Relative motion calculation** - Compute motion at each boundary pixel pair
+- **Boundary type classification** - Convergent, divergent, or transform based on relative motion
+  - Convergent: Plates colliding (angle < 45° from head-on)
+  - Divergent: Plates spreading apart (angle < 45° from opposite)
+  - Transform: Plates sliding past (angle near 90°)
+- **Plate character assignment** - Oceanic vs continental designation
+  - Affects subduction zones (oceanic subducts under continental)
+  - Could use size heuristic (larger plates = more continental) or random
+- **Boundary segment storage** - Store type and characteristics per boundary segment
+- **Visualization export** - Color-coded boundary types for validation
+- **Note:** Critical foundation for Stage 2 (geologic provinces) and Stage 3 (elevation)
 
 ### **Stage 2: Geologic Provinces** ⏳ PLANNED
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces
