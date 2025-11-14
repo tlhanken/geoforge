@@ -120,6 +120,7 @@ impl BoundaryRefiner {
     }
 
     /// Identify all boundary pixels (pixels adjacent to different plates)
+    #[allow(dead_code)]  // Reserved for future boundary-type analysis
     fn identify_boundaries(&self, plate_map: &TerrainMap<u16>) -> HashSet<(usize, usize)> {
         let mut boundaries = HashSet::new();
 
@@ -236,29 +237,6 @@ impl BoundaryRefiner {
         }
     }
 
-    /// Multi-octave Perlin-like noise
-    fn multi_octave_noise(&mut self, x: f64, y: f64) -> f64 {
-        self.multi_octave_noise_channel(x, y, 0)
-    }
-
-    /// Multi-octave noise with channel parameter for independent fields
-    fn multi_octave_noise_channel(&mut self, x: f64, y: f64, channel: u64) -> f64 {
-        let mut total = 0.0;
-        let mut amplitude = 1.0;
-        let mut frequency = 1.0;
-        let mut max_value = 0.0;
-
-        for _ in 0..self.config.octaves {
-            total += self.simple_noise_channel(x * frequency, y * frequency, channel) * amplitude;
-            max_value += amplitude;
-
-            amplitude *= self.config.persistence;
-            frequency *= 2.0;
-        }
-
-        total / max_value
-    }
-
     /// Multi-octave 3D noise with channel parameter
     fn multi_octave_noise_3d(&mut self, x: f64, y: f64, z: f64, channel: u64) -> f64 {
         let mut total = 0.0;
@@ -275,39 +253,6 @@ impl BoundaryRefiner {
         }
 
         total / max_value
-    }
-
-    /// Simple noise function using value noise
-    fn simple_noise(&self, x: f64, y: f64) -> f64 {
-        self.simple_noise_channel(x, y, 0)
-    }
-
-    /// Simple noise with channel parameter
-    fn simple_noise_channel(&self, x: f64, y: f64, channel: u64) -> f64 {
-        // Grid cell coordinates
-        let x0 = x.floor() as i64;
-        let y0 = y.floor() as i64;
-        let x1 = x0 + 1;
-        let y1 = y0 + 1;
-
-        // Local coordinates within cell
-        let fx = x - x0 as f64;
-        let fy = y - y0 as f64;
-
-        // Smooth interpolation
-        let sx = self.smoothstep(fx);
-        let sy = self.smoothstep(fy);
-
-        // Get random values at grid corners using channel
-        let n00 = self.hash_noise_channel(x0, y0, channel);
-        let n10 = self.hash_noise_channel(x1, y0, channel);
-        let n01 = self.hash_noise_channel(x0, y1, channel);
-        let n11 = self.hash_noise_channel(x1, y1, channel);
-
-        // Bilinear interpolation
-        let nx0 = self.lerp(n00, n10, sx);
-        let nx1 = self.lerp(n01, n11, sx);
-        self.lerp(nx0, nx1, sy)
     }
 
     /// Simple 3D noise function using value noise with trilinear interpolation
@@ -350,22 +295,6 @@ impl BoundaryRefiner {
         let ny1 = self.lerp(nx01, nx11, sy);
 
         self.lerp(ny0, ny1, sz)
-    }
-
-    /// Hash function for noise generation with channel support
-    fn hash_noise(&self, x: i64, y: i64) -> f64 {
-        self.hash_noise_channel(x, y, 0)
-    }
-
-    /// Hash function with channel parameter for independent noise fields
-    fn hash_noise_channel(&self, x: i64, y: i64, channel: u64) -> f64 {
-        // Simple hash using prime numbers, seed, and channel
-        let mut hash = self.config.seed.wrapping_add(channel.wrapping_mul(1000000007)).wrapping_mul(2654435761);
-        hash = hash.wrapping_add(x as u64).wrapping_mul(2654435761);
-        hash = hash.wrapping_add(y as u64).wrapping_mul(2654435761);
-
-        // Convert to -1.0 to 1.0 range
-        (hash as f64 / u64::MAX as f64) * 2.0 - 1.0
     }
 
     /// 3D hash function with channel parameter
@@ -487,8 +416,8 @@ mod tests {
         let mut refiner1 = BoundaryRefiner::new(config.clone());
         let mut refiner2 = BoundaryRefiner::new(config);
 
-        let noise1 = refiner1.multi_octave_noise(5.5, 10.2);
-        let noise2 = refiner2.multi_octave_noise(5.5, 10.2);
+        let noise1 = refiner1.multi_octave_noise_3d(5.5, 10.2, 3.3, 0);
+        let noise2 = refiner2.multi_octave_noise_3d(5.5, 10.2, 3.3, 0);
 
         assert_eq!(noise1, noise2, "Noise should be deterministic with same seed");
     }

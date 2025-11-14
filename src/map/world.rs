@@ -133,19 +133,65 @@ impl WorldMap {
         
         let num_plates = color_to_plate_id.len();
         println!("📊 Detected {} unique colors/plates", num_plates);
-        
-        // Generate plate seeds from the imported data
-        let plate_seeds = self.generate_seeds_from_plate_data(&tectonic_data)?;
-        
+
+        // Generate plate seeds from the imported data by finding centroids
+        let mut plate_pixels: HashMap<u16, Vec<(usize, usize)>> = HashMap::new();
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = y * self.width + x;
+                let plate_id = tectonic_data[idx];
+
+                if plate_id > 0 {
+                    plate_pixels.entry(plate_id).or_insert_with(Vec::new).push((x, y));
+                }
+            }
+        }
+
+        let mut plate_seeds = Vec::new();
+
+        for (plate_id, pixels) in plate_pixels {
+            if pixels.is_empty() {
+                continue;
+            }
+
+            // Calculate centroid
+            let sum_x: usize = pixels.iter().map(|(x, _)| x).sum();
+            let sum_y: usize = pixels.iter().map(|(_, y)| y).sum();
+            let count = pixels.len();
+
+            let centroid_x = sum_x / count;
+            let centroid_y = sum_y / count;
+
+            // Convert to geographic coordinates
+            let projection = crate::map::terrain::MapProjection::global_equirectangular(self.width, self.height);
+            let (lat, lon) = projection.pixel_to_coords(centroid_x, centroid_y);
+
+            // Create seed with default motion parameters
+            let seed = PlateSeed::new(
+                plate_id,
+                centroid_x,
+                centroid_y,
+                lat,
+                lon,
+                0.0,  // Default motion direction
+                2.5,  // Default motion speed (cm/year)
+            );
+
+            plate_seeds.push(seed);
+        }
+
+        plate_seeds.sort_by_key(|s| s.id);
+
         // Calculate statistics
         let tectonic_map = TerrainMap::from_data(self.width, self.height, tectonic_data);
         let plate_stats = self.calculate_plate_stats_from_map(&tectonic_map, &plate_seeds);
-        
+
         // Store results
         self.tectonics = Some(tectonic_map);
         self.plate_seeds = Some(plate_seeds);
         self.plate_stats = Some(plate_stats);
-        
+
         println!("✅ Tectonic plates imported successfully from PNG");
         Ok(())
     }
@@ -271,61 +317,6 @@ impl WorldMap {
     }
 
 
-    /// Generate plate seeds from imported plate data by finding centroids
-    fn generate_seeds_from_plate_data(&self, plate_data: &[u16]) -> Result<Vec<PlateSeed>, Box<dyn std::error::Error>> {
-        use std::collections::HashMap;
-        
-        // Group pixels by plate ID to find centroids
-        let mut plate_pixels: HashMap<u16, Vec<(usize, usize)>> = HashMap::new();
-        
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let idx = y * self.width + x;
-                let plate_id = plate_data[idx];
-                
-                if plate_id > 0 {
-                    plate_pixels.entry(plate_id).or_insert_with(Vec::new).push((x, y));
-                }
-            }
-        }
-        
-        let mut seeds = Vec::new();
-        
-        for (plate_id, pixels) in plate_pixels {
-            if pixels.is_empty() {
-                continue;
-            }
-            
-            // Calculate centroid
-            let sum_x: usize = pixels.iter().map(|(x, _)| x).sum();
-            let sum_y: usize = pixels.iter().map(|(_, y)| y).sum();
-            let count = pixels.len();
-            
-            let centroid_x = sum_x / count;
-            let centroid_y = sum_y / count;
-            
-            // Convert to geographic coordinates
-            let projection = crate::map::terrain::MapProjection::global_equirectangular(self.width, self.height);
-            let (lat, lon) = projection.pixel_to_coords(centroid_x, centroid_y);
-            
-            // Create seed with default motion parameters
-            let seed = PlateSeed::new(
-                plate_id,
-                centroid_x,
-                centroid_y,
-                lat,
-                lon,
-                0.0,  // Default motion direction
-                2.5,  // Default motion speed (cm/year)
-            );
-            
-            seeds.push(seed);
-        }
-        
-        seeds.sort_by_key(|s| s.id);
-        Ok(seeds)
-    }
-    
     /// Calculate plate statistics from a terrain map and seeds
     fn calculate_plate_stats_from_map(&self, tectonic_map: &TerrainMap<u16>, plate_seeds: &[PlateSeed]) -> HashMap<u16, PlateStats> {
         let mut plate_areas = HashMap::new();

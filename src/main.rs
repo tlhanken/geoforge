@@ -15,10 +15,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
     let mut world = WorldMap::new(1800, 900, seed)?;
     
-    // Generate tectonic plates using electrostatic physics
-    println!("\n⚡ Generating tectonic layer...");
+    // Stage 1.1: Generate tectonic plates using electrostatic physics
+    println!("\n⚡ Stage 1.1: Generating tectonic plates...");
     world.generate_tectonics(20, true)?;
-    
+
+    // Stage 1.2: Refine boundaries for realistic irregular edges
+    println!("🎨 Stage 1.2: Refining plate boundaries...");
+    world.refine_boundaries(None)?;  // Use default configuration
+
+    // Stage 1.3: Remove islands to ensure plate contiguity
+    println!("🏝️  Stage 1.3: Removing plate islands...");
+    let island_stats = world.remove_islands(None)?;
+    if island_stats.islands_removed > 0 {
+        println!("   Removed {} islands ({} pixels reassigned)",
+                 island_stats.islands_removed, island_stats.pixels_reassigned);
+    }
+
     // Show statistics
     if let Some(stats) = world.get_tectonic_stats() {
         println!("\n📊 Generated {} plates with realistic size distribution:", stats.len());
@@ -57,13 +69,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world.save_to_file("outputs/world.map")?;
     println!("✅ Complete world map saved to binary file");
     
-    println!("\n🎉 WORLD GENERATION COMPLETE!");
-    println!("Files created in outputs/ directory:");
+    println!("\n🎉 STAGE 1: TECTONIC FOUNDATION COMPLETE!");
+    println!("\nPipeline executed:");
+    println!("  ✅ Stage 1.1: Core Plate Generation (electrostatic physics)");
+    println!("  ✅ Stage 1.2: Boundary Refinement (realistic irregularity)");
+    println!("  ✅ Stage 1.3: Island Removal (contiguous plates)");
+    println!("\nFiles created in outputs/ directory:");
     println!("  • world.map - Complete world data (binary)");
-    
+
     #[cfg(feature = "export-png")]
     println!("  • tectonics.png - Tectonic plates visualization");
-    
+
+    #[cfg(not(feature = "export-png"))]
+    println!("\n💡 Run with --features export-png for visualization output");
+
     Ok(())
 }
 

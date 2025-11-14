@@ -22,6 +22,50 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - ✅ Stellar luminosity and insolation calculations
 - ✅ Physics-based orbital mechanics (inverse square law)
 
+## Development Workflow
+
+**IMPORTANT:** When implementing new features, always follow this workflow:
+
+### 1. API Design First
+- **Start with interface design** - Define public APIs and function signatures first
+- **Review and proposal** - Present the API design for review before implementation
+- **Consider ergonomics** - Ensure APIs are intuitive and follow Rust best practices
+- **Document early** - Write doc comments during API design phase
+
+### 2. Test-Driven Development
+- **Write tests second** - After API approval, write comprehensive test cases
+- **Cover edge cases** - Include boundary conditions, error cases, and integration scenarios
+- **Test organization:**
+  - Unit tests: `#[cfg(test)] mod tests` in source files
+  - Integration tests: `/tests/stageN_*_integration.rs` for pipeline stages
+  - Examples: `/examples/` for user-facing demonstrations
+- **Test before implementation** - Tests should fail initially (Red-Green-Refactor)
+
+### 3. Implementation
+- **Implement to tests** - Write code to satisfy the test requirements
+- **Maintain test coverage** - Ensure all tests pass before marking complete
+- **Refactor iteratively** - Improve code quality while keeping tests green
+
+### 4. Code Review
+- **Ensure all code is sensible** - Make sure code is sensible and not bloated.  Implement what is needed efficiently, nothing more.
+- **Meets style guidelines** - Ensure all code uses best practices for rust
+- **Remove unnessary code** - Simplify down to just needed code, and clean it up
+
+### 5. Workflow Summary
+```
+1. Design API → Review → Approve
+2. Write Tests → Review
+3. Implement → Tests Pass → Done
+4. Code Review
+```
+
+### 6. Test Coverage Standards
+- **Unit tests** - All public functions and methods
+- **Integration tests** - Full pipeline workflows for each major stage
+- **Edge cases** - Boundary conditions, empty inputs, extreme values
+- **Error handling** - All error paths and failure modes
+- **Determinism** - Verify the same seed reproduces the same output every time.
+
 ## Pipeline Roadmap
 
 ### **Stage 0: Stellar System Generation** ⏳ FUTURE

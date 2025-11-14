@@ -33,23 +33,33 @@ Or with specific export features:
 geoforge = { version = "0.1", features = ["export-png", "export-tiff"] }
 ```
 
-Generate your first world:
+Generate your first world with the complete Stage 1 pipeline:
 
 ```rust
-use geoforge::TectonicPlateGenerator;
+use geoforge::WorldMap;
 
-// Generate a world with 20 tectonic plates at 0.2° resolution
-let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 20, 42)?;
-let plate_map = generator.generate("electrostatic", true)?;
+// Create a new world (1800x900 at 0.2° resolution)
+let mut world = WorldMap::new(1800, 900, 42)?;
 
-// Export in all available formats to organized directory
-generator.export_all("outputs", "my_world")?;
+// Stage 1.1: Generate tectonic plates using electrostatic physics
+world.generate_tectonics(20, true)?;
+
+// Stage 1.2: Refine boundaries for realistic irregular edges
+world.refine_boundaries(None)?;
+
+// Stage 1.3: Remove islands to ensure plate contiguity
+let island_stats = world.remove_islands(None)?;
+
+// Export the result
+#[cfg(feature = "export-png")]
+world.export_tectonics_png("outputs", "tectonics.png")?;
 
 // Get statistics about the generated plates
-let stats = generator.get_plate_stats();
-for (plate_id, stat) in stats.iter().take(5) {
-    println!("Plate {}: {:.1}% of surface ({} km²)", 
-             plate_id, stat.percentage, stat.area_km2);
+if let Some(stats) = world.get_tectonic_stats() {
+    for (plate_id, stat) in stats.iter().take(5) {
+        println!("Plate {}: {:.1}% of surface ({} km²)",
+                 plate_id, stat.percentage, stat.area_km2);
+    }
 }
 ```
 
@@ -58,10 +68,14 @@ for (plate_id, stat) in stats.iter().take(5) {
 Run the example application:
 
 ```bash
-cargo run
+cargo run --features export-png
 ```
 
-This will generate a realistic tectonic plate map with 20 plates using electrostatic physics simulation and export it in multiple formats.
+This will execute the complete Stage 1 pipeline:
+1. **Generate** 20 tectonic plates using electrostatic physics simulation
+2. **Refine** boundaries to add realistic irregularity
+3. **Remove islands** to ensure all plates are contiguous
+4. **Export** the result as PNG visualization
 
 ## Export Formats
 
@@ -98,21 +112,34 @@ generator.export_geotiff("outputs", "georef.tiff")?;       // if export-tiff ena
 
 ## How It Works
 
-The electrostatic physics simulation:
+### Stage 1: Tectonic Foundation (Complete)
 
+The complete tectonic generation pipeline consists of three stages:
+
+**Stage 1.1: Core Plate Generation**
 1. **⚡ Charge Placement** - Random point charges distributed on the sphere
 2. **🎯 Size Variety** - Power-law charge distribution creates Earth-like size hierarchy
 3. **🧲 Physics Simulation** - Charges repel until reaching equilibrium
 4. **🗺️ Boundary Generation** - Voronoi diagram from equilibrium positions
 5. **✨ Smoothing** - Optional geodesic-aware boundary smoothing
 
+**Stage 1.2: Boundary Refinement**
+- Adds realistic irregularity to plate edges using 3D noise-based domain warping
+- Creates natural jagged boundaries instead of perfect Voronoi edges
+- Configurable noise parameters for different levels of roughness
+
+**Stage 1.3: Island Removal**
+- Ensures all plates are contiguous using connected component analysis
+- Removes isolated plate fragments created during refinement
+- Reassigns island pixels to surrounding plates intelligently
+
 ## Pipeline Overview
 
 Geoforge implements a scientifically-grounded generation pipeline:
 
 - **⭐ Stage 0: Stellar Systems** ⏳ - Star generation, luminosity, habitable zones (defaults to Sun-like)
-- **🔥 Stage 1: Tectonic Foundation** ✅ - Realistic plate boundaries using electrostatic physics
-- **🏔️ Stage 2: Geologic Provinces** 🔄 - Orogenic belts, LIPs, cratons, oceanic domains
+- **🔥 Stage 1: Tectonic Foundation** ✅ - Complete pipeline with plate generation, boundary refinement, and island removal
+- **🏔️ Stage 2: Geologic Provinces** ⏳ - Orogenic belts, LIPs, cratons, oceanic domains
 - **⛰️ Stage 3: Elevation Generation** ⏳ - Mountains, ocean floors, continental margins  
 - **🌤️ Stage 4: Climate Modeling** ⏳ - Trade winds, temperature, precipitation patterns
 - **🌿 Stage 5: Biome Generation** ⏳ - Realistic biome distribution from climate data
