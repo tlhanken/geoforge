@@ -31,3 +31,4 @@ pub use map::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AR
 pub use map::WorldMap;
 pub use tectonics::{TectonicPlateGenerator, PlateSeed, PlateStats, PlateError};
 pub use tectonics::{BoundaryRefiner, BoundaryRefinementConfig};
+pub use tectonics::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};

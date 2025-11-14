@@ -41,7 +41,7 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - Export system (PNG, binary, GeoTIFF)
 - Deterministic generation with seeds
 
-**1.2 Boundary Refinement** 🔄 NEXT
+**1.2 Boundary Refinement** ✅ COMPLETE
 **Foundation:** Post-process Voronoi boundaries to add realistic irregularity
 - **Boundary roughening** - Add natural jaggedness to plate edges
 - **Noise-based perturbation** - Perlin/simplex noise for organic shapes
@@ -49,6 +49,15 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Boundary-type variation** - Different roughness for convergent vs divergent vs transform boundaries
 - **Seed-based consistency** - Maintain determinism in roughening process
 - **Note:** Keeps Stage 1.1 generation isolated and unaffected
+
+**1.3 Island Removal / Plate Contiguity** 🔄 NEXT
+**Foundation:** Ensure all plates are contiguous and remove isolated fragments
+- **Connected component analysis** - Identify non-contiguous plate regions
+- **Fragment detection** - Find isolated plate "islands" separated from main body
+- **Size comparison** - Determine smaller vs larger portions of fragmented plates
+- **Smart reassignment** - Assign smaller fragments to surrounding plates
+- **Deterministic processing** - Consistent behavior for reproducible results
+- **Note:** Applied after boundary refinement to clean up artifacts
 
 ### **Stage 2: Geologic Provinces** ⏳ PLANNED
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces

@@ -8,6 +8,7 @@ use crate::map::spherical::PlanetaryParams;
 use crate::tectonics::TectonicPlateGenerator;
 use crate::tectonics::plates::{PlateSeed, PlateStats};
 use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
+use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 use std::collections::HashMap;
 use std::fs;
 
@@ -218,6 +219,55 @@ impl WorldMap {
         }
 
         Ok(())
+    }
+
+    /// Remove plate islands to ensure all plates are contiguous (Stage 1.3)
+    ///
+    /// This should be called after `refine_boundaries()` to clean up any isolated plate fragments
+    /// that may have been created by the boundary refinement process. It ensures that each plate
+    /// consists of a single contiguous region by reassigning isolated fragments to surrounding plates.
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration for island removal. If None, uses defaults.
+    ///
+    /// # Returns
+    /// Statistics about the island removal process
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{WorldMap, IslandRemovalConfig};
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.generate_tectonics(15, true)?;
+    /// world.refine_boundaries(None)?;
+    ///
+    /// // Remove any plate islands created by boundary refinement
+    /// let stats = world.remove_islands(None)?;
+    /// println!("Removed {} islands from {} plates", stats.islands_removed, stats.plates_with_islands);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn remove_islands(&mut self, config: Option<IslandRemovalConfig>) -> Result<IslandRemovalStats, Box<dyn std::error::Error>> {
+        // Ensure tectonics have been generated
+        if self.tectonics.is_none() {
+            return Err("Tectonics must be generated before removing islands".into());
+        }
+
+        // Use provided config or create default
+        let config = config.unwrap_or_default();
+
+        // Apply island removal
+        let mut remover = IslandRemover::new(config);
+        let tectonics = self.tectonics.as_mut().unwrap(); // Safe because we checked above
+        let stats = remover.remove_islands(tectonics);
+
+        // Recalculate plate stats after island removal
+        if let Some(ref seeds) = self.plate_seeds.clone() {
+            if let Some(ref tectonics) = self.tectonics {
+                self.plate_stats = Some(self.calculate_plate_stats_from_map(tectonics, seeds));
+            }
+        }
+
+        Ok(stats)
     }
 
 

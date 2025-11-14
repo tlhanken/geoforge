@@ -44,9 +44,9 @@ impl Default for BoundaryRefinementConfig {
     fn default() -> Self {
         Self {
             seed: 0,
-            noise_scale: 0.015,       // Medium-scale features
-            noise_amplitude: 20.0,    // Moderate warping
-            octaves: 4,               // Multi-scale detail
+            noise_scale: 0.020,       // Medium-scale features
+            noise_amplitude: 80.0,    // Moderate warping (default)
+            octaves: 5,               // Multi-scale detail
             persistence: 0.5,
             smoothing_iterations: 1,
             convergent_scale: 1.2,
@@ -142,39 +142,85 @@ impl BoundaryRefiner {
         boundaries
     }
 
-    /// Apply domain warping to warp the entire Voronoi diagram
+    /// Apply domain warping in true 3D spherical space
     ///
-    /// Instead of perturbing boundary pixels, this warps the lookup coordinates
-    /// for the entire map, creating large-scale organic distortions
+    /// Warps points on the surface of a sphere using 3D Cartesian coordinates,
+    /// ensuring truly uniform distortion in all directions
     fn apply_domain_warping(&mut self, plate_map: &mut TerrainMap<u16>) {
         // Create a copy of the original data
         let original_data = plate_map.data.clone();
 
-        println!("  Applying domain warping to {} pixels...", plate_map.width * plate_map.height);
+        println!("  Applying 3D spherical domain warping to {} pixels...", plate_map.width * plate_map.height);
 
-        // Process each pixel with warped lookup
+        // Convert amplitude to radians on unit sphere
+        // amplitude is in "pixels at equator", convert to angular distance
+        let degrees_per_pixel = 360.0 / plate_map.width as f64;
+        let amplitude_degrees = self.config.noise_amplitude * degrees_per_pixel;
+        let amplitude_radians = amplitude_degrees.to_radians();
+
+        println!("  Warping amplitude: {:.2}° ({:.0} pixels at equator)",
+                 amplitude_degrees, self.config.noise_amplitude);
+
+        // Process each pixel with 3D spherical warping
         for y in 0..plate_map.height {
             for x in 0..plate_map.width {
-                // Generate noise offsets for this pixel
-                // Use two different noise samples for X and Y to avoid correlation
-                let offset_x = self.multi_octave_noise(
-                    x as f64 * self.config.noise_scale,
-                    y as f64 * self.config.noise_scale,
-                ) * self.config.noise_amplitude;
+                // Get current pixel's geographic coordinates
+                let (lat, lon) = plate_map.projection.pixel_to_coords(x, y);
 
-                let offset_y = self.multi_octave_noise(
-                    x as f64 * self.config.noise_scale + 1000.0,  // Offset to decorrelate
-                    y as f64 * self.config.noise_scale + 1000.0,
-                ) * self.config.noise_amplitude;
+                // Convert to 3D Cartesian coordinates on unit sphere
+                let lat_rad = lat.to_radians();
+                let lon_rad = lon.to_radians();
 
-                // Compute warped sample position
-                let sample_x_f = x as f64 + offset_x;
-                let sample_y_f = y as f64 + offset_y;
+                let orig_x = lat_rad.cos() * lon_rad.cos();
+                let orig_y = lat_rad.cos() * lon_rad.sin();
+                let orig_z = lat_rad.sin();
 
-                // Wrap X coordinate (longitude wraps around)
-                let sample_x = sample_x_f.rem_euclid(plate_map.width as f64) as usize;
-                // Clamp Y coordinate (latitude doesn't wrap)
-                let sample_y = sample_y_f.clamp(0.0, (plate_map.height - 1) as f64) as usize;
+                // Generate 3D displacement vector using three independent 3D noise channels
+                // Use all three spatial coordinates for each channel to ensure isotropy
+                let scale = self.config.noise_scale * 100.0;
+
+                let noise_x = self.multi_octave_noise_3d(
+                    orig_x * scale,
+                    orig_y * scale,
+                    orig_z * scale,
+                    0,  // Channel 0
+                ) * amplitude_radians;
+
+                let noise_y = self.multi_octave_noise_3d(
+                    orig_x * scale,
+                    orig_y * scale,
+                    orig_z * scale,
+                    1,  // Channel 1
+                ) * amplitude_radians;
+
+                let noise_z = self.multi_octave_noise_3d(
+                    orig_x * scale,
+                    orig_y * scale,
+                    orig_z * scale,
+                    2,  // Channel 2
+                ) * amplitude_radians;
+
+                // Apply displacement and project back onto sphere
+                let displaced_x = orig_x + noise_x;
+                let displaced_y = orig_y + noise_y;
+                let displaced_z = orig_z + noise_z;
+
+                // Normalize to ensure point stays on unit sphere
+                let length = (displaced_x * displaced_x + displaced_y * displaced_y + displaced_z * displaced_z).sqrt();
+                let warped_x = displaced_x / length;
+                let warped_y = displaced_y / length;
+                let warped_z = displaced_z / length;
+
+                // Convert back to lat/lon
+                let warped_lat = warped_z.asin().to_degrees();
+                let warped_lon = warped_y.atan2(warped_x).to_degrees();
+
+                // Convert to pixel coordinates
+                let (sample_x, sample_y) = plate_map.projection.coords_to_pixel(warped_lat, warped_lon);
+
+                // Bounds check
+                let sample_x = sample_x.min(plate_map.width - 1);
+                let sample_y = sample_y.min(plate_map.height - 1);
 
                 // Sample from warped position
                 let sampled_plate = original_data[plate_map.get_index(sample_x, sample_y)];
@@ -192,13 +238,36 @@ impl BoundaryRefiner {
 
     /// Multi-octave Perlin-like noise
     fn multi_octave_noise(&mut self, x: f64, y: f64) -> f64 {
+        self.multi_octave_noise_channel(x, y, 0)
+    }
+
+    /// Multi-octave noise with channel parameter for independent fields
+    fn multi_octave_noise_channel(&mut self, x: f64, y: f64, channel: u64) -> f64 {
         let mut total = 0.0;
         let mut amplitude = 1.0;
         let mut frequency = 1.0;
         let mut max_value = 0.0;
 
         for _ in 0..self.config.octaves {
-            total += self.simple_noise(x * frequency, y * frequency) * amplitude;
+            total += self.simple_noise_channel(x * frequency, y * frequency, channel) * amplitude;
+            max_value += amplitude;
+
+            amplitude *= self.config.persistence;
+            frequency *= 2.0;
+        }
+
+        total / max_value
+    }
+
+    /// Multi-octave 3D noise with channel parameter
+    fn multi_octave_noise_3d(&mut self, x: f64, y: f64, z: f64, channel: u64) -> f64 {
+        let mut total = 0.0;
+        let mut amplitude = 1.0;
+        let mut frequency = 1.0;
+        let mut max_value = 0.0;
+
+        for _ in 0..self.config.octaves {
+            total += self.simple_noise_3d(x * frequency, y * frequency, z * frequency, channel) * amplitude;
             max_value += amplitude;
 
             amplitude *= self.config.persistence;
@@ -210,6 +279,11 @@ impl BoundaryRefiner {
 
     /// Simple noise function using value noise
     fn simple_noise(&self, x: f64, y: f64) -> f64 {
+        self.simple_noise_channel(x, y, 0)
+    }
+
+    /// Simple noise with channel parameter
+    fn simple_noise_channel(&self, x: f64, y: f64, channel: u64) -> f64 {
         // Grid cell coordinates
         let x0 = x.floor() as i64;
         let y0 = y.floor() as i64;
@@ -224,11 +298,11 @@ impl BoundaryRefiner {
         let sx = self.smoothstep(fx);
         let sy = self.smoothstep(fy);
 
-        // Get random values at grid corners
-        let n00 = self.hash_noise(x0, y0);
-        let n10 = self.hash_noise(x1, y0);
-        let n01 = self.hash_noise(x0, y1);
-        let n11 = self.hash_noise(x1, y1);
+        // Get random values at grid corners using channel
+        let n00 = self.hash_noise_channel(x0, y0, channel);
+        let n10 = self.hash_noise_channel(x1, y0, channel);
+        let n01 = self.hash_noise_channel(x0, y1, channel);
+        let n11 = self.hash_noise_channel(x1, y1, channel);
 
         // Bilinear interpolation
         let nx0 = self.lerp(n00, n10, sx);
@@ -236,12 +310,71 @@ impl BoundaryRefiner {
         self.lerp(nx0, nx1, sy)
     }
 
-    /// Hash function for noise generation
+    /// Simple 3D noise function using value noise with trilinear interpolation
+    fn simple_noise_3d(&self, x: f64, y: f64, z: f64, channel: u64) -> f64 {
+        // Grid cell coordinates
+        let x0 = x.floor() as i64;
+        let y0 = y.floor() as i64;
+        let z0 = z.floor() as i64;
+        let x1 = x0 + 1;
+        let y1 = y0 + 1;
+        let z1 = z0 + 1;
+
+        // Local coordinates within cell
+        let fx = x - x0 as f64;
+        let fy = y - y0 as f64;
+        let fz = z - z0 as f64;
+
+        // Smooth interpolation
+        let sx = self.smoothstep(fx);
+        let sy = self.smoothstep(fy);
+        let sz = self.smoothstep(fz);
+
+        // Get random values at 8 corners of the cube
+        let n000 = self.hash_noise_3d(x0, y0, z0, channel);
+        let n100 = self.hash_noise_3d(x1, y0, z0, channel);
+        let n010 = self.hash_noise_3d(x0, y1, z0, channel);
+        let n110 = self.hash_noise_3d(x1, y1, z0, channel);
+        let n001 = self.hash_noise_3d(x0, y0, z1, channel);
+        let n101 = self.hash_noise_3d(x1, y0, z1, channel);
+        let n011 = self.hash_noise_3d(x0, y1, z1, channel);
+        let n111 = self.hash_noise_3d(x1, y1, z1, channel);
+
+        // Trilinear interpolation
+        let nx00 = self.lerp(n000, n100, sx);
+        let nx10 = self.lerp(n010, n110, sx);
+        let nx01 = self.lerp(n001, n101, sx);
+        let nx11 = self.lerp(n011, n111, sx);
+
+        let ny0 = self.lerp(nx00, nx10, sy);
+        let ny1 = self.lerp(nx01, nx11, sy);
+
+        self.lerp(ny0, ny1, sz)
+    }
+
+    /// Hash function for noise generation with channel support
     fn hash_noise(&self, x: i64, y: i64) -> f64 {
-        // Simple hash using prime numbers and the seed
-        let mut hash = self.config.seed.wrapping_mul(2654435761);
+        self.hash_noise_channel(x, y, 0)
+    }
+
+    /// Hash function with channel parameter for independent noise fields
+    fn hash_noise_channel(&self, x: i64, y: i64, channel: u64) -> f64 {
+        // Simple hash using prime numbers, seed, and channel
+        let mut hash = self.config.seed.wrapping_add(channel.wrapping_mul(1000000007)).wrapping_mul(2654435761);
         hash = hash.wrapping_add(x as u64).wrapping_mul(2654435761);
         hash = hash.wrapping_add(y as u64).wrapping_mul(2654435761);
+
+        // Convert to -1.0 to 1.0 range
+        (hash as f64 / u64::MAX as f64) * 2.0 - 1.0
+    }
+
+    /// 3D hash function with channel parameter
+    fn hash_noise_3d(&self, x: i64, y: i64, z: i64, channel: u64) -> f64 {
+        // Simple hash using prime numbers, seed, and channel
+        let mut hash = self.config.seed.wrapping_add(channel.wrapping_mul(1000000007)).wrapping_mul(2654435761);
+        hash = hash.wrapping_add(x as u64).wrapping_mul(2654435761);
+        hash = hash.wrapping_add(y as u64).wrapping_mul(2654435761);
+        hash = hash.wrapping_add(z as u64).wrapping_mul(2654435761);
 
         // Convert to -1.0 to 1.0 range
         (hash as f64 / u64::MAX as f64) * 2.0 - 1.0

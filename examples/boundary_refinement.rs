@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Boundary Refinement Example");
     println!("==========================================\n");
 
-    let seed = 42;
+    let seed = 12345;
     let width = 1800;
     let height = 900;
     let num_plates = 15;
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_moderate.generate_tectonics(num_plates, true)?;
 
     let moderate_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.015, 20.0, 4)  // Medium-scale features, moderate warping
+        .with_noise(0.020, 80.0, 5)  // Medium features, solid warping (was strong)
         .with_smoothing(1);
 
     world_moderate.refine_boundaries(Some(moderate_config))?;
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_strong.generate_tectonics(num_plates, true)?;
 
     let strong_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.020, 40.0, 5)  // Smaller features, strong warping
+        .with_noise(0.025, 100.0, 5)  // Tighter features, strong warping (new intermediate)
         .with_smoothing(2);
 
     world_strong.refine_boundaries(Some(strong_config))?;
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_extreme.generate_tectonics(num_plates, true)?;
 
     let extreme_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.030, 70.0, 6)  // Tight, frequent features with extreme warping
+        .with_noise(0.030, 120.0, 6)  // Tight, frequent features with massive warping
         .with_smoothing(3);
 
     world_extreme.refine_boundaries(Some(extreme_config))?;
