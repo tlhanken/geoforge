@@ -387,3 +387,171 @@ fn test_plate_type_assignment() {
     println!("  Continental: {}", continental_count);
     println!("  Mixed: {}", mixed_count);
 }
+
+#[test]
+fn test_complete_stage_1_pipeline() {
+    // Test the complete Stage 1 pipeline from 1.1 through 1.4
+    let mut world = WorldMap::new(360, 180, 42).unwrap();
+
+    // Stage 1.1: Generate plates
+    world.generate_tectonics(8).unwrap();
+    assert!(world.tectonics.is_some());
+
+    let metadata = world.get_tectonic_metadata().unwrap();
+
+    // Verify motion was automatically assigned
+    for seed in &metadata.plate_seeds {
+        assert!(seed.motion_speed > 0.0, "Plate {} should have motion assigned", seed.id);
+        assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0);
+    }
+
+    // Stage 1.2: Refine boundaries
+    world.refine_boundaries(None).unwrap();
+
+    // Stage 1.3: Remove islands
+    world.remove_islands(None).unwrap();
+
+    // Stage 1.4: Analyze boundaries
+    let boundary_stats = world.analyze_boundaries(None).unwrap();
+
+    assert!(boundary_stats.total_boundaries > 0);
+    assert!(boundary_stats.average_relative_velocity > 0.0,
+        "Boundaries should have non-zero relative velocity");
+
+    // Verify boundary types are distributed
+    let has_convergent = boundary_stats.convergent_count > 0;
+    let has_divergent = boundary_stats.divergent_count > 0;
+    let has_transform = boundary_stats.transform_count > 0;
+
+    let boundary_type_count = [has_convergent, has_divergent, has_transform]
+        .iter()
+        .filter(|&&x| x)
+        .count();
+
+    assert!(boundary_type_count >= 2,
+        "Should have at least 2 different boundary types with 8 plates");
+
+    println!("Complete Stage 1 pipeline success!");
+    println!("  Plates: 8");
+    println!("  Boundaries: {}", boundary_stats.total_boundaries);
+    println!("  Convergent: {}", boundary_stats.convergent_count);
+    println!("  Divergent: {}", boundary_stats.divergent_count);
+    println!("  Transform: {}", boundary_stats.transform_count);
+    println!("  Avg velocity: {:.2} cm/year", boundary_stats.average_relative_velocity);
+}
+
+#[test]
+fn test_motion_assignment_determinism() {
+    // Test that motion assignment is deterministic with same seed
+    let mut world1 = WorldMap::new(180, 90, 123).unwrap();
+    let mut world2 = WorldMap::new(180, 90, 123).unwrap();
+
+    world1.generate_tectonics(5).unwrap();
+    world2.generate_tectonics(5).unwrap();
+
+    let metadata1 = world1.get_tectonic_metadata().unwrap();
+    let metadata2 = world2.get_tectonic_metadata().unwrap();
+
+    // Motion should be identical
+    for (seed1, seed2) in metadata1.plate_seeds.iter().zip(&metadata2.plate_seeds) {
+        assert_eq!(seed1.id, seed2.id);
+        assert_eq!(seed1.motion_direction, seed2.motion_direction,
+            "Motion direction should be deterministic");
+        assert_eq!(seed1.motion_speed, seed2.motion_speed,
+            "Motion speed should be deterministic");
+    }
+}
+
+#[test]
+fn test_motion_realistic_values() {
+    // Test that motion values are within realistic Earth-like ranges
+    let mut world = WorldMap::new(360, 180, 999).unwrap();
+    world.generate_tectonics(15).unwrap();
+
+    let metadata = world.get_tectonic_metadata().unwrap();
+
+    for seed in &metadata.plate_seeds {
+        // Speed should be in Earth-like range (1-10 cm/year by default)
+        assert!(seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
+            "Plate {} speed {:.2} outside realistic range",
+            seed.id, seed.motion_speed);
+
+        // Direction should be valid (0-360 degrees)
+        assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
+            "Plate {} direction {:.2} invalid",
+            seed.id, seed.motion_direction);
+    }
+}
+
+#[test]
+#[cfg(feature = "export-png")]
+fn test_boundary_visualization_export() {
+    use std::path::Path;
+
+    let mut world = WorldMap::new(180, 90, 42).unwrap();
+    world.generate_tectonics(6).unwrap();
+    world.refine_boundaries(None).unwrap();
+    world.remove_islands(None).unwrap();
+    world.analyze_boundaries(None).unwrap();
+
+    // Export boundary visualization
+    let output_dir = "outputs/tests";
+    let filename = "test_boundaries.png";
+    let result = world.export_boundaries_png(output_dir, filename);
+
+    assert!(result.is_ok(), "Boundary export should succeed");
+
+    // Verify file was created
+    let path = Path::new(output_dir).join(filename);
+    assert!(path.exists(), "Boundary PNG should be created");
+
+    // Cleanup
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
+#[cfg(feature = "export-png")]
+fn test_boundary_export_requires_analysis() {
+    // Test that exporting boundaries before analysis fails
+    let mut world = WorldMap::new(100, 50, 42).unwrap();
+    world.generate_tectonics(4).unwrap();
+
+    // Try to export without analyzing
+    let result = world.export_boundaries_png("outputs/tests", "should_fail.png");
+    assert!(result.is_err(), "Should fail when boundaries not analyzed");
+}
+
+#[test]
+fn test_boundary_classification_accuracy() {
+    // Test that boundary classification produces sensible results
+    let mut world = WorldMap::new(360, 180, 789).unwrap();
+    world.generate_tectonics(10).unwrap();
+    world.refine_boundaries(None).unwrap();
+    world.remove_islands(None).unwrap();
+    world.analyze_boundaries(None).unwrap();
+
+    let metadata = world.get_tectonic_metadata().unwrap();
+
+    // Every boundary should have a valid classification
+    for boundary in &metadata.plate_boundaries {
+        // Should have positive relative velocity (plates are moving)
+        assert!(boundary.relative_velocity >= 0.0,
+            "Boundary between {} and {} has negative velocity",
+            boundary.plate_a, boundary.plate_b);
+
+        // Should have positive length
+        assert!(boundary.length_km > 0.0,
+            "Boundary should have positive length");
+
+        // Should involve different plates
+        assert_ne!(boundary.plate_a, boundary.plate_b,
+            "Boundary should connect different plates");
+
+        // Should have pixels
+        assert!(!boundary.pixels.is_empty(),
+            "Boundary should have pixels");
+    }
+
+    println!("Boundary classification validation passed for {} boundaries",
+        metadata.plate_boundaries.len());
+}

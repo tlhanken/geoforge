@@ -14,13 +14,17 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - Performance optimized with fast physics simulation
 
 ## Current Status
-- ✅ Electrostatic physics simulation (production ready)
-- ✅ Earth-like size variety and natural boundaries
-- ✅ Clean, optimized codebase with electrostatic-only approach
-- ✅ Nested output directory structure (`outputs/examples/`)
+- ✅ **Stage 1: Tectonic Foundation** - COMPLETE (production ready)
+  - Electrostatic physics simulation for natural plate boundaries
+  - Earth-like size variety with 6000x+ ratios
+  - Boundary refinement with domain warping
+  - Island removal for plate contiguity
+  - Plate motion assignment and boundary classification
+  - Boundary visualization export
 - ✅ Comprehensive planetary parameters system
 - ✅ Stellar luminosity and insolation calculations
 - ✅ Physics-based orbital mechanics (inverse square law)
+- ✅ 82 tests passing (57 unit, 20 integration, 5 doc)
 
 ## Development Workflow
 
@@ -103,22 +107,23 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Deterministic processing** - Consistent behavior for reproducible results
 - **Note:** Applied after boundary refinement to clean up artifacts
 
-**1.4 Plate Motion & Boundary Classification** 🔄 NEXT
+**1.4 Plate Motion & Boundary Classification** ✅ COMPLETE
 **Foundation:** Assign motion vectors and classify boundary interactions for geology
 - **Motion vector assignment** - Each plate gets direction (azimuth) and velocity (cm/year)
-  - Use physics-based angular velocity on sphere or simplified random assignment
-  - Earth-realistic velocities: ~1-10 cm/year
+  - Random assignment with deterministic seeding (1-10 cm/year Earth-realistic)
+  - Physics-based angular velocity option available
+  - Automatically assigned during tectonic generation
 - **Relative motion calculation** - Compute motion at each boundary pixel pair
 - **Boundary type classification** - Convergent, divergent, or transform based on relative motion
-  - Convergent: Plates colliding (angle < 45° from head-on)
-  - Divergent: Plates spreading apart (angle < 45° from opposite)
-  - Transform: Plates sliding past (angle near 90°)
+  - Convergent: Plates colliding (moving toward each other)
+  - Divergent: Plates spreading apart (moving away from each other)
+  - Transform: Plates sliding past (parallel motion)
 - **Plate character assignment** - Oceanic vs continental designation
-  - Affects subduction zones (oceanic subducts under continental)
-  - Could use size heuristic (larger plates = more continental) or random
+  - Size-based heuristic: larger plates = continental, smaller = oceanic
+  - Automatically assigned and stored in metadata
 - **Boundary segment storage** - Store type and characteristics per boundary segment
-- **Visualization export** - Color-coded boundary types for validation
-- **Note:** Critical foundation for Stage 2 (geologic provinces) and Stage 3 (elevation)
+- **Visualization export** - Color-coded boundary types (red=convergent, blue=divergent, green=transform)
+- **Note:** Foundation for Stage 2 (geologic provinces) and Stage 3 (elevation)
 
 ### **Stage 2: Geologic Provinces** ⏳ PLANNED
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces

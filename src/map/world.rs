@@ -10,6 +10,7 @@ use crate::tectonics::plates::{PlateSeed, PlateStats, PlateType};
 use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 use crate::tectonics::boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
+use crate::tectonics::motion::{PlateMotionAssigner, PlateMotionConfig};
 use std::collections::HashMap;
 use std::fs;
 
@@ -244,6 +245,11 @@ impl WorldMap {
         let mut metadata = TectonicMetadata::new(plate_seeds, plate_stats);
         metadata.assign_plate_types();
 
+        // Assign realistic plate motion vectors
+        let motion_config = PlateMotionConfig::with_seed(self.seed);
+        let mut motion_assigner = PlateMotionAssigner::with_config(motion_config);
+        motion_assigner.assign_motion(&mut metadata.plate_seeds);
+
         // Store results
         self.tectonics = Some(tectonic_map);
         self.tectonic_metadata = Some(metadata);
@@ -273,6 +279,11 @@ impl WorldMap {
         // Create metadata and assign plate types
         let mut metadata = TectonicMetadata::new(seeds.clone(), plate_stats);
         metadata.assign_plate_types();
+
+        // Assign realistic plate motion vectors
+        let motion_config = PlateMotionConfig::with_seed(self.seed);
+        let mut motion_assigner = PlateMotionAssigner::with_config(motion_config);
+        motion_assigner.assign_motion(&mut metadata.plate_seeds);
 
         // Store results in WorldMap
         self.tectonics = Some(TerrainMap::from_data(width, height, plate_data.clone()));
@@ -528,6 +539,108 @@ impl WorldMap {
         Ok(())
     }
 
+    /// Export boundary visualization as PNG with color-coded boundary types
+    ///
+    /// This creates a visualization showing:
+    /// - Plate boundaries colored by type (red=convergent, blue=divergent, green=transform)
+    /// - Plates shown in grayscale for context
+    ///
+    /// Boundaries must be analyzed first using `analyze_boundaries()`.
+    #[cfg(feature = "export-png")]
+    pub fn export_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+            if metadata.plate_boundaries.is_empty() {
+                return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
+            }
+
+            let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+
+            // Background: plates in grayscale
+            for (y, row) in tectonic_map.data.chunks(self.width).enumerate() {
+                for (x, &plate_id) in row.iter().enumerate() {
+                    // Vary grayscale based on plate ID for subtle differentiation
+                    let gray_value = (((plate_id as f64) * 37.5).rem_euclid(128.0) + 64.0) as u8;
+                    img.put_pixel(x as u32, y as u32, Rgb([gray_value, gray_value, gray_value]));
+                }
+            }
+
+            // Overlay: boundaries colored by type
+            for boundary in &metadata.plate_boundaries {
+                use crate::tectonics::plates::PlateInteraction;
+
+                let color = match boundary.interaction_type {
+                    PlateInteraction::Convergent => [255, 0, 0],     // Red
+                    PlateInteraction::Divergent => [0, 128, 255],    // Blue
+                    PlateInteraction::Transform => [0, 255, 0],      // Green
+                };
+
+                for (x, y) in &boundary.pixels {
+                    img.put_pixel(*x as u32, *y as u32, Rgb(color));
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Tectonic layer not generated or metadata missing".into());
+        }
+
+        Ok(())
+    }
+
+    /// Export plate motion visualization as PNG
+    ///
+    /// This creates a visualization showing plate motion vectors:
+    /// - **Hue (color)**: Motion direction (0°=red/east, 90°=yellow/north, 180°=cyan/west, 270°=blue/south)
+    /// - **Saturation**: Motion speed (brighter = faster, 1-10 cm/year range)
+    /// - **Value**: Constant brightness
+    ///
+    /// Each plate is colored uniformly by its motion vector. This provides
+    /// an intuitive view of the global flow of tectonic motion.
+    #[cfg(feature = "export-png")]
+    pub fn export_plate_motion_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+            let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+
+            // Create motion color map for each plate
+            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> = std::collections::HashMap::new();
+
+            for seed in &metadata.plate_seeds {
+                let color = motion_to_rgb(seed.motion_direction, seed.motion_speed);
+                plate_colors.insert(seed.id, color);
+            }
+
+            // Fill image with plate colors
+            for (y, row) in tectonic_map.data.chunks(self.width).enumerate() {
+                for (x, &plate_id) in row.iter().enumerate() {
+                    if plate_id > 0 {
+                        if let Some(&color) = plate_colors.get(&plate_id) {
+                            img.put_pixel(x as u32, y as u32, Rgb(color));
+                        }
+                    } else {
+                        // No plate (shouldn't happen, but handle it)
+                        img.put_pixel(x as u32, y as u32, Rgb([0, 0, 0]));
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Tectonic layer not generated or metadata missing".into());
+        }
+
+        Ok(())
+    }
+
     /// Export all available layers as PNG files
     #[cfg(feature = "export-png")]
     pub fn export_all_png(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -730,6 +843,68 @@ impl WorldMap {
         if self.biomes.is_some() { flags |= 0x10; }
         flags
     }
+}
+
+/// Convert motion direction and speed to RGB color
+///
+/// Uses HSV color space for intuitive visualization:
+/// - Hue: Motion direction (0-360° maps directly to color wheel)
+/// - Saturation: Motion speed (1-10 cm/year maps to 50-100% saturation)
+/// - Value: Fixed at 90% for visibility
+///
+/// # Color Key
+/// - 0° (Red): Eastward motion
+/// - 90° (Yellow-Green): Northward motion
+/// - 180° (Cyan): Westward motion
+/// - 270° (Blue-Magenta): Southward motion
+#[cfg(feature = "export-png")]
+fn motion_to_rgb(direction_deg: f64, speed_cm_year: f64) -> [u8; 3] {
+    // Hue: 0-360° from direction
+    let hue = direction_deg;
+
+    // Saturation: map speed (1-10 cm/year) to 50-100% saturation
+    // Slower plates = less saturated (more grayish)
+    // Faster plates = more saturated (vivid color)
+    let saturation = 0.5 + (speed_cm_year - 1.0) / 9.0 * 0.5;
+    let saturation = saturation.clamp(0.5, 1.0);
+
+    // Value: constant at 90% for good visibility
+    let value = 0.9;
+
+    hsv_to_rgb(hue, saturation, value)
+}
+
+/// Convert HSV to RGB
+///
+/// H: 0-360 (degrees)
+/// S: 0-1 (0% to 100%)
+/// V: 0-1 (0% to 100%)
+#[cfg(feature = "export-png")]
+fn hsv_to_rgb(h: f64, s: f64, v: f64) -> [u8; 3] {
+    let c = v * s;
+    let h_prime = h / 60.0;
+    let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
+    let m = v - c;
+
+    let (r, g, b) = if h_prime < 1.0 {
+        (c, x, 0.0)
+    } else if h_prime < 2.0 {
+        (x, c, 0.0)
+    } else if h_prime < 3.0 {
+        (0.0, c, x)
+    } else if h_prime < 4.0 {
+        (0.0, x, c)
+    } else if h_prime < 5.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    [
+        ((r + m) * 255.0) as u8,
+        ((g + m) * 255.0) as u8,
+        ((b + m) * 255.0) as u8,
+    ]
 }
 
 

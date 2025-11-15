@@ -189,6 +189,8 @@ impl BoundaryAnalyzer {
         plate_seeds: &[PlateSeed],
         plate_map: &TerrainMap<u16>,
     ) {
+        use crate::tectonics::motion::PlateMotionAssigner;
+
         // Create lookup map for seeds
         let seed_map: HashMap<u16, &PlateSeed> = plate_seeds
             .iter()
@@ -201,16 +203,21 @@ impl BoundaryAnalyzer {
             let seed_b = seed_map.get(&segment.plate_b);
 
             if let (Some(seed_a), Some(seed_b)) = (seed_a, seed_b) {
-                // Calculate relative motion at boundary
-                let (velocity, angle) = self.calculate_relative_motion(
+                // Use improved classification from motion module
+                segment.interaction_type = PlateMotionAssigner::classify_boundary_interaction(
                     seed_a,
                     seed_b,
-                    &segment.pixels,
-                    plate_map,
+                    self.config.angle_threshold_degrees,
                 );
 
+                // Calculate relative velocity magnitude
+                let boundary_center = self.get_boundary_center(&segment.pixels, plate_map);
+                let (velocity, _angle) = PlateMotionAssigner::calculate_relative_motion(
+                    seed_a,
+                    seed_b,
+                    &boundary_center,
+                );
                 segment.relative_velocity = velocity;
-                segment.interaction_type = self.classify_interaction_type(angle);
 
                 // Calculate boundary length
                 segment.length_km = self.calculate_boundary_length(&segment.pixels, plate_map);
@@ -218,101 +225,18 @@ impl BoundaryAnalyzer {
         }
     }
 
-    /// Calculate relative motion between two plates at a boundary
-    ///
-    /// Returns (velocity_magnitude_cm_per_year, angle_degrees)
-    fn calculate_relative_motion(
-        &self,
-        seed_a: &PlateSeed,
-        seed_b: &PlateSeed,
-        boundary_pixels: &[(usize, usize)],
-        plate_map: &TerrainMap<u16>,
-    ) -> (f64, f64) {
-        // Simplified model: use plate motion vectors at boundary midpoint
-        // For now, we'll use a simplified approach:
-        // 1. Find approximate center of boundary
-        // 2. Calculate relative velocity vector
-
-        if boundary_pixels.is_empty() {
-            return (0.0, 0.0);
+    /// Get the approximate center point of a boundary
+    fn get_boundary_center(&self, pixels: &[(usize, usize)], plate_map: &TerrainMap<u16>) -> SphericalPoint {
+        if pixels.is_empty() {
+            return SphericalPoint::from_lat_lon(0.0, 0.0);
         }
 
-        // Find boundary center
-        let sum_x: usize = boundary_pixels.iter().map(|(x, _)| x).sum();
-        let sum_y: usize = boundary_pixels.iter().map(|(_, y)| y).sum();
-        let center_x = sum_x / boundary_pixels.len();
-        let center_y = sum_y / boundary_pixels.len();
+        let sum_x: usize = pixels.iter().map(|(x, _)| x).sum();
+        let sum_y: usize = pixels.iter().map(|(_, y)| y).sum();
+        let center_x = sum_x / pixels.len();
+        let center_y = sum_y / pixels.len();
 
-        let center_point = plate_map.get_spherical_point(center_x, center_y);
-
-        // Calculate velocity vectors for each plate at this point
-        let vel_a = self.plate_velocity_at_point(seed_a, &center_point);
-        let vel_b = self.plate_velocity_at_point(seed_b, &center_point);
-
-        // Relative velocity: v_rel = v_a - v_b
-        let rel_vel_x = vel_a.0 - vel_b.0;
-        let rel_vel_y = vel_a.1 - vel_b.1;
-
-        // Magnitude
-        let velocity = (rel_vel_x * rel_vel_x + rel_vel_y * rel_vel_y).sqrt();
-
-        // Direction of boundary (approximate from plate seed positions)
-        let boundary_dir = self.boundary_direction(seed_a, seed_b);
-
-        // Angle between relative velocity and boundary direction
-        let rel_vel_angle = rel_vel_y.atan2(rel_vel_x).to_degrees();
-        let mut angle_diff = (rel_vel_angle - boundary_dir).abs();
-
-        // Normalize to 0-180 range
-        if angle_diff > 180.0 {
-            angle_diff = 360.0 - angle_diff;
-        }
-        if angle_diff > 90.0 {
-            angle_diff = 180.0 - angle_diff;
-        }
-
-        (velocity, angle_diff)
-    }
-
-    /// Calculate plate velocity at a given point (simplified model)
-    ///
-    /// For now, assumes uniform motion across entire plate
-    /// Returns (vx, vy) in cm/year in local tangent plane coordinates
-    fn plate_velocity_at_point(
-        &self,
-        seed: &PlateSeed,
-        _point: &SphericalPoint,
-    ) -> (f64, f64) {
-        // Simplified: uniform plate motion
-        // Direction is in degrees (0 = east, 90 = north)
-        let dir_rad = seed.motion_direction.to_radians();
-        let vx = seed.motion_speed * dir_rad.cos();
-        let vy = seed.motion_speed * dir_rad.sin();
-        (vx, vy)
-    }
-
-    /// Calculate boundary direction in degrees (0 = east, 90 = north)
-    fn boundary_direction(&self, seed_a: &PlateSeed, seed_b: &PlateSeed) -> f64 {
-        // Approximate boundary direction as perpendicular to line connecting seeds
-        let dx = seed_b.lon - seed_a.lon;
-        let dy = seed_b.lat - seed_a.lat;
-
-        let connect_angle = dy.atan2(dx).to_degrees();
-
-        // Perpendicular is +90 degrees
-        connect_angle + 90.0
-    }
-
-    /// Classify interaction type based on angle between relative motion and boundary
-    fn classify_interaction_type(&self, angle: f64) -> PlateInteraction {
-        if angle < self.config.angle_threshold_degrees {
-            // Nearly perpendicular to boundary = convergent or divergent
-            // For now, we'll default to convergent (can be refined later)
-            PlateInteraction::Convergent
-        } else {
-            // Nearly parallel to boundary = transform
-            PlateInteraction::Transform
-        }
+        plate_map.get_spherical_point(center_x, center_y)
     }
 
     /// Calculate approximate boundary length in kilometers

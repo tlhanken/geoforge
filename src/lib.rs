@@ -34,3 +34,4 @@ pub use tectonics::{PlateInteraction, PlateBoundary};
 pub use tectonics::{BoundaryRefiner, BoundaryRefinementConfig};
 pub use tectonics::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 pub use tectonics::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
+pub use tectonics::{PlateMotionAssigner, PlateMotionConfig};
