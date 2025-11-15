@@ -295,3 +295,95 @@ fn test_contiguity_guarantee() {
         }
     }
 }
+#[test]
+fn test_boundary_analysis_integration() {
+    // Test Stage 1.4: Boundary Analysis
+    let mut world = WorldMap::new(180, 90, 42).unwrap();
+
+    // Generate and process plates
+    world.generate_tectonics(6).unwrap();
+    world.refine_boundaries(None).unwrap();
+    world.remove_islands(None).unwrap();
+
+    // Stage 1.4: Analyze boundaries
+    let boundary_stats = world.analyze_boundaries(None).unwrap();
+
+    // Verify boundary statistics
+    assert!(boundary_stats.total_boundaries > 0, "Should find plate boundaries");
+    
+    // With 6 plates, maximum possible boundaries is (6 * 5) / 2 = 15
+    assert!(boundary_stats.total_boundaries <= 15, 
+        "Cannot have more than 15 boundaries with 6 plates");
+
+    // Total should equal sum of parts
+    assert_eq!(
+        boundary_stats.total_boundaries,
+        boundary_stats.convergent_count + boundary_stats.divergent_count + boundary_stats.transform_count,
+        "Boundary counts should sum to total"
+    );
+
+    // Verify metadata was updated
+    let metadata = world.get_tectonic_metadata().unwrap();
+    assert_eq!(metadata.plate_boundaries.len(), boundary_stats.total_boundaries);
+    assert!(metadata.boundary_stats.is_some());
+
+    // Verify each boundary segment
+    for boundary in &metadata.plate_boundaries {
+        assert!(boundary.plate_a > 0 && boundary.plate_a <= 6);
+        assert!(boundary.plate_b > 0 && boundary.plate_b <= 6);
+        assert_ne!(boundary.plate_a, boundary.plate_b);
+        assert!(boundary.pixel_count() > 0);
+        assert!(boundary.length_km > 0.0);
+    }
+
+    println!("Boundary analysis results:");
+    println!("  Total boundaries: {}", boundary_stats.total_boundaries);
+    println!("  Convergent: {}", boundary_stats.convergent_count);
+    println!("  Divergent: {}", boundary_stats.divergent_count);
+    println!("  Transform: {}", boundary_stats.transform_count);
+    println!("  Total length: {:.0} km", boundary_stats.total_length_km);
+    println!("  Avg velocity: {:.2} cm/year", boundary_stats.average_relative_velocity);
+}
+
+#[test]
+fn test_boundary_analysis_requires_tectonics() {
+    // Test error handling when analyzing boundaries before generating tectonics
+    let mut world = WorldMap::new(100, 50, 42).unwrap();
+
+    let result = world.analyze_boundaries(None);
+    assert!(result.is_err(), "Should fail when tectonics not generated");
+}
+
+#[test]
+fn test_plate_type_assignment() {
+    // Test that plate types are assigned correctly based on size
+    let mut world = WorldMap::new(360, 180, 123).unwrap();
+    world.generate_tectonics(10).unwrap();
+
+    let metadata = world.get_tectonic_metadata().unwrap();
+
+    // Should have assigned types to all plates
+    let mut oceanic_count = 0;
+    let mut continental_count = 0;
+    let mut mixed_count = 0;
+
+    for stats in metadata.plate_stats.values() {
+        match stats.plate_type {
+            geoforge::PlateType::Oceanic => oceanic_count += 1,
+            geoforge::PlateType::Continental => continental_count += 1,
+            geoforge::PlateType::Mixed => mixed_count += 1,
+        }
+    }
+
+    // With 10 plates, should have a mix of types
+    assert!(oceanic_count > 0, "Should have some oceanic plates");
+    assert!(continental_count > 0, "Should have some continental plates");
+    
+    assert_eq!(oceanic_count + continental_count + mixed_count, 10,
+        "All plates should have assigned types");
+
+    println!("Plate type distribution:");
+    println!("  Oceanic: {}", oceanic_count);
+    println!("  Continental: {}", continental_count);
+    println!("  Mixed: {}", mixed_count);
+}

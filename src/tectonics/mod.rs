@@ -9,11 +9,13 @@ pub mod plates;
 pub mod electrostatic;
 pub mod boundary_refinement;
 pub mod island_removal;
+pub mod boundary_analysis;
 
 pub use generator::TectonicPlateGenerator;
-pub use plates::{PlateSeed, PlateStats};
+pub use plates::{PlateSeed, PlateStats, PlateType, PlateInteraction, PlateBoundary};
 pub use boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 pub use island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
+pub use boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 
 
 /// Errors that can occur during plate generation

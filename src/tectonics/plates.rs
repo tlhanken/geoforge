@@ -62,18 +62,76 @@ pub struct PlateStats {
     pub percentage: f64,
     pub area_km2: u64,
     pub seed: PlateSeed,
+    pub plate_type: PlateType,
 }
 
 impl PlateStats {
     /// Create new plate statistics
     pub fn new(pixels: usize, area_km2: f64, seed: PlateSeed) -> Self {
         const PLANET_SURFACE_AREA_KM2: f64 = 4.0 * std::f64::consts::PI * 6371.0 * 6371.0;
-        
+
         Self {
             pixels,
             percentage: (area_km2 / PLANET_SURFACE_AREA_KM2) * 100.0,
             area_km2: area_km2 as u64,
             seed,
+            plate_type: PlateType::Mixed, // Default, will be assigned later
+        }
+    }
+
+    /// Calculate size percentile of this plate among all plates
+    ///
+    /// Returns a value from 0.0 to 1.0 indicating what fraction of plates are smaller
+    pub fn calculate_size_percentile(&self, all_stats: &std::collections::HashMap<u16, PlateStats>) -> f64 {
+        let total_plates = all_stats.len();
+        if total_plates == 0 {
+            return 0.5;
+        }
+
+        let smaller_plates = all_stats.values()
+            .filter(|s| s.area_km2 < self.area_km2)
+            .count();
+
+        smaller_plates as f64 / total_plates as f64
+    }
+
+    /// Assign plate type based on size among all plates
+    pub fn assign_plate_type(&mut self, all_stats: &std::collections::HashMap<u16, PlateStats>) {
+        let percentile = self.calculate_size_percentile(all_stats);
+        self.plate_type = PlateType::from_size_percentile(percentile);
+    }
+}
+
+/// Character/composition of a tectonic plate
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlateType {
+    /// Oceanic plate (denser, subducts beneath continental)
+    Oceanic,
+    /// Continental plate (lighter, does not subduct)
+    Continental,
+    /// Mixed/composite plate with both oceanic and continental crust
+    Mixed,
+}
+
+impl PlateType {
+    /// Assign plate type based on size heuristics
+    ///
+    /// Larger plates tend to be continental, smaller plates tend to be oceanic.
+    /// This is a simplified model - in reality, plate type depends on crust composition.
+    ///
+    /// # Arguments
+    /// * `area_km2` - Area of the plate in square kilometers
+    /// * `all_areas` - All plate areas for percentile calculation
+    ///
+    /// # Returns
+    /// PlateType classification based on size percentile
+    pub fn from_size_percentile(percentile: f64) -> Self {
+        if percentile > 0.7 {
+            PlateType::Continental
+        } else if percentile < 0.3 {
+            PlateType::Oceanic
+        } else {
+            PlateType::Mixed
         }
     }
 }
@@ -83,7 +141,7 @@ impl PlateStats {
 pub enum PlateInteraction {
     /// Plates moving apart (divergent boundary)
     Divergent,
-    /// Plates moving together (convergent boundary) 
+    /// Plates moving together (convergent boundary)
     Convergent,
     /// Plates sliding past each other (transform boundary)
     Transform,

@@ -13,5 +13,5 @@ pub use terrain::{
     TerrainMap, MapProjection, MapStats,
     PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap
 };
-pub use world::WorldMap;
+pub use world::{WorldMap, TectonicMetadata};
 pub use spherical::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};

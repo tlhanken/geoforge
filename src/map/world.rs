@@ -6,11 +6,66 @@
 use crate::map::terrain::TerrainMap;
 use crate::map::spherical::PlanetaryParams;
 use crate::tectonics::TectonicPlateGenerator;
-use crate::tectonics::plates::{PlateSeed, PlateStats};
+use crate::tectonics::plates::{PlateSeed, PlateStats, PlateType};
 use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
+use crate::tectonics::boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 use std::collections::HashMap;
 use std::fs;
+
+/// Metadata for Stage 1: Tectonic Foundation
+#[derive(Debug, Clone)]
+pub struct TectonicMetadata {
+    /// Plate seed points with motion information
+    pub plate_seeds: Vec<PlateSeed>,
+
+    /// Statistics for each plate (area, percentage, type)
+    pub plate_stats: HashMap<u16, PlateStats>,
+
+    /// Identified boundary segments between plates
+    pub plate_boundaries: Vec<BoundarySegment>,
+
+    /// Statistics about all boundaries
+    pub boundary_stats: Option<BoundaryStatistics>,
+}
+
+impl TectonicMetadata {
+    /// Create new tectonic metadata with seeds and stats
+    pub fn new(plate_seeds: Vec<PlateSeed>, plate_stats: HashMap<u16, PlateStats>) -> Self {
+        Self {
+            plate_seeds,
+            plate_stats,
+            plate_boundaries: Vec::new(),
+            boundary_stats: None,
+        }
+    }
+
+    /// Assign plate types based on size distribution
+    pub fn assign_plate_types(&mut self) {
+        // Calculate size percentiles first
+        let total_plates = self.plate_stats.len();
+        let mut percentiles = HashMap::new();
+
+        for (plate_id, stats) in &self.plate_stats {
+            let smaller_count = self.plate_stats.values()
+                .filter(|s| s.area_km2 < stats.area_km2)
+                .count();
+            let percentile = if total_plates > 0 {
+                smaller_count as f64 / total_plates as f64
+            } else {
+                0.5
+            };
+            percentiles.insert(*plate_id, percentile);
+        }
+
+        // Now assign types based on percentiles
+        for (plate_id, stats) in self.plate_stats.iter_mut() {
+            if let Some(&percentile) = percentiles.get(plate_id) {
+                stats.plate_type = PlateType::from_size_percentile(percentile);
+            }
+        }
+    }
+}
 
 /// Main world map containing all generated layers
 #[derive(Debug, Clone)]
@@ -19,17 +74,16 @@ pub struct WorldMap {
     pub height: usize,
     pub seed: u64,
     pub planetary_params: PlanetaryParams,
-    
+
     // World generation layers
     pub tectonics: Option<TerrainMap<u16>>,
     pub elevation: Option<TerrainMap<f32>>,
     pub temperature: Option<TerrainMap<f32>>,
     pub precipitation: Option<TerrainMap<f32>>,
     pub biomes: Option<TerrainMap<u8>>,
-    
+
     // Metadata for layers
-    pub plate_seeds: Option<Vec<PlateSeed>>,
-    pub plate_stats: Option<HashMap<u16, PlateStats>>,
+    pub tectonic_metadata: Option<TectonicMetadata>,
 }
 
 impl WorldMap {
@@ -59,8 +113,7 @@ impl WorldMap {
             temperature: None,
             precipitation: None,
             biomes: None,
-            plate_seeds: None,
-            plate_stats: None,
+            tectonic_metadata: None,
         })
     }
     
@@ -187,10 +240,13 @@ impl WorldMap {
         let tectonic_map = TerrainMap::from_data(self.width, self.height, tectonic_data);
         let plate_stats = self.calculate_plate_stats_from_map(&tectonic_map, &plate_seeds);
 
+        // Create metadata and assign plate types
+        let mut metadata = TectonicMetadata::new(plate_seeds, plate_stats);
+        metadata.assign_plate_types();
+
         // Store results
         self.tectonics = Some(tectonic_map);
-        self.plate_seeds = Some(plate_seeds);
-        self.plate_stats = Some(plate_stats);
+        self.tectonic_metadata = Some(metadata);
 
         println!("✅ Tectonic plates imported successfully from PNG");
         Ok(())
@@ -214,10 +270,13 @@ impl WorldMap {
         let (width, height, plate_data, seeds) = generator.get_plate_data();
         let plate_stats = generator.get_plate_stats();
 
+        // Create metadata and assign plate types
+        let mut metadata = TectonicMetadata::new(seeds.clone(), plate_stats);
+        metadata.assign_plate_types();
+
         // Store results in WorldMap
         self.tectonics = Some(TerrainMap::from_data(width, height, plate_data.clone()));
-        self.plate_seeds = Some(seeds.clone());
-        self.plate_stats = Some(plate_stats);
+        self.tectonic_metadata = Some(metadata);
 
         Ok(())
     }
@@ -258,10 +317,15 @@ impl WorldMap {
         refiner.refine_boundaries(tectonics);
 
         // Recalculate plate stats after refinement
-        if let Some(ref seeds) = self.plate_seeds.clone() {
-            if let Some(ref tectonics) = self.tectonics {
-                self.plate_stats = Some(self.calculate_plate_stats_from_map(tectonics, seeds));
-            }
+        if self.tectonic_metadata.is_some() && self.tectonics.is_some() {
+            let seeds = self.tectonic_metadata.as_ref().unwrap().plate_seeds.clone();
+            let tectonics = self.tectonics.as_ref().unwrap();
+            let new_stats = self.calculate_plate_stats_from_map(tectonics, &seeds);
+
+            // Update metadata
+            let metadata = self.tectonic_metadata.as_mut().unwrap();
+            metadata.plate_stats = new_stats;
+            metadata.assign_plate_types();
         }
 
         Ok(())
@@ -307,15 +371,85 @@ impl WorldMap {
         let stats = remover.remove_islands(tectonics);
 
         // Recalculate plate stats after island removal
-        if let Some(ref seeds) = self.plate_seeds.clone() {
-            if let Some(ref tectonics) = self.tectonics {
-                self.plate_stats = Some(self.calculate_plate_stats_from_map(tectonics, seeds));
-            }
+        if self.tectonic_metadata.is_some() && self.tectonics.is_some() {
+            let seeds = self.tectonic_metadata.as_ref().unwrap().plate_seeds.clone();
+            let tectonics = self.tectonics.as_ref().unwrap();
+            let new_stats = self.calculate_plate_stats_from_map(tectonics, &seeds);
+
+            // Update metadata
+            let metadata = self.tectonic_metadata.as_mut().unwrap();
+            metadata.plate_stats = new_stats;
+            metadata.assign_plate_types();
         }
 
         Ok(stats)
     }
 
+    /// Analyze plate boundaries and classify their types (Stage 1.4)
+    ///
+    /// This identifies all boundaries between plates and classifies them as convergent,
+    /// divergent, or transform based on relative plate motion. Results are stored in
+    /// the tectonic metadata.
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration for boundary analysis. If None, uses defaults.
+    ///
+    /// # Returns
+    /// Statistics about the analyzed boundaries
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::WorldMap;
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.generate_tectonics(15)?;
+    /// world.refine_boundaries(None)?;
+    /// world.remove_islands(None)?;
+    ///
+    /// // Analyze boundaries
+    /// let boundary_stats = world.analyze_boundaries(None)?;
+    /// println!("Found {} boundaries", boundary_stats.total_boundaries);
+    /// println!("  Convergent: {}", boundary_stats.convergent_count);
+    /// println!("  Divergent: {}", boundary_stats.divergent_count);
+    /// println!("  Transform: {}", boundary_stats.transform_count);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn analyze_boundaries(
+        &mut self,
+        config: Option<BoundaryAnalysisConfig>
+    ) -> Result<BoundaryStatistics, Box<dyn std::error::Error>> {
+        // Ensure tectonics have been generated
+        if self.tectonics.is_none() {
+            return Err("Tectonics must be generated before analyzing boundaries".into());
+        }
+
+        if self.tectonic_metadata.is_none() {
+            return Err("Tectonic metadata missing. Generate tectonics first.".into());
+        }
+
+        // Use provided config or create default
+        let config = config.unwrap_or_default();
+
+        // Create analyzer and find boundaries
+        let analyzer = BoundaryAnalyzer::with_config(config);
+        let tectonics = self.tectonics.as_ref().unwrap();
+        let mut boundaries = analyzer.find_boundaries(tectonics);
+
+        // Classify boundaries based on plate motion
+        let metadata = self.tectonic_metadata.as_ref().unwrap();
+        analyzer.classify_boundaries(&mut boundaries, &metadata.plate_seeds, tectonics);
+
+        // Get statistics
+        let stats = analyzer.boundary_statistics(&boundaries);
+
+        // Store boundaries in metadata
+        if let Some(ref mut metadata) = self.tectonic_metadata {
+            metadata.plate_boundaries = boundaries;
+            metadata.boundary_stats = Some(stats.clone());
+        }
+
+        Ok(stats)
+    }
 
     /// Calculate plate statistics from a terrain map and seeds
     fn calculate_plate_stats_from_map(&self, tectonic_map: &TerrainMap<u16>, plate_seeds: &[PlateSeed]) -> HashMap<u16, PlateStats> {
@@ -347,7 +481,17 @@ impl WorldMap {
 
     /// Get statistics for the tectonic layer
     pub fn get_tectonic_stats(&self) -> Option<&HashMap<u16, PlateStats>> {
-        self.plate_stats.as_ref()
+        self.tectonic_metadata.as_ref().map(|m| &m.plate_stats)
+    }
+
+    /// Get plate seeds for the tectonic layer
+    pub fn get_tectonic_seeds(&self) -> Option<&Vec<PlateSeed>> {
+        self.tectonic_metadata.as_ref().map(|m| &m.plate_seeds)
+    }
+
+    /// Get full tectonic metadata
+    pub fn get_tectonic_metadata(&self) -> Option<&TectonicMetadata> {
+        self.tectonic_metadata.as_ref()
     }
     
     /// Export tectonic plates as PNG
@@ -485,9 +629,9 @@ impl WorldMap {
         }
         
         // Write plate seeds if available
-        if let Some(ref seeds) = self.plate_seeds {
-            file.write_all(&(seeds.len() as u32).to_le_bytes())?;
-            for seed in seeds {
+        if let Some(ref metadata) = self.tectonic_metadata {
+            file.write_all(&(metadata.plate_seeds.len() as u32).to_le_bytes())?;
+            for seed in &metadata.plate_seeds {
                 file.write_all(&seed.id.to_le_bytes())?;
                 file.write_all(&(seed.x as u32).to_le_bytes())?;
                 file.write_all(&(seed.y as u32).to_le_bytes())?;
@@ -547,8 +691,7 @@ impl WorldMap {
             temperature: None,
             precipitation: None,
             biomes: None,
-            plate_seeds: None,
-            plate_stats: None,
+            tectonic_metadata: None,
         };
         
         // Read tectonic layer
@@ -608,8 +751,11 @@ mod tests {
         let result = worldmap.generate_tectonics(5);
         assert!(result.is_ok());
         assert!(worldmap.tectonics.is_some());
-        assert!(worldmap.plate_seeds.is_some());
-        assert!(worldmap.plate_stats.is_some());
+        assert!(worldmap.tectonic_metadata.is_some());
+
+        let metadata = worldmap.tectonic_metadata.as_ref().unwrap();
+        assert!(!metadata.plate_seeds.is_empty());
+        assert!(!metadata.plate_stats.is_empty());
     }
     
     #[test]
@@ -679,10 +825,10 @@ mod tests {
         assert_eq!(data1, data2);
         
         // Compare plate seeds
-        let seeds1 = worldmap1.plate_seeds.as_ref().unwrap();
-        let seeds2 = worldmap2.plate_seeds.as_ref().unwrap();
+        let seeds1 = &worldmap1.tectonic_metadata.as_ref().unwrap().plate_seeds;
+        let seeds2 = &worldmap2.tectonic_metadata.as_ref().unwrap().plate_seeds;
         assert_eq!(seeds1.len(), seeds2.len());
-        
+
         for (s1, s2) in seeds1.iter().zip(seeds2.iter()) {
             assert_eq!(s1.id, s2.id);
             assert!((s1.lat - s2.lat).abs() < 1e-10);
@@ -819,8 +965,7 @@ mod tests {
         
         // Should have generated tectonics
         assert!(world.tectonics.is_some());
-        assert!(world.plate_seeds.is_some());
-        assert!(world.plate_stats.is_some());
+        assert!(world.tectonic_metadata.is_some());
         
         // Other layers should still be None (not yet implemented)
         assert!(world.elevation.is_none());
