@@ -24,6 +24,7 @@
 // Core modules
 pub mod map;
 pub mod tectonics;
+pub mod geology;
 pub mod utils;
 
 // Re-export main types for convenience
@@ -36,3 +37,5 @@ pub use tectonics::{BoundaryRefiner, BoundaryRefinementConfig};
 pub use tectonics::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 pub use tectonics::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 pub use tectonics::{PlateMotionAssigner, PlateMotionConfig};
+pub use geology::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
+pub use geology::{OrogenicBeltGenerator, OrogenicConfig};

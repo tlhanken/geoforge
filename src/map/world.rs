@@ -11,6 +11,8 @@ use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementC
 use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 use crate::tectonics::boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 use crate::tectonics::motion::{PlateMotionAssigner, PlateMotionConfig};
+use crate::geology::orogenic::{OrogenicBeltGenerator, OrogenicConfig};
+use crate::geology::provinces::ProvinceRegion;
 use std::collections::HashMap;
 use std::fs;
 
@@ -78,6 +80,7 @@ pub struct WorldMap {
 
     // World generation layers
     pub tectonics: Option<TerrainMap<u16>>,
+    pub geology: Option<Vec<ProvinceRegion>>,  // Stage 2: Geological provinces
     pub elevation: Option<TerrainMap<f32>>,
     pub temperature: Option<TerrainMap<f32>>,
     pub precipitation: Option<TerrainMap<f32>>,
@@ -110,6 +113,7 @@ impl WorldMap {
             seed,
             planetary_params,
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,
@@ -525,6 +529,67 @@ impl WorldMap {
         Ok(stats)
     }
 
+    /// Generate geological provinces from tectonic data (Stage 2.1: Orogenic Belts)
+    ///
+    /// This analyzes convergent plate boundaries and creates orogenic belts (mountain-building zones).
+    /// Requires that tectonics have been generated and boundaries have been analyzed.
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration for orogenic belt generation
+    ///
+    /// # Returns
+    /// Vector of province regions representing orogenic belts
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{WorldMap, OrogenicConfig};
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    ///
+    /// // Generate orogenic belts with default config
+    /// let orogens = world.generate_geology(None)?;
+    /// println!("Generated {} orogenic belts", orogens.len());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn generate_geology(
+        &mut self,
+        config: Option<OrogenicConfig>
+    ) -> Result<Vec<ProvinceRegion>, Box<dyn std::error::Error>> {
+        // Ensure tectonics exist
+        let plate_map = self.tectonics.as_ref()
+            .ok_or("Tectonics not generated. Call tectonics().generate_plates() first.")?;
+
+        // Ensure metadata exists with boundaries
+        let metadata = self.tectonic_metadata.as_ref()
+            .ok_or("Tectonic metadata not found. Call tectonics().generate_plates() first.")?;
+
+        if metadata.plate_boundaries.is_empty() {
+            return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
+        }
+
+        // Generate orogenic belts
+        let config = config.unwrap_or_default();
+        let generator = OrogenicBeltGenerator::new(config);
+
+        let orogens = generator.generate_orogens(
+            &metadata.plate_boundaries,
+            &metadata.plate_stats,
+            plate_map,
+        );
+
+        // Store in geology field
+        self.geology = Some(orogens.clone());
+
+        Ok(orogens)
+    }
+
+    /// Get the generated geological provinces
+    pub fn get_geology(&self) -> Option<&Vec<ProvinceRegion>> {
+        self.geology.as_ref()
+    }
+
     /// Calculate plate statistics from a terrain map and seeds
     fn calculate_plate_stats_from_map(&self, tectonic_map: &TerrainMap<u16>, plate_seeds: &[PlateSeed]) -> HashMap<u16, PlateStats> {
         let mut plate_areas = HashMap::new();
@@ -922,6 +987,7 @@ impl WorldMap {
             seed,
             planetary_params: PlanetaryParams::earth(), // Default to Earth parameters for loaded files
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,
