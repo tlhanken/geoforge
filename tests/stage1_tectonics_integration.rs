@@ -5,7 +5,7 @@
 //! Stage 1.2: Boundary Refinement
 //! Stage 1.3: Island Removal
 
-use geoforge::{WorldMap, BoundaryRefinementConfig};
+use geoforge::{WorldMap, BoundaryRefinementConfig, PlateSeed};
 
 #[test]
 fn test_full_pipeline_integration() {
@@ -13,7 +13,7 @@ fn test_full_pipeline_integration() {
     let mut world = WorldMap::new(360, 180, 42).unwrap();
 
     // Stage 1.1: Generate plates
-    world.generate_tectonics(8).unwrap();
+    world.tectonics().generate_plates(8).unwrap();
     let initial_stats = world.get_tectonic_stats().unwrap();
     assert_eq!(initial_stats.len(), 8, "Should have 8 plates after generation");
 
@@ -21,13 +21,13 @@ fn test_full_pipeline_integration() {
     let refinement_config = BoundaryRefinementConfig::with_seed(42)
         .with_noise(0.020, 50.0, 4)
         .with_smoothing(1);
-    world.refine_boundaries(Some(refinement_config)).unwrap();
+    world.tectonics().roughen_boundaries(Some(refinement_config)).unwrap();
 
     let refined_stats = world.get_tectonic_stats().unwrap();
     assert_eq!(refined_stats.len(), 8, "Should still have 8 plates after refinement");
 
     // Stage 1.3: Remove islands
-    let island_stats = world.remove_islands(None).unwrap();
+    let island_stats = world.tectonics().deisland(None).unwrap();
 
     let final_stats = world.get_tectonic_stats().unwrap();
     assert_eq!(final_stats.len(), 8, "Should still have 8 plates after island removal");
@@ -48,13 +48,13 @@ fn test_pipeline_preserves_plate_count() {
     // Verify that refinement and island removal don't change the number of plates
     let mut world = WorldMap::new(180, 90, 999).unwrap();
 
-    world.generate_tectonics(5).unwrap();
+    world.tectonics().generate_plates(5).unwrap();
     let initial_plate_count = world.get_tectonic_stats().unwrap().len();
 
-    world.refine_boundaries(None).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
     let refined_plate_count = world.get_tectonic_stats().unwrap().len();
 
-    world.remove_islands(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
     let final_plate_count = world.get_tectonic_stats().unwrap().len();
 
     assert_eq!(initial_plate_count, refined_plate_count);
@@ -67,14 +67,14 @@ fn test_pipeline_with_extreme_refinement() {
     // Test that island removal can handle aggressive refinement
     let mut world = WorldMap::new(360, 180, 12345).unwrap();
 
-    world.generate_tectonics(10).unwrap();
+    world.tectonics().generate_plates(10).unwrap();
 
     // Extreme refinement to maximize island creation
     let extreme_config = BoundaryRefinementConfig::with_seed(12345)
         .with_noise(0.030, 120.0, 6)
         .with_smoothing(3);
 
-    world.refine_boundaries(Some(extreme_config)).unwrap();
+    world.tectonics().roughen_boundaries(Some(extreme_config)).unwrap();
     let _island_stats = world.remove_islands(None).unwrap();
 
     // With extreme refinement, we should find islands
@@ -92,20 +92,20 @@ fn test_pipeline_determinism_generation_and_refinement() {
     let seed = 54321;
 
     let mut world1 = WorldMap::new(180, 90, seed).unwrap();
-    world1.generate_tectonics(6).unwrap();
+    world1.tectonics().generate_plates(6).unwrap();
 
     let config1 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
         .with_smoothing(0);  // Disable smoothing for exact determinism
-    world1.refine_boundaries(Some(config1)).unwrap();
+    world1.tectonics().roughen_boundaries(Some(config1)).unwrap();
 
     let mut world2 = WorldMap::new(180, 90, seed).unwrap();
-    world2.generate_tectonics(6).unwrap();
+    world2.tectonics().generate_plates(6).unwrap();
 
     let config2 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
         .with_smoothing(0);  // Disable smoothing for exact determinism
-    world2.refine_boundaries(Some(config2)).unwrap();
+    world2.tectonics().roughen_boundaries(Some(config2)).unwrap();
 
     // Compare plate data before island removal
     let data1 = &world1.tectonics.as_ref().unwrap().data;
@@ -115,8 +115,8 @@ fn test_pipeline_determinism_generation_and_refinement() {
 
     // Island removal should successfully complete on both
     // Note: Exact stats may vary slightly due to HashMap iteration order
-    let stats1 = world1.remove_islands(None).unwrap();
-    let stats2 = world2.remove_islands(None).unwrap();
+    let stats1 = world1.tectonics().deisland(None).unwrap();
+    let stats2 = world2.tectonics().deisland(None).unwrap();
 
     // Verify both runs found and removed islands
     assert!(stats1.islands_removed > 0, "Should find islands with this config");
@@ -159,14 +159,14 @@ fn test_pipeline_with_minimal_refinement() {
     // Test that minimal refinement produces few or no islands
     let mut world = WorldMap::new(180, 90, 111).unwrap();
 
-    world.generate_tectonics(7).unwrap();
+    world.tectonics().generate_plates(7).unwrap();
 
     // Minimal refinement
     let minimal_config = BoundaryRefinementConfig::with_seed(111)
         .with_noise(0.005, 2.0, 2)
         .with_smoothing(0);
 
-    world.refine_boundaries(Some(minimal_config)).unwrap();
+    world.tectonics().roughen_boundaries(Some(minimal_config)).unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
     // Minimal refinement should produce very few islands
@@ -178,19 +178,19 @@ fn test_stats_recalculation_after_stages() {
     // Verify that plate statistics are properly recalculated after each stage
     let mut world = WorldMap::new(360, 180, 777).unwrap();
 
-    world.generate_tectonics(8).unwrap();
+    world.tectonics().generate_plates(8).unwrap();
     let initial_total_area: u64 = world.get_tectonic_stats().unwrap()
         .values()
         .map(|s| s.area_km2)
         .sum();
 
-    world.refine_boundaries(None).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
     let refined_total_area: u64 = world.get_tectonic_stats().unwrap()
         .values()
         .map(|s| s.area_km2)
         .sum();
 
-    world.remove_islands(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
     let final_total_area: u64 = world.get_tectonic_stats().unwrap()
         .values()
         .map(|s| s.area_km2)
@@ -209,8 +209,8 @@ fn test_pipeline_with_many_plates() {
     // Test pipeline with a large number of plates
     let mut world = WorldMap::new(360, 180, 8888).unwrap();
 
-    world.generate_tectonics(30).unwrap();
-    world.refine_boundaries(None).unwrap();
+    world.tectonics().generate_plates(30).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
     let final_stats = world.get_tectonic_stats().unwrap();
@@ -225,8 +225,8 @@ fn test_single_plate_edge_case() {
     // Test edge case with only one plate
     let mut world = WorldMap::new(100, 50, 333).unwrap();
 
-    world.generate_tectonics(1).unwrap();
-    world.refine_boundaries(None).unwrap();
+    world.tectonics().generate_plates(1).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
     // Single plate should never have islands
@@ -243,12 +243,12 @@ fn test_contiguity_guarantee() {
     use std::collections::{HashSet, VecDeque};
 
     let mut world = WorldMap::new(180, 90, 55555).unwrap();
-    world.generate_tectonics(10).unwrap();
-    world.refine_boundaries(Some(
+    world.tectonics().generate_plates(10).unwrap();
+    world.tectonics().roughen_boundaries(Some(
         BoundaryRefinementConfig::with_seed(55555)
             .with_noise(0.025, 100.0, 5)
     )).unwrap();
-    world.remove_islands(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
 
     let plate_map = world.tectonics.as_ref().unwrap();
 
@@ -301,9 +301,9 @@ fn test_boundary_analysis_integration() {
     let mut world = WorldMap::new(180, 90, 42).unwrap();
 
     // Generate and process plates
-    world.generate_tectonics(6).unwrap();
-    world.refine_boundaries(None).unwrap();
-    world.remove_islands(None).unwrap();
+    world.tectonics().generate_plates(6).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
 
     // Stage 1.4: Analyze boundaries
     let boundary_stats = world.analyze_boundaries(None).unwrap();
@@ -358,7 +358,7 @@ fn test_boundary_analysis_requires_tectonics() {
 fn test_plate_type_assignment() {
     // Test that plate types are assigned correctly based on size
     let mut world = WorldMap::new(360, 180, 123).unwrap();
-    world.generate_tectonics(10).unwrap();
+    world.tectonics().generate_plates(10).unwrap();
 
     let metadata = world.get_tectonic_metadata().unwrap();
 
@@ -394,7 +394,7 @@ fn test_complete_stage_1_pipeline() {
     let mut world = WorldMap::new(360, 180, 42).unwrap();
 
     // Stage 1.1: Generate plates
-    world.generate_tectonics(8).unwrap();
+    world.tectonics().generate_plates(8).unwrap();
     assert!(world.tectonics.is_some());
 
     let metadata = world.get_tectonic_metadata().unwrap();
@@ -406,10 +406,10 @@ fn test_complete_stage_1_pipeline() {
     }
 
     // Stage 1.2: Refine boundaries
-    world.refine_boundaries(None).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
 
     // Stage 1.3: Remove islands
-    world.remove_islands(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
 
     // Stage 1.4: Analyze boundaries
     let boundary_stats = world.analyze_boundaries(None).unwrap();
@@ -446,8 +446,8 @@ fn test_motion_assignment_determinism() {
     let mut world1 = WorldMap::new(180, 90, 123).unwrap();
     let mut world2 = WorldMap::new(180, 90, 123).unwrap();
 
-    world1.generate_tectonics(5).unwrap();
-    world2.generate_tectonics(5).unwrap();
+    world1.tectonics().generate_plates(5).unwrap();
+    world2.tectonics().generate_plates(5).unwrap();
 
     let metadata1 = world1.get_tectonic_metadata().unwrap();
     let metadata2 = world2.get_tectonic_metadata().unwrap();
@@ -466,7 +466,7 @@ fn test_motion_assignment_determinism() {
 fn test_motion_realistic_values() {
     // Test that motion values are within realistic Earth-like ranges
     let mut world = WorldMap::new(360, 180, 999).unwrap();
-    world.generate_tectonics(15).unwrap();
+    world.tectonics().generate_plates(15).unwrap();
 
     let metadata = world.get_tectonic_metadata().unwrap();
 
@@ -489,10 +489,10 @@ fn test_boundary_visualization_export() {
     use std::path::Path;
 
     let mut world = WorldMap::new(180, 90, 42).unwrap();
-    world.generate_tectonics(6).unwrap();
-    world.refine_boundaries(None).unwrap();
-    world.remove_islands(None).unwrap();
-    world.analyze_boundaries(None).unwrap();
+    world.tectonics().generate_plates(6).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
+    world.tectonics().analyze(None).unwrap();
 
     // Export boundary visualization
     let output_dir = "outputs/tests";
@@ -514,7 +514,7 @@ fn test_boundary_visualization_export() {
 fn test_boundary_export_requires_analysis() {
     // Test that exporting boundaries before analysis fails
     let mut world = WorldMap::new(100, 50, 42).unwrap();
-    world.generate_tectonics(4).unwrap();
+    world.tectonics().generate_plates(4).unwrap();
 
     // Try to export without analyzing
     let result = world.export_boundaries_png("outputs/tests", "should_fail.png");
@@ -525,10 +525,10 @@ fn test_boundary_export_requires_analysis() {
 fn test_boundary_classification_accuracy() {
     // Test that boundary classification produces sensible results
     let mut world = WorldMap::new(360, 180, 789).unwrap();
-    world.generate_tectonics(10).unwrap();
-    world.refine_boundaries(None).unwrap();
-    world.remove_islands(None).unwrap();
-    world.analyze_boundaries(None).unwrap();
+    world.tectonics().generate_plates(10).unwrap();
+    world.tectonics().roughen_boundaries(None).unwrap();
+    world.tectonics().deisland(None).unwrap();
+    world.tectonics().analyze(None).unwrap();
 
     let metadata = world.get_tectonic_metadata().unwrap();
 
@@ -554,4 +554,122 @@ fn test_boundary_classification_accuracy() {
 
     println!("Boundary classification validation passed for {} boundaries",
         metadata.plate_boundaries.len());
+}
+
+#[test]
+#[cfg(feature = "export-png")]
+fn test_motion_png_export_import_roundtrip() {
+    use std::fs;
+
+    // Create output directory
+    let test_dir = "outputs/tests/motion_roundtrip";
+    fs::create_dir_all(test_dir).unwrap();
+
+    // Generate a world with specific seed for reproducibility
+    let mut world1 = WorldMap::new(360, 180, 12345).unwrap();
+    world1.tectonics().generate(8).unwrap();
+
+    // Get original metadata
+    let original_metadata = world1.get_tectonic_metadata().unwrap();
+    let original_seeds = original_metadata.plate_seeds.clone();
+
+    // Export to plate_motion.png
+    let motion_png_path = format!("{}/test_motion.png", test_dir);
+    world1.export_plate_motion_png(test_dir, "test_motion.png").unwrap();
+
+    // Create new world and import from plate_motion.png
+    let mut world2 = WorldMap::new(360, 180, 0).unwrap();
+    world2.tectonics().import_png(&motion_png_path).unwrap();
+
+    // Get imported metadata
+    let imported_metadata = world2.get_tectonic_metadata().unwrap();
+    let imported_seeds = &imported_metadata.plate_seeds;
+
+    // Verify same number of plates
+    assert_eq!(original_seeds.len(), imported_seeds.len(),
+        "Should have same number of plates after roundtrip");
+
+    // Build a map from (direction, speed) to original seed to match imported plates
+    // We'll match by the motion vector itself since that's what's encoded in the PNG
+    use std::collections::HashMap;
+
+    let mut motion_to_original: HashMap<(i32, i32), &PlateSeed> = HashMap::new();
+    for seed in &original_seeds {
+        // Round to integers for matching (RGB quantization means we lose precision)
+        let dir_key = seed.motion_direction.round() as i32;
+        let speed_key = (seed.motion_speed * 10.0).round() as i32; // 0.1 cm/year precision
+        motion_to_original.insert((dir_key, speed_key), seed);
+    }
+
+    // Verify each imported plate matches an original (within tolerance)
+    let mut matched_count = 0;
+    for imported_seed in imported_seeds {
+        let imp_dir = imported_seed.motion_direction.round() as i32;
+        let imp_speed = (imported_seed.motion_speed * 10.0).round() as i32;
+
+        // Try to find a match within small tolerance
+        let mut found_match = false;
+        for dir_offset in -2..=2 {
+            for speed_offset in -2..=2 {
+                let key = (imp_dir + dir_offset, imp_speed + speed_offset);
+                if motion_to_original.contains_key(&key) {
+                    found_match = true;
+                    matched_count += 1;
+                    break;
+                }
+            }
+            if found_match { break; }
+        }
+
+        assert!(found_match,
+            "Imported plate with motion {}° at {:.1} cm/year should match an original plate",
+            imported_seed.motion_direction, imported_seed.motion_speed);
+    }
+
+    assert_eq!(matched_count, original_seeds.len(),
+        "All plates should have matching motion vectors after roundtrip");
+
+    println!("✅ Motion PNG roundtrip test passed: {} plates with preserved motion vectors",
+        original_seeds.len());
+}
+
+#[test]
+#[cfg(feature = "export-png")]
+fn test_complete_export_import_workflow() {
+    use std::fs;
+
+    // Test the complete workflow: generate -> export all -> import -> verify
+    let test_dir = "outputs/tests/complete_workflow";
+    fs::create_dir_all(test_dir).unwrap();
+
+    // Generate and export everything
+    let mut world1 = WorldMap::new(180, 90, 42424).unwrap();
+    let _stats1 = world1.tectonics().generate(6).unwrap();
+
+    // Export all formats
+    world1.tectonics().export(test_dir).unwrap();
+
+    // Verify files were created
+    assert!(std::path::Path::new(&format!("{}/world.map", test_dir)).exists());
+    assert!(std::path::Path::new(&format!("{}/tectonics.png", test_dir)).exists());
+    assert!(std::path::Path::new(&format!("{}/boundaries.png", test_dir)).exists());
+    assert!(std::path::Path::new(&format!("{}/plate_motion.png", test_dir)).exists());
+
+    // Import from motion PNG (this is the key test - motion vectors preserved)
+    let mut world2 = WorldMap::new(180, 90, 0).unwrap();
+    let motion_path = format!("{}/plate_motion.png", test_dir);
+    world2.tectonics().import_png(&motion_path).unwrap();
+
+    let metadata2 = world2.get_tectonic_metadata().unwrap();
+    assert_eq!(metadata2.plate_seeds.len(), 6, "Motion PNG should have 6 plates");
+
+    // Verify all plates have valid motion vectors
+    for seed in &metadata2.plate_seeds {
+        assert!(seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
+            "Plate should have realistic speed");
+        assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
+            "Plate should have valid direction");
+    }
+
+    println!("✅ Complete export/import workflow test passed");
 }

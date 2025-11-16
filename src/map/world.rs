@@ -132,20 +132,66 @@ impl WorldMap {
     pub fn new_random(width: usize, height: usize) -> Result<Self, Box<dyn std::error::Error>> {
         Self::new(width, height, rand::random())
     }
-    
-    /// Import tectonic plates from a PNG image where each color represents a different plate
+
+    /// Access tectonic operations module
+    ///
+    /// Provides organized access to all tectonic plate operations including:
+    /// - `generate_plates()` - Create plates using electrostatic physics
+    /// - `roughen_boundaries()` - Add realistic irregularity
+    /// - `deisland()` - Remove plate fragments
+    /// - `analyze()` - Classify boundaries
+    /// - `generate()` - Run complete pipeline
+    /// - `export()` / `import()` - Save/load data
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::WorldMap;
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    ///
+    /// // Complete pipeline:
+    /// world.tectonics().generate(20)?;
+    /// world.tectonics().export("outputs")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn tectonics(&mut self) -> crate::map::tectonics_module::TectonicsModule<'_> {
+        crate::map::tectonics_module::TectonicsModule::new(self)
+    }
+
+    /// Import tectonic plates with motion vectors from PNG (plate_motion.png)
+    ///
+    /// This imports both plate boundaries AND motion vectors from a single PNG file.
+    /// Each unique color represents a plate with specific motion (direction and speed).
+    ///
+    /// The PNG must use the same HSV encoding as export_plate_motion_png:
+    /// - Hue (0-360°) = Motion direction
+    /// - Saturation (50-100%) = Motion speed (1-10 cm/year)
+    ///
+    /// This is the recommended way to import tectonic data from PNG files, as it
+    /// preserves complete plate information including motion vectors.
+    ///
+    /// # Arguments
+    /// * `png_path` - Path to plate_motion.png file
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 0)?;
+    /// world.import_png("outputs/plate_motion.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     #[cfg(feature = "export-png")]
-    pub fn import_tectonics_png(&mut self, png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn import_png(&mut self, png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         use image::io::Reader as ImageReader;
         use std::collections::HashMap;
-        
-        println!("🖼️ Importing tectonic plates from PNG: {}", png_path);
-        
+
+        println!("🖼️ Importing tectonic plates with motion from PNG: {}", png_path);
+
         // Load the PNG image
         let img = ImageReader::open(png_path)?.decode()?;
         let rgb_img = img.to_rgb8();
         let (img_width, img_height) = rgb_img.dimensions();
-        
+
         // Ensure image dimensions match world map
         if img_width as usize != self.width || img_height as usize != self.height {
             return Err(format!(
@@ -153,42 +199,44 @@ impl WorldMap {
                 img_width, img_height, self.width, self.height
             ).into());
         }
-        
-        // Map colors to plate IDs
-        let mut color_to_plate_id: HashMap<[u8; 3], u16> = HashMap::new();
+
+        // Map colors to (plate_id, direction, speed)
+        let mut color_to_plate: HashMap<[u8; 3], (u16, f64, f64)> = HashMap::new();
         let mut next_plate_id = 1u16;
         let mut tectonic_data = vec![0u16; self.width * self.height];
-        
+
         // Process each pixel
         for y in 0..self.height {
             for x in 0..self.width {
                 let pixel = rgb_img.get_pixel(x as u32, y as u32);
                 let color = [pixel[0], pixel[1], pixel[2]];
-                
-                // Get or assign plate ID for this color
-                let plate_id = if let Some(&existing_id) = color_to_plate_id.get(&color) {
-                    existing_id
+
+                // Get or assign plate data for this color
+                let (plate_id, _direction, _speed) = if let Some(&existing) = color_to_plate.get(&color) {
+                    existing
                 } else {
+                    // New color - extract motion from it
+                    let (direction, speed) = rgb_to_motion(color);
                     let new_id = next_plate_id;
-                    color_to_plate_id.insert(color, new_id);
+                    color_to_plate.insert(color, (new_id, direction, speed));
                     next_plate_id += 1;
-                    
+
                     if next_plate_id > u16::MAX {
                         return Err("Too many unique colors in PNG (max 65535 plates)".into());
                     }
-                    
-                    new_id
+
+                    (new_id, direction, speed)
                 };
-                
+
                 let idx = y * self.width + x;
                 tectonic_data[idx] = plate_id;
             }
         }
-        
-        let num_plates = color_to_plate_id.len();
-        println!("📊 Detected {} unique colors/plates", num_plates);
 
-        // Generate plate seeds from the imported data by finding centroids
+        let num_plates = color_to_plate.len();
+        println!("📊 Detected {} unique plates with motion vectors", num_plates);
+
+        // Generate plate seeds from the imported data
         let mut plate_pixels: HashMap<u16, Vec<(usize, usize)>> = HashMap::new();
 
         for y in 0..self.height {
@@ -203,6 +251,12 @@ impl WorldMap {
         }
 
         let mut plate_seeds = Vec::new();
+
+        // Extract motion info for each plate from the color mapping
+        let mut plate_motion: HashMap<u16, (f64, f64)> = HashMap::new();
+        for (_color, (plate_id, direction, speed)) in color_to_plate {
+            plate_motion.insert(plate_id, (direction, speed));
+        }
 
         for (plate_id, pixels) in plate_pixels {
             if pixels.is_empty() {
@@ -221,21 +275,35 @@ impl WorldMap {
             let projection = crate::map::terrain::MapProjection::global_equirectangular(self.width, self.height);
             let (lat, lon) = projection.pixel_to_coords(centroid_x, centroid_y);
 
-            // Create seed with default motion parameters
+            // Get motion from color mapping
+            let (motion_direction, motion_speed) = plate_motion.get(&plate_id)
+                .copied()
+                .unwrap_or((0.0, 2.5)); // Default fallback
+
+            // Create seed with motion from PNG
             let seed = PlateSeed::new(
                 plate_id,
                 centroid_x,
                 centroid_y,
                 lat,
                 lon,
-                0.0,  // Default motion direction
-                2.5,  // Default motion speed (cm/year)
+                motion_direction,
+                motion_speed,
             );
 
             plate_seeds.push(seed);
         }
 
         plate_seeds.sort_by_key(|s| s.id);
+
+        println!("  Motion vectors imported:");
+        for seed in plate_seeds.iter().take(5) {
+            println!("    Plate {}: {:.0}° at {:.1} cm/year",
+                     seed.id, seed.motion_direction, seed.motion_speed);
+        }
+        if plate_seeds.len() > 5 {
+            println!("    ... and {} more plates", plate_seeds.len() - 5);
+        }
 
         // Calculate statistics
         let tectonic_map = TerrainMap::from_data(self.width, self.height, tectonic_data);
@@ -245,16 +313,11 @@ impl WorldMap {
         let mut metadata = TectonicMetadata::new(plate_seeds, plate_stats);
         metadata.assign_plate_types();
 
-        // Assign realistic plate motion vectors
-        let motion_config = PlateMotionConfig::with_seed(self.seed);
-        let mut motion_assigner = PlateMotionAssigner::with_config(motion_config);
-        motion_assigner.assign_motion(&mut metadata.plate_seeds);
-
-        // Store results
+        // Store results (motion already assigned from PNG)
         self.tectonics = Some(tectonic_map);
         self.tectonic_metadata = Some(metadata);
 
-        println!("✅ Tectonic plates imported successfully from PNG");
+        println!("✅ Tectonic plates with motion vectors imported successfully");
         Ok(())
     }
 
@@ -741,21 +804,80 @@ impl WorldMap {
             }
         }
         
-        // Write plate seeds if available
+        // Write complete tectonic metadata if available
         if let Some(ref metadata) = self.tectonic_metadata {
-            file.write_all(&(metadata.plate_seeds.len() as u32).to_le_bytes())?;
-            for seed in &metadata.plate_seeds {
-                file.write_all(&seed.id.to_le_bytes())?;
-                file.write_all(&(seed.x as u32).to_le_bytes())?;
-                file.write_all(&(seed.y as u32).to_le_bytes())?;
-                file.write_all(&seed.lat.to_le_bytes())?;
-                file.write_all(&seed.lon.to_le_bytes())?;
-                file.write_all(&seed.motion_direction.to_le_bytes())?;
-                file.write_all(&seed.motion_speed.to_le_bytes())?;
-            }
+            Self::write_tectonic_metadata(&mut file, metadata)?;
         }
-        
+
         println!("✅ WorldMap saved to {}", filepath);
+        Ok(())
+    }
+
+    /// Write complete TectonicMetadata to file
+    fn write_tectonic_metadata(file: &mut fs::File, metadata: &TectonicMetadata) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+
+        // Write plate_seeds
+        file.write_all(&(metadata.plate_seeds.len() as u32).to_le_bytes())?;
+        for seed in &metadata.plate_seeds {
+            file.write_all(&seed.id.to_le_bytes())?;
+            file.write_all(&(seed.x as u32).to_le_bytes())?;
+            file.write_all(&(seed.y as u32).to_le_bytes())?;
+            file.write_all(&seed.lat.to_le_bytes())?;
+            file.write_all(&seed.lon.to_le_bytes())?;
+            file.write_all(&seed.motion_direction.to_le_bytes())?;
+            file.write_all(&seed.motion_speed.to_le_bytes())?;
+        }
+
+        // Write plate_stats
+        file.write_all(&(metadata.plate_stats.len() as u32).to_le_bytes())?;
+        for (plate_id, stats) in &metadata.plate_stats {
+            file.write_all(&plate_id.to_le_bytes())?;
+            file.write_all(&(stats.pixels as u32).to_le_bytes())?;
+            file.write_all(&stats.percentage.to_le_bytes())?;
+            file.write_all(&stats.area_km2.to_le_bytes())?;
+            // plate_type as u8: Oceanic=0, Continental=1, Mixed=2
+            let type_byte = match stats.plate_type {
+                crate::tectonics::plates::PlateType::Oceanic => 0u8,
+                crate::tectonics::plates::PlateType::Continental => 1u8,
+                crate::tectonics::plates::PlateType::Mixed => 2u8,
+            };
+            file.write_all(&[type_byte])?;
+        }
+
+        // Write plate_boundaries
+        file.write_all(&(metadata.plate_boundaries.len() as u32).to_le_bytes())?;
+        for boundary in &metadata.plate_boundaries {
+            file.write_all(&boundary.plate_a.to_le_bytes())?;
+            file.write_all(&boundary.plate_b.to_le_bytes())?;
+            file.write_all(&(boundary.pixels.len() as u32).to_le_bytes())?;
+            for &(x, y) in &boundary.pixels {
+                file.write_all(&(x as u32).to_le_bytes())?;
+                file.write_all(&(y as u32).to_le_bytes())?;
+            }
+            // interaction_type as u8: Convergent=0, Divergent=1, Transform=2
+            let interaction_byte = match boundary.interaction_type {
+                crate::tectonics::PlateInteraction::Convergent => 0u8,
+                crate::tectonics::PlateInteraction::Divergent => 1u8,
+                crate::tectonics::PlateInteraction::Transform => 2u8,
+            };
+            file.write_all(&[interaction_byte])?;
+            file.write_all(&boundary.relative_velocity.to_le_bytes())?;
+            file.write_all(&boundary.length_km.to_le_bytes())?;
+        }
+
+        // Write boundary_stats (optional)
+        let has_boundary_stats = metadata.boundary_stats.is_some();
+        file.write_all(&[if has_boundary_stats { 1u8 } else { 0u8 }])?;
+        if let Some(ref stats) = metadata.boundary_stats {
+            file.write_all(&(stats.total_boundaries as u32).to_le_bytes())?;
+            file.write_all(&(stats.convergent_count as u32).to_le_bytes())?;
+            file.write_all(&(stats.divergent_count as u32).to_le_bytes())?;
+            file.write_all(&(stats.transform_count as u32).to_le_bytes())?;
+            file.write_all(&stats.total_length_km.to_le_bytes())?;
+            file.write_all(&stats.average_relative_velocity.to_le_bytes())?;
+        }
+
         Ok(())
     }
     
@@ -828,9 +950,193 @@ impl WorldMap {
             }
             worldmap.elevation = Some(TerrainMap::from_data(width, height, elevation_data));
         }
-        
+
+        // Read tectonic metadata if tectonic layer exists and there's more data
+        if flags & 0x01 != 0 && cursor < buffer.len() {
+            worldmap.tectonic_metadata = Some(Self::read_tectonic_metadata(&buffer, &mut cursor)?);
+        }
+
         println!("✅ WorldMap loaded from {}", filepath);
         Ok(worldmap)
+    }
+
+    /// Read complete TectonicMetadata from buffer
+    fn read_tectonic_metadata(buffer: &[u8], cursor: &mut usize) -> Result<TectonicMetadata, Box<dyn std::error::Error>> {
+        // Read plate_seeds
+        let seed_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+        *cursor += 4;
+
+        let mut plate_seeds = Vec::with_capacity(seed_count);
+        for _ in 0..seed_count {
+            let id = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
+            *cursor += 2;
+            let x = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let y = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let lat = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let lon = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let motion_direction = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let motion_speed = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+
+            plate_seeds.push(PlateSeed::new(id, x, y, lat, lon, motion_direction, motion_speed));
+        }
+
+        // Read plate_stats
+        let stats_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+        *cursor += 4;
+
+        let mut plate_stats = HashMap::new();
+        for _ in 0..stats_count {
+            let plate_id = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
+            *cursor += 2;
+            let pixels = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let percentage = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let area_km2 = u64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let type_byte = buffer[*cursor];
+            *cursor += 1;
+            let plate_type = match type_byte {
+                0 => crate::tectonics::plates::PlateType::Oceanic,
+                1 => crate::tectonics::plates::PlateType::Continental,
+                2 => crate::tectonics::plates::PlateType::Mixed,
+                _ => return Err(format!("Invalid plate type: {}", type_byte).into()),
+            };
+
+            // Find the corresponding seed
+            let seed = plate_seeds.iter()
+                .find(|s| s.id == plate_id)
+                .ok_or_else(|| format!("No seed found for plate {}", plate_id))?
+                .clone();
+
+            let stats = crate::tectonics::plates::PlateStats {
+                pixels,
+                percentage,
+                area_km2,
+                seed,
+                plate_type,
+            };
+            plate_stats.insert(plate_id, stats);
+        }
+
+        // Read plate_boundaries
+        let boundary_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+        *cursor += 4;
+
+        let mut plate_boundaries = Vec::with_capacity(boundary_count);
+        for _ in 0..boundary_count {
+            let plate_a = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
+            *cursor += 2;
+            let plate_b = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
+            *cursor += 2;
+            let pixel_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+
+            let mut pixels = Vec::with_capacity(pixel_count);
+            for _ in 0..pixel_count {
+                let x = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+                *cursor += 4;
+                let y = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+                *cursor += 4;
+                pixels.push((x, y));
+            }
+
+            let interaction_byte = buffer[*cursor];
+            *cursor += 1;
+            let interaction_type = match interaction_byte {
+                0 => crate::tectonics::PlateInteraction::Convergent,
+                1 => crate::tectonics::PlateInteraction::Divergent,
+                2 => crate::tectonics::PlateInteraction::Transform,
+                _ => return Err(format!("Invalid interaction type: {}", interaction_byte).into()),
+            };
+
+            let relative_velocity = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let length_km = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+
+            plate_boundaries.push(crate::tectonics::BoundarySegment {
+                plate_a,
+                plate_b,
+                pixels,
+                interaction_type,
+                relative_velocity,
+                length_km,
+            });
+        }
+
+        // Read boundary_stats (optional)
+        let has_boundary_stats = buffer[*cursor] != 0;
+        *cursor += 1;
+
+        let boundary_stats = if has_boundary_stats {
+            let total_boundaries = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let convergent_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let divergent_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let transform_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
+            *cursor += 4;
+            let total_length_km = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+            let average_relative_velocity = f64::from_le_bytes([
+                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
+                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
+            ]);
+            *cursor += 8;
+
+            Some(crate::tectonics::BoundaryStatistics {
+                total_boundaries,
+                convergent_count,
+                divergent_count,
+                transform_count,
+                total_length_km,
+                average_relative_velocity,
+            })
+        } else {
+            None
+        };
+
+        Ok(TectonicMetadata {
+            plate_seeds,
+            plate_stats,
+            plate_boundaries,
+            boundary_stats,
+        })
     }
     
     /// Get flags indicating which layers are present
@@ -852,6 +1158,8 @@ impl WorldMap {
 /// - Saturation: Motion speed (1-10 cm/year maps to 50-100% saturation)
 /// - Value: Fixed at 90% for visibility
 ///
+/// Convert plate motion to RGB color for visualization
+///
 /// # Color Key
 /// - 0° (Red): Eastward motion
 /// - 90° (Yellow-Green): Northward motion
@@ -859,6 +1167,8 @@ impl WorldMap {
 /// - 270° (Blue-Magenta): Southward motion
 #[cfg(feature = "export-png")]
 fn motion_to_rgb(direction_deg: f64, speed_cm_year: f64) -> [u8; 3] {
+    use crate::utils::color::hsv_to_rgb;
+
     // Hue: 0-360° from direction
     let hue = direction_deg;
 
@@ -874,37 +1184,28 @@ fn motion_to_rgb(direction_deg: f64, speed_cm_year: f64) -> [u8; 3] {
     hsv_to_rgb(hue, saturation, value)
 }
 
-/// Convert HSV to RGB
+/// Convert RGB color back to plate motion (direction and speed)
 ///
-/// H: 0-360 (degrees)
-/// S: 0-1 (0% to 100%)
-/// V: 0-1 (0% to 100%)
+/// This is the inverse of motion_to_rgb, used for importing from plate_motion.png
 #[cfg(feature = "export-png")]
-fn hsv_to_rgb(h: f64, s: f64, v: f64) -> [u8; 3] {
-    let c = v * s;
-    let h_prime = h / 60.0;
-    let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
-    let m = v - c;
+fn rgb_to_motion(rgb: [u8; 3]) -> (f64, f64) {
+    use crate::utils::color::rgb_to_hsv;
 
-    let (r, g, b) = if h_prime < 1.0 {
-        (c, x, 0.0)
-    } else if h_prime < 2.0 {
-        (x, c, 0.0)
-    } else if h_prime < 3.0 {
-        (0.0, c, x)
-    } else if h_prime < 4.0 {
-        (0.0, x, c)
-    } else if h_prime < 5.0 {
-        (x, 0.0, c)
-    } else {
-        (c, 0.0, x)
-    };
+    let (hue, saturation, _value) = rgb_to_hsv(rgb[0], rgb[1], rgb[2]);
 
-    [
-        ((r + m) * 255.0) as u8,
-        ((g + m) * 255.0) as u8,
-        ((b + m) * 255.0) as u8,
-    ]
+    // Direction: hue maps directly to degrees (0-360)
+    let direction_deg = hue;
+
+    // Speed: reverse the saturation mapping
+    // saturation = 0.5 + (speed - 1.0) / 9.0 * 0.5
+    // saturation - 0.5 = (speed - 1.0) / 9.0 * 0.5
+    // (saturation - 0.5) * 2.0 = (speed - 1.0) / 9.0
+    // (saturation - 0.5) * 2.0 * 9.0 = speed - 1.0
+    // speed = (saturation - 0.5) * 18.0 + 1.0
+    let speed_cm_year = (saturation - 0.5) * 18.0 + 1.0;
+    let speed_cm_year = speed_cm_year.clamp(1.0, 10.0);
+
+    (direction_deg, speed_cm_year)
 }
 
 
@@ -1050,21 +1351,21 @@ mod tests {
     #[cfg(feature = "export-png")]
     fn test_png_export_import_roundtrip() {
         use std::fs;
-        
+
         // Create test directory
         let test_dir = "outputs/examples/test_png_roundtrip";
         fs::create_dir_all(test_dir).unwrap();
-        
+
         // Step 1: Generate world with seed 42 and export PNG
         let mut original_world = WorldMap::new(120, 60, 42).unwrap();
         original_world.generate_tectonics(6).unwrap();
-        
-        let png_path = format!("{}/test_plates.png", test_dir);
-        original_world.export_tectonics_png(test_dir, "test_plates.png").unwrap();
-        
+
+        let png_path = format!("{}/test_motion.png", test_dir);
+        original_world.export_plate_motion_png(test_dir, "test_motion.png").unwrap();
+
         // Step 2: Import PNG into new world object
         let mut imported_world = WorldMap::new(120, 60, 999).unwrap(); // Different seed
-        imported_world.import_tectonics_png(&png_path).unwrap();
+        imported_world.import_png(&png_path).unwrap();
         
         // Step 3: Compare the worlds
         let original_data = &original_world.tectonics.as_ref().unwrap().data;

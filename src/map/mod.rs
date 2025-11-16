@@ -7,6 +7,7 @@
 pub mod terrain;
 pub mod world;
 pub mod spherical;
+pub mod tectonics_module;
 
 // Re-export main types for convenience
 pub use terrain::{
@@ -15,3 +16,4 @@ pub use terrain::{
 };
 pub use world::{WorldMap, TectonicMetadata};
 pub use spherical::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
+pub use tectonics_module::TectonicsModule;

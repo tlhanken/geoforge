@@ -14,26 +14,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let seed = 097243067;
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
     let mut world = WorldMap::new(1800, 900, seed)?;
-    
-    // Stage 1.1: Generate tectonic plates using electrostatic physics
+
+    // Run complete Stage 1 pipeline using new API
+    println!("\n🌍 Running complete Stage 1: Tectonic Foundation pipeline...");
     println!("\n⚡ Stage 1.1: Generating tectonic plates...");
-    world.generate_tectonics(20)?;
+    world.tectonics().generate_plates(20)?;
 
-    // Stage 1.2: Refine boundaries for realistic irregular edges
     println!("🎨 Stage 1.2: Refining plate boundaries...");
-    world.refine_boundaries(None)?;  // Use default configuration
+    world.tectonics().roughen_boundaries(None)?;
 
-    // Stage 1.3: Remove islands to ensure plate contiguity
     println!("🏝️  Stage 1.3: Removing plate islands...");
-    let island_stats = world.remove_islands(None)?;
+    let island_stats = world.tectonics().deisland(None)?;
     if island_stats.islands_removed > 0 {
         println!("   Removed {} islands ({} pixels reassigned)",
                  island_stats.islands_removed, island_stats.pixels_reassigned);
     }
 
-    // Stage 1.4: Analyze boundaries and classify by type
     println!("🔍 Stage 1.4: Analyzing plate boundaries...");
-    let boundary_stats = world.analyze_boundaries(None)?;
+    let boundary_stats = world.tectonics().analyze(None)?;
     println!("   Found {} plate boundaries:", boundary_stats.total_boundaries);
     println!("   • Convergent (colliding):    {}", boundary_stats.convergent_count);
     println!("   • Divergent (spreading):     {}", boundary_stats.divergent_count);
@@ -89,26 +87,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                  continental, oceanic, mixed);
     }
     
-    // Export individual layers
+    // Export all tectonic data using new API
     println!("\n💾 Exporting visualizations...");
-    std::fs::create_dir_all("outputs")?;
+    world.tectonics().export("outputs")?;
 
     #[cfg(feature = "export-png")]
     {
-        world.export_tectonics_png("outputs", "tectonics.png")?;
         println!("✅ Plate boundaries exported: outputs/tectonics.png");
-
-        world.export_boundaries_png("outputs", "boundaries.png")?;
         println!("✅ Boundary types exported: outputs/boundaries.png");
         println!("   (Red=convergent, Blue=divergent, Green=transform)");
-
-        world.export_plate_motion_png("outputs", "plate_motion.png")?;
         println!("✅ Plate motion exported: outputs/plate_motion.png");
         println!("   (Color=direction, Brightness=speed)");
     }
 
-    // Save complete world map to binary file
-    world.save_to_file("outputs/world.map")?;
     println!("✅ Complete world data saved: outputs/world.map");
 
     println!("\n🎉 STAGE 1: TECTONIC FOUNDATION COMPLETE!");
@@ -152,9 +143,9 @@ fn import_png_mode(png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     
     // Create world map with matching dimensions
     let mut world = WorldMap::new(width as usize, height as usize, 0)?;
-    
-    // Import the PNG
-    world.import_tectonics_png(png_path)?;
+
+    // Import the PNG using new API
+    world.tectonics().import_png(png_path)?;
     
     // Show statistics
     if let Some(stats) = world.get_tectonic_stats() {
