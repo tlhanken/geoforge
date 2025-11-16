@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("• Using electrostatic physics simulation");
     println!("• Seed: {}", generator.get_seed());
     
-    generator.generate("electrostatic", true)?;
+    generator.generate("electrostatic")?;
     generator.validate()?;
     
     // Show plate statistics
@@ -49,8 +49,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("• Seed: {}", world.seed);
     
     // Generate tectonic layer
-    world.generate_tectonics(12, true)?;
-    println!("• Generated 12 tectonic plates with smoothing");
+    world.generate_tectonics(12)?;
+    println!("• Generated 12 tectonic plates");
     
     // Show world statistics
     if let Some(tectonic_stats) = world.get_tectonic_stats() {
@@ -73,8 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut world1 = WorldMap::new(90, 45, seed)?;
     let mut world2 = WorldMap::new(90, 45, seed)?;
     
-    world1.generate_tectonics(6, false)?;
-    world2.generate_tectonics(6, false)?;
+    world1.generate_tectonics(6)?;
+    world2.generate_tectonics(6)?;
     
     // Compare the results
     let data1 = &world1.tectonics.as_ref().unwrap().data;

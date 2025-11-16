@@ -3,6 +3,7 @@
 use crate::map::terrain::{TerrainMap, PlateMap};
 use crate::tectonics::plates::{PlateSeed, PlateStats};
 use crate::tectonics::electrostatic::*;
+use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 use crate::tectonics::PlateError;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -108,71 +109,41 @@ impl TectonicPlateGenerator {
         Ok(())
     }
 
-    /// Smooth boundaries with geodesic-aware smoothing
-    pub fn smooth_boundaries(&mut self, iterations: usize) {
-        println!("Smoothing boundaries ({} iterations)...", iterations);
 
-        for iter in 0..iterations {
-            let original_data = self.plate_map.data.clone();
-            
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    let idx = self.plate_map.get_index(x, y);
-                    let point = self.plate_map.get_spherical_point(x, y);
-                    
-                    // Get neighbors and their weights based on geodesic distance
-                    let neighbors = self.plate_map.get_neighbors(x, y);
-                    let mut weighted_counts: HashMap<u16, f64> = HashMap::new();
-                    let mut total_weight = 0.0;
-                    
-                    for (nx, ny) in neighbors {
-                        let neighbor_idx = self.plate_map.get_index(nx, ny);
-                        let neighbor_point = self.plate_map.get_spherical_point(nx, ny);
-                        let neighbor_plate = original_data[neighbor_idx];
-                        
-                        // Weight by inverse geodesic distance
-                        let distance = point.distance_to(&neighbor_point);
-                        let weight = 1.0 / (distance + 0.01); // Add small epsilon to avoid division by zero
-                        
-                        *weighted_counts.entry(neighbor_plate).or_insert(0.0) += weight;
-                        total_weight += weight;
-                    }
-                    
-                    // Also consider current pixel with some weight
-                    let current_plate = original_data[idx];
-                    let self_weight = total_weight * 0.5; // Current pixel has weight equal to half of all neighbors
-                    *weighted_counts.entry(current_plate).or_insert(0.0) += self_weight;
-                    total_weight += self_weight;
-                    
-                    // Find plate with highest weighted count
-                    if let Some((&most_common, &weight)) = weighted_counts
-                        .iter()
-                        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                    {
-                        // Only change if there's significant majority
-                        if weight / total_weight > 0.6 {
-                            self.plate_map.data[idx] = most_common;
-                        }
-                    }
-                }
-            }
-
-            println!("Completed smoothing iteration {}/{}", iter + 1, iterations);
-        }
+    /// Apply boundary refinement to add realistic irregularity to plate edges (Stage 1.2)
+    ///
+    /// This post-processes the Voronoi boundaries from Stage 1.1 to create more natural-looking
+    /// plate boundaries with roughness and variation, while keeping the core generation isolated.
+    ///
+    /// # Arguments
+    /// * `config` - Configuration for boundary refinement parameters
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{TectonicPlateGenerator, BoundaryRefinementConfig};
+    ///
+    /// let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
+    /// generator.generate("electrostatic")?;
+    ///
+    /// // Apply boundary refinement (Stage 1.2)
+    /// let config = BoundaryRefinementConfig::with_seed(42)
+    ///     .with_noise(0.1, 3.0, 3)
+    ///     .with_smoothing(1);
+    /// generator.refine_boundaries(config);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn refine_boundaries(&mut self, config: BoundaryRefinementConfig) {
+        let mut refiner = BoundaryRefiner::new(config);
+        refiner.refine_boundaries(&mut self.plate_map);
     }
 
     /// Main generation function using electrostatic physics simulation
-    pub fn generate(&mut self, _method: &str, smooth: bool) -> Result<&Vec<u16>, PlateError> {
-        println!("Generating {} tectonic plates using electrostatic physics... (seed: {})", 
+    pub fn generate(&mut self, _method: &str) -> Result<&Vec<u16>, PlateError> {
+        println!("Generating {} tectonic plates using electrostatic physics... (seed: {})",
                  self.num_plates, self.current_seed);
 
         // Generate plate boundaries using electrostatic simulation
         self.generate_plates_electrostatic()?;
-
-        // Optional smoothing for final polish
-        if smooth {
-            self.smooth_boundaries(2);
-        }
 
         println!("Tectonic plate generation complete!");
         Ok(&self.plate_map.data)
@@ -363,8 +334,8 @@ mod tests {
         let mut gen1 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
         let mut gen2 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
 
-        let result1 = gen1.generate("electrostatic", false);
-        let result2 = gen2.generate("electrostatic", false);
+        let result1 = gen1.generate("electrostatic");
+        let result2 = gen2.generate("electrostatic");
 
         assert!(result1.is_ok() && result2.is_ok());
         // With same seed, results should be identical
@@ -376,8 +347,8 @@ mod tests {
         let mut gen1 = TectonicPlateGenerator::with_seed(180, 90, 5, 123).unwrap();
         let mut gen2 = TectonicPlateGenerator::with_seed(180, 90, 5, 456).unwrap();
 
-        let result1 = gen1.generate("electrostatic", false);
-        let result2 = gen2.generate("electrostatic", false);
+        let result1 = gen1.generate("electrostatic");
+        let result2 = gen2.generate("electrostatic");
 
         assert!(result1.is_ok() && result2.is_ok());
         // With different seeds, results should be different
@@ -387,7 +358,7 @@ mod tests {
     #[test]
     fn test_validation() {
         let mut generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
-        let result = generator.generate("electrostatic", false);
+        let result = generator.generate("electrostatic");
         assert!(result.is_ok());
         assert!(generator.validate().is_ok());
     }

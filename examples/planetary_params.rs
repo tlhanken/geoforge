@@ -11,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------");
     
     let mut earth_world = WorldMap::new(90, 45, 42)?;
-    earth_world.generate_tectonics(6, true)?;
+    earth_world.generate_tectonics(6)?;
     
     println!("🌍 Earth Parameters:");
     println!("   Radius: {:.0} km", earth_world.planetary_params.radius_km);
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("-----------------------------");
     
     let mut mars_world = WorldMap::new_mars(90, 45, 123)?;
-    mars_world.generate_tectonics(5, true)?;
+    mars_world.generate_tectonics(5)?;
     
     println!("🔴 Mars Parameters:");
     println!("   Radius: {:.0} km", mars_world.planetary_params.radius_km);
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------------------------");
     
     let mut venus_world = WorldMap::new_venus(90, 45, 456)?;
-    venus_world.generate_tectonics(4, true)?;
+    venus_world.generate_tectonics(4)?;
     
     println!("🟡 Venus Parameters:");
     println!("   Radius: {:.0} km", venus_world.planetary_params.radius_km);
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     custom_params.stellar_luminosity = 1.2; // Brighter star (20% more luminous than Sun)
     
     let mut custom_world = WorldMap::new_with_params(90, 45, 789, custom_params)?;
-    custom_world.generate_tectonics(8, true)?;
+    custom_world.generate_tectonics(8)?;
     
     println!("🌌 Super-Earth Parameters:");
     println!("   Radius: {:.0} km", custom_world.planetary_params.radius_km);

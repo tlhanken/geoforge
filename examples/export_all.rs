@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Create and generate a world
     let mut world = WorldMap::new(180, 90, 42)?;
-    world.generate_tectonics(8, true)?;
+    world.generate_tectonics(8)?;
     
     println!("✅ Generated world with tectonics");
     

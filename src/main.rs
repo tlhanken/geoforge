@@ -14,56 +14,117 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let seed = 097243067;
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
     let mut world = WorldMap::new(1800, 900, seed)?;
-    
-    // Generate tectonic plates using electrostatic physics
-    println!("\n⚡ Generating tectonic layer...");
-    world.generate_tectonics(20, true)?;
-    
+
+    // Run complete Stage 1 pipeline using new API
+    println!("\n🌍 Running complete Stage 1: Tectonic Foundation pipeline...");
+    println!("\n⚡ Stage 1.1: Generating tectonic plates...");
+    world.tectonics().generate_plates(20)?;
+
+    println!("🎨 Stage 1.2: Refining plate boundaries...");
+    world.tectonics().roughen_boundaries(None)?;
+
+    println!("🏝️  Stage 1.3: Removing plate islands...");
+    let island_stats = world.tectonics().deisland(None)?;
+    if island_stats.islands_removed > 0 {
+        println!("   Removed {} islands ({} pixels reassigned)",
+                 island_stats.islands_removed, island_stats.pixels_reassigned);
+    }
+
+    println!("🔍 Stage 1.4: Analyzing plate boundaries...");
+    let boundary_stats = world.tectonics().analyze(None)?;
+    println!("   Found {} plate boundaries:", boundary_stats.total_boundaries);
+    println!("   • Convergent (colliding):    {}", boundary_stats.convergent_count);
+    println!("   • Divergent (spreading):     {}", boundary_stats.divergent_count);
+    println!("   • Transform (sliding):       {}", boundary_stats.transform_count);
+    println!("   • Total length: {:.0} km", boundary_stats.total_length_km);
+    println!("   • Avg relative velocity: {:.2} cm/year", boundary_stats.average_relative_velocity);
+
     // Show statistics
-    if let Some(stats) = world.get_tectonic_stats() {
-        println!("\n📊 Generated {} plates with realistic size distribution:", stats.len());
-        
+    if let Some(metadata) = world.get_tectonic_metadata() {
+        println!("\n📊 Plate Statistics ({} plates total):", metadata.plate_stats.len());
+
         // Sort by size for better display
-        let mut sorted_stats: Vec<_> = stats.iter().collect();
+        let mut sorted_stats: Vec<_> = metadata.plate_stats.iter().collect();
         sorted_stats.sort_by(|a, b| b.1.area_km2.partial_cmp(&a.1.area_km2).unwrap());
-        
+
         for (i, (plate_id, stat)) in sorted_stats.iter().enumerate().take(5) {
             let category = match i {
                 0 => "Superplate",
-                1..=2 => "Major plate",
-                3..=4 => "Medium plate",
-                _ => "Small plate",
+                1..=2 => "Major",
+                3..=4 => "Medium",
+                _ => "Small",
             };
-            println!("  {} {}: {:.1}% of surface ({:.0} km²)", 
-                     category, plate_id, stat.percentage, stat.area_km2);
+            let plate_type_icon = match stat.plate_type {
+                geoforge::PlateType::Continental => "🏔️",
+                geoforge::PlateType::Oceanic => "🌊",
+                geoforge::PlateType::Mixed => "🏝️",
+            };
+
+            // Find motion info
+            if let Some(seed) = metadata.plate_seeds.iter().find(|s| s.id == **plate_id) {
+                println!("  {} {} {}: {:.1}% ({:.0} km²) - moving {:.0}° at {:.1} cm/yr",
+                         plate_type_icon, category, plate_id, stat.percentage, stat.area_km2,
+                         seed.motion_direction, seed.motion_speed);
+            }
         }
-        
+
         if sorted_stats.len() > 5 {
             println!("  ... and {} smaller plates", sorted_stats.len() - 5);
         }
+
+        // Show plate type distribution
+        let mut oceanic = 0;
+        let mut continental = 0;
+        let mut mixed = 0;
+        for stat in metadata.plate_stats.values() {
+            match stat.plate_type {
+                geoforge::PlateType::Oceanic => oceanic += 1,
+                geoforge::PlateType::Continental => continental += 1,
+                geoforge::PlateType::Mixed => mixed += 1,
+            }
+        }
+        println!("\n  Plate Types: {} continental, {} oceanic, {} mixed",
+                 continental, oceanic, mixed);
     }
     
-    // Export individual layers
-    println!("\n💾 Exporting layers...");
-    std::fs::create_dir_all("outputs")?;
-    
+    // Export all tectonic data using new API
+    println!("\n💾 Exporting visualizations...");
+    world.tectonics().export("outputs")?;
+
     #[cfg(feature = "export-png")]
     {
-        world.export_tectonics_png("outputs", "tectonics.png")?;
-        println!("✅ Tectonics layer exported as PNG");
+        println!("✅ Plate boundaries exported: outputs/tectonics.png");
+        println!("✅ Boundary types exported: outputs/boundaries.png");
+        println!("   (Red=convergent, Blue=divergent, Green=transform)");
+        println!("✅ Plate motion exported: outputs/plate_motion.png");
+        println!("   (Color=direction, Brightness=speed)");
     }
-    
-    // Save complete world map to binary file
-    world.save_to_file("outputs/world.map")?;
-    println!("✅ Complete world map saved to binary file");
-    
-    println!("\n🎉 WORLD GENERATION COMPLETE!");
-    println!("Files created in outputs/ directory:");
+
+    println!("✅ Complete world data saved: outputs/world.map");
+
+    println!("\n🎉 STAGE 1: TECTONIC FOUNDATION COMPLETE!");
+    println!("\nPipeline executed:");
+    println!("  ✅ Stage 1.1: Core Plate Generation (electrostatic physics)");
+    println!("  ✅ Stage 1.2: Boundary Refinement (realistic irregularity)");
+    println!("  ✅ Stage 1.3: Island Removal (contiguous plates)");
+    println!("  ✅ Stage 1.4: Boundary Analysis (motion & classification)");
+    println!("\nFiles created in outputs/ directory:");
     println!("  • world.map - Complete world data (binary)");
-    
+
     #[cfg(feature = "export-png")]
-    println!("  • tectonics.png - Tectonic plates visualization");
-    
+    {
+        println!("  • tectonics.png - Tectonic plates (color-coded)");
+        println!("  • boundaries.png - Boundary types (red/blue/green)");
+        println!("  • plate_motion.png - Motion vectors (hue=direction, sat=speed)");
+        println!("\n📖 Motion Visualization Color Key:");
+        println!("  • Red → Eastward    • Yellow → Northward");
+        println!("  • Cyan → Westward   • Blue → Southward");
+        println!("  • Brighter = faster, Grayer = slower");
+    }
+
+    #[cfg(not(feature = "export-png"))]
+    println!("\n💡 Run with --features export-png for visualization output");
+
     Ok(())
 }
 
@@ -82,9 +143,9 @@ fn import_png_mode(png_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     
     // Create world map with matching dimensions
     let mut world = WorldMap::new(width as usize, height as usize, 0)?;
-    
-    // Import the PNG
-    world.import_tectonics_png(png_path)?;
+
+    // Import the PNG using new API
+    world.tectonics().import_png(png_path)?;
     
     // Show statistics
     if let Some(stats) = world.get_tectonic_stats() {
