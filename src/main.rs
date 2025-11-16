@@ -57,7 +57,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let plate_type_icon = match stat.plate_type {
                 geoforge::PlateType::Continental => "🏔️",
                 geoforge::PlateType::Oceanic => "🌊",
-                geoforge::PlateType::Mixed => "🏝️",
             };
 
             // Find motion info
@@ -75,16 +74,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Show plate type distribution
         let mut oceanic = 0;
         let mut continental = 0;
-        let mut mixed = 0;
         for stat in metadata.plate_stats.values() {
             match stat.plate_type {
                 geoforge::PlateType::Oceanic => oceanic += 1,
                 geoforge::PlateType::Continental => continental += 1,
-                geoforge::PlateType::Mixed => mixed += 1,
             }
         }
-        println!("\n  Plate Types: {} continental, {} oceanic, {} mixed",
-                 continental, oceanic, mixed);
+        println!("\n  Plate Types: {} continental, {} oceanic",
+                 continental, oceanic);
     }
 
     // Stage 2: Geological Provinces (Orogenic Belts)
@@ -94,18 +91,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Show orogen statistics
     let mut collision = 0;
     let mut subduction = 0;
-    let mut accretionary = 0;
     for orogen in &orogens {
         match orogen.characteristics.province_type {
             geoforge::GeologicProvince::CollisionOrogen => collision += 1,
             geoforge::GeologicProvince::SubductionOrogen => subduction += 1,
-            geoforge::GeologicProvince::AccretionaryOrogen => accretionary += 1,
         }
     }
     println!("   Generated {} orogenic belts:", orogens.len());
     println!("   • Collision (continental-continental):  {}", collision);
     println!("   • Subduction (oceanic-continental):     {}", subduction);
-    println!("   • Accretionary (mixed/terrane):         {}", accretionary);
 
     // Export all tectonic data using new API
     println!("\n💾 Exporting visualizations...");
@@ -119,10 +113,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("✅ Plate motion exported: outputs/plate_motion.png");
         println!("   (Color=direction, Brightness=speed)");
 
+        // Export plate types
+        world.export_plate_types_png("outputs", "plate_types.png")?;
+        println!("✅ Plate types exported: outputs/plate_types.png");
+        println!("   (COOL Blue/Cyan=oceanic, WARM Red/Orange=continental)");
+
         // Export geology
         world.export_geology_png("outputs", "geology.png")?;
         println!("✅ Geological provinces exported: outputs/geology.png");
-        println!("   (Red=collision, Orange=subduction, Yellow=accretionary)");
+        println!("   (Red=collision, Orange=subduction)");
     }
 
     println!("✅ Complete world data saved: outputs/world.map");
@@ -142,7 +141,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  • tectonics.png - Tectonic plates (color-coded)");
         println!("  • boundaries.png - Boundary types (red/blue/green)");
         println!("  • plate_motion.png - Motion vectors (hue=direction, sat=speed)");
+        println!("  • plate_types.png - Plate character (oceanic vs continental)");
         println!("  • geology.png - Orogenic belts (red/orange/yellow)");
+        println!("\n🌊 Plate Types Color Key:");
+        println!("  • COOL Blue/Cyan = Oceanic plates (denser crust)");
+        println!("  • WARM Red/Orange = Continental plates (lighter crust)");
+        println!("  • Purple/Magenta = Mixed plates");
         println!("\n📖 Motion Visualization Color Key:");
         println!("  • Red → Eastward    • Yellow → Northward");
         println!("  • Cyan → Westward   • Blue → Southward");
@@ -150,7 +154,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🏔️  Geology Visualization Color Key:");
         println!("  • Red = Collision orogens (continental-continental)");
         println!("  • Orange = Subduction orogens (oceanic-continental)");
-        println!("  • Yellow = Accretionary orogens (mixed/terrane)");
     }
 
     #[cfg(not(feature = "export-png"))]

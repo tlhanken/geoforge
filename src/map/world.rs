@@ -774,7 +774,6 @@ impl WorldMap {
     /// This creates a visualization showing:
     /// - **Red**: Collision orogens (continental-continental convergence)
     /// - **Orange**: Subduction orogens (oceanic-continental convergence)
-    /// - **Yellow**: Accretionary orogens (mixed plate convergence)
     /// - **White**: Unpopulated areas (no geological province)
     ///
     /// The visualization overlays geological provinces on the map, showing where
@@ -811,7 +810,6 @@ impl WorldMap {
                 let color: [u8; 3] = match region.characteristics.province_type {
                     GeologicProvince::CollisionOrogen => [200, 50, 50],      // Red
                     GeologicProvince::SubductionOrogen => [255, 140, 40],    // Orange
-                    GeologicProvince::AccretionaryOrogen => [255, 200, 50],  // Yellow
                 };
 
                 // Paint all pixels in this province
@@ -825,6 +823,81 @@ impl WorldMap {
             img.save(path)?;
         } else {
             return Err("Geological provinces not generated. Call generate_geology() first.".into());
+        }
+
+        Ok(())
+    }
+
+    /// Export plate types as PNG with oceanic (cool) vs continental (warm) colors
+    ///
+    /// This creates a visualization showing plate character/composition:
+    /// - **Blue/Cyan shades** (COOL): Oceanic plates (denser crust, can subduct)
+    /// - **Red/Orange shades** (WARM): Continental plates (lighter crust, resists subduction)
+    /// - **Purple/Magenta shades**: Mixed plates (both oceanic and continental crust)
+    ///
+    /// Each plate gets a unique color within its type category, making it easy to
+    /// distinguish individual plates while seeing the oceanic vs continental distribution.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.export_plate_types_png("outputs", "plate_types.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_plate_types_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        use rand::prelude::*;
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+            let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+
+            // Generate colors for each plate based on its type
+            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> = std::collections::HashMap::new();
+            let mut rng = StdRng::seed_from_u64(self.seed);
+
+            for (plate_id, stats) in &metadata.plate_stats {
+                let color = match stats.plate_type {
+                    // Oceanic plates: COOL blue/cyan shades (very clear)
+                    PlateType::Oceanic => {
+                        let hue = rng.gen_range(190..230) as f64; // Blue to cyan (tighter range)
+                        let sat = rng.gen_range(70..100) as f64 / 100.0; // High saturation
+                        let val = rng.gen_range(60..95) as f64 / 100.0;  // Bright
+                        crate::utils::color::hsv_to_rgb(hue, sat, val)
+                    }
+                    // Continental plates: WARM red/orange/yellow shades (very clear)
+                    PlateType::Continental => {
+                        let hue = rng.gen_range(0..50) as f64; // Red to orange (avoiding yellow-green)
+                        let sat = rng.gen_range(70..100) as f64 / 100.0; // High saturation
+                        let val = rng.gen_range(60..95) as f64 / 100.0;  // Bright
+                        crate::utils::color::hsv_to_rgb(hue, sat, val)
+                    }
+                };
+                plate_colors.insert(*plate_id, color);
+            }
+
+            // Paint the map
+            for (y, row) in tectonic_map.data.chunks(self.width).enumerate() {
+                for (x, &plate_id) in row.iter().enumerate() {
+                    if plate_id > 0 {
+                        if let Some(&color) = plate_colors.get(&plate_id) {
+                            img.put_pixel(x as u32, y as u32, Rgb(color));
+                        }
+                    } else {
+                        // Black for no plate (shouldn't happen)
+                        img.put_pixel(x as u32, y as u32, Rgb([0, 0, 0]));
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Tectonic layer not generated or metadata missing".into());
         }
 
         Ok(())
@@ -968,11 +1041,10 @@ impl WorldMap {
             file.write_all(&(stats.pixels as u32).to_le_bytes())?;
             file.write_all(&stats.percentage.to_le_bytes())?;
             file.write_all(&stats.area_km2.to_le_bytes())?;
-            // plate_type as u8: Oceanic=0, Continental=1, Mixed=2
+            // plate_type as u8: Oceanic=0, Continental=1
             let type_byte = match stats.plate_type {
                 crate::tectonics::plates::PlateType::Oceanic => 0u8,
                 crate::tectonics::plates::PlateType::Continental => 1u8,
-                crate::tectonics::plates::PlateType::Mixed => 2u8,
             };
             file.write_all(&[type_byte])?;
         }
@@ -1156,7 +1228,6 @@ impl WorldMap {
             let plate_type = match type_byte {
                 0 => crate::tectonics::plates::PlateType::Oceanic,
                 1 => crate::tectonics::plates::PlateType::Continental,
-                2 => crate::tectonics::plates::PlateType::Mixed,
                 _ => return Err(format!("Invalid plate type: {}", type_byte).into()),
             };
 

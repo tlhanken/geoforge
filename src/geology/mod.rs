@@ -8,7 +8,8 @@
 //! Mountain-building zones created at convergent plate boundaries:
 //! - **Collision Orogens**: Continental-continental convergence (e.g., Himalayas)
 //! - **Subduction Orogens**: Oceanic-continental convergence (e.g., Andes)
-//! - **Accretionary Orogens**: Mixed plate convergence with terrane accretion
+//!
+//! Note: Oceanic-oceanic convergence (island arcs) will be handled in a future stage.
 //!
 //! # Usage
 //!

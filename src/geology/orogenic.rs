@@ -24,11 +24,6 @@ pub struct OrogenicConfig {
     /// Earth examples: Andes ~500 km, Cascades ~300 km
     pub subduction_base_width_km: f64,
 
-    /// Base width for accretionary orogens in km (mixed/terrane)
-    ///
-    /// Earth examples: Western North America ~800 km
-    pub accretionary_base_width_km: f64,
-
     /// Minimum convergence rate to create an orogen (cm/year)
     ///
     /// Boundaries with slower convergence are considered inactive.
@@ -51,7 +46,6 @@ impl Default for OrogenicConfig {
             // Base widths (km)
             collision_base_width_km: 1000.0,
             subduction_base_width_km: 400.0,
-            accretionary_base_width_km: 600.0,
 
             // Activity thresholds
             min_convergence_rate: 2.0, // cm/year
@@ -68,13 +62,11 @@ impl OrogenicConfig {
     pub fn new(
         collision_base_width_km: f64,
         subduction_base_width_km: f64,
-        accretionary_base_width_km: f64,
         min_convergence_rate: f64,
     ) -> Self {
         Self {
             collision_base_width_km,
             subduction_base_width_km,
-            accretionary_base_width_km,
             min_convergence_rate,
             ..Default::default()
         }
@@ -163,7 +155,7 @@ impl OrogenicBeltGenerator {
     /// Based on the plate types of the two converging plates:
     /// - Continental + Continental → Collision Orogen
     /// - Oceanic + Continental → Subduction Orogen
-    /// - Mixed plates or Oceanic + Oceanic → Accretionary Orogen
+    /// - Oceanic + Oceanic → None (island arcs, handled in future stage)
     ///
     /// # Arguments
     /// * `boundary` - The convergent boundary to classify
@@ -195,15 +187,9 @@ impl OrogenicBeltGenerator {
                 Some(GeologicProvince::SubductionOrogen)
             }
 
-            // Oceanic-Oceanic → Subduction Orogen (island arc)
-            (PlateType::Oceanic, PlateType::Oceanic) => {
-                Some(GeologicProvince::SubductionOrogen)
-            }
-
-            // Any combination with Mixed plate → Accretionary Orogen
-            (PlateType::Mixed, _) | (_, PlateType::Mixed) => {
-                Some(GeologicProvince::AccretionaryOrogen)
-            }
+            // Oceanic-Oceanic → Skip (island arcs, not continental orogens)
+            // These will be handled in a future stage (Arc and Basin Systems)
+            (PlateType::Oceanic, PlateType::Oceanic) => None,
         }
     }
 
@@ -221,7 +207,6 @@ impl OrogenicBeltGenerator {
         let base_width = match orogen_type {
             GeologicProvince::CollisionOrogen => self.config.collision_base_width_km,
             GeologicProvince::SubductionOrogen => self.config.subduction_base_width_km,
-            GeologicProvince::AccretionaryOrogen => self.config.accretionary_base_width_km,
         };
 
         self.config.calculate_width(base_width, convergence_rate)
@@ -268,9 +253,6 @@ impl OrogenicBeltGenerator {
             }
             GeologicProvince::SubductionOrogen => {
                 ProvinceCharacteristics::subduction_orogen(convergence_rate, width_km)
-            }
-            GeologicProvince::AccretionaryOrogen => {
-                ProvinceCharacteristics::accretionary_orogen(convergence_rate, width_km)
             }
         };
 
@@ -338,7 +320,6 @@ mod tests {
         let config = OrogenicConfig::default();
         assert_eq!(config.collision_base_width_km, 1000.0);
         assert_eq!(config.subduction_base_width_km, 400.0);
-        assert_eq!(config.accretionary_base_width_km, 600.0);
         assert_eq!(config.min_convergence_rate, 2.0);
     }
 
@@ -447,49 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn test_orogen_classification_accretionary() {
-        let generator = OrogenicBeltGenerator::new(OrogenicConfig::default());
-        let mut plate_stats = HashMap::new();
-
-        // Mixed plate
-        let stats_a = PlateStats {
-            pixels: 7000,
-            percentage: 7.0,
-            area_km2: 700000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                1, 100, 100, 0.0, 0.0, 0.0, 4.0
-            ),
-            plate_type: PlateType::Mixed,
-        };
-
-        // Continental plate
-        let stats_b = PlateStats {
-            pixels: 11000,
-            percentage: 11.0,
-            area_km2: 1100000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                2, 200, 200, 10.0, 10.0, 180.0, 4.0
-            ),
-            plate_type: PlateType::Continental,
-        };
-
-        plate_stats.insert(1, stats_a);
-        plate_stats.insert(2, stats_b);
-
-        let boundary = BoundarySegment {
-            plate_a: 1,
-            plate_b: 2,
-            pixels: vec![(150, 150)],
-            interaction_type: PlateInteraction::Convergent,
-            relative_velocity: 4.0,
-            length_km: 1500.0,
-        };
-
-        let orogen_type = generator.classify_orogen_type(&boundary, &plate_stats);
-        assert_eq!(orogen_type, Some(GeologicProvince::AccretionaryOrogen));
-    }
-
-    #[test]
     fn test_width_calculation_by_type() {
         let generator = OrogenicBeltGenerator::new(OrogenicConfig::default());
 
@@ -501,18 +439,12 @@ mod tests {
             GeologicProvince::SubductionOrogen,
             5.0,
         );
-        let accretionary_width = generator.calculate_orogen_width(
-            GeologicProvince::AccretionaryOrogen,
-            5.0,
-        );
 
         // Collision should be widest
         assert!(collision_width > subduction_width);
-        assert!(collision_width > accretionary_width);
 
         // All should be dynamically scaled above base
         assert!(collision_width > 1000.0);
         assert!(subduction_width > 400.0);
-        assert!(accretionary_width > 600.0);
     }
 }

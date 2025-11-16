@@ -21,29 +21,20 @@ pub enum GeologicProvince {
     /// - Significant crustal shortening
     CollisionOrogen,
 
-    /// Subduction orogen - Oceanic-continental or oceanic-oceanic convergence
+    /// Subduction orogen - Oceanic-continental convergence
     ///
-    /// Forms where oceanic crust subducts beneath continental or oceanic crust,
+    /// Forms where oceanic crust subducts beneath continental crust,
     /// creating volcanic mountain ranges and deep ocean trenches.
-    /// Example: Andes (Nazca-South America), Marianas (oceanic-oceanic)
+    /// Example: Andes (Nazca-South America), Cascades (Juan de Fuca-North America)
     ///
     /// Characteristics:
     /// - Volcanic arc parallel to trench
     /// - Moderate to high elevation
     /// - Associated with deep ocean trench
+    ///
+    /// Note: Oceanic-oceanic convergence (island arcs like Marianas) will be
+    /// handled in a future stage as part of Arc and Basin Systems.
     SubductionOrogen,
-
-    /// Accretionary orogen - Mixed plate convergence with terrane accretion
-    ///
-    /// Forms where terranes (fragments of crust) are scraped off and accreted
-    /// onto the overriding plate. Common with mixed oceanic-continental plates.
-    /// Example: Western North America (multiple accreted terranes)
-    ///
-    /// Characteristics:
-    /// - Complex, heterogeneous structure
-    /// - Moderate elevation
-    /// - Irregular, fragmented appearance
-    AccretionaryOrogen,
 
     // ========== Future Stages ==========
     // These will be implemented in later stages
@@ -79,7 +70,6 @@ impl GeologicProvince {
         match self {
             GeologicProvince::CollisionOrogen => "Collision Orogen",
             GeologicProvince::SubductionOrogen => "Subduction Orogen",
-            GeologicProvince::AccretionaryOrogen => "Accretionary Orogen",
         }
     }
 
@@ -90,8 +80,6 @@ impl GeologicProvince {
                 "Continental-continental collision zone (e.g., Himalayas)",
             GeologicProvince::SubductionOrogen =>
                 "Oceanic-continental subduction zone (e.g., Andes)",
-            GeologicProvince::AccretionaryOrogen =>
-                "Mixed convergence with terrane accretion",
         }
     }
 }
@@ -124,7 +112,6 @@ pub struct ProvinceCharacteristics {
     /// Calculated dynamically from convergence rate and other factors.
     /// - Collision: 500-2000 km
     /// - Subduction: 200-800 km
-    /// - Accretionary: 300-1000 km
     pub width_km: f64,
 
     /// Activity/intensity level (0.0 to 1.0)
@@ -172,24 +159,6 @@ impl ProvinceCharacteristics {
             province_type: GeologicProvince::SubductionOrogen,
             elevation_intensity: 0.7, // Moderate to high elevation
             roughness: 0.8,           // Quite rugged
-            width_km,
-            intensity,
-            convergence_rate,
-        }
-    }
-
-    /// Create characteristics for an accretionary orogen
-    ///
-    /// # Arguments
-    /// * `convergence_rate` - Convergence rate in cm/year
-    /// * `width_km` - Calculated width in kilometers
-    pub fn accretionary_orogen(convergence_rate: f64, width_km: f64) -> Self {
-        let intensity = (convergence_rate / 10.0).min(1.0);
-
-        Self {
-            province_type: GeologicProvince::AccretionaryOrogen,
-            elevation_intensity: 0.5, // Lower to moderate elevation
-            roughness: 0.7,           // Moderately rugged
             width_km,
             intensity,
             convergence_rate,
@@ -252,7 +221,6 @@ mod tests {
     fn test_province_names() {
         assert_eq!(GeologicProvince::CollisionOrogen.name(), "Collision Orogen");
         assert_eq!(GeologicProvince::SubductionOrogen.name(), "Subduction Orogen");
-        assert_eq!(GeologicProvince::AccretionaryOrogen.name(), "Accretionary Orogen");
     }
 
     #[test]
@@ -272,14 +240,6 @@ mod tests {
         assert_eq!(chars.elevation_intensity, 0.7);
         assert_eq!(chars.width_km, 500.0);
         assert!(chars.intensity > 0.0 && chars.intensity <= 1.0);
-    }
-
-    #[test]
-    fn test_accretionary_characteristics() {
-        let chars = ProvinceCharacteristics::accretionary_orogen(4.0, 750.0);
-        assert_eq!(chars.province_type, GeologicProvince::AccretionaryOrogen);
-        assert_eq!(chars.elevation_intensity, 0.5);
-        assert_eq!(chars.roughness, 0.7);
     }
 
     #[test]
