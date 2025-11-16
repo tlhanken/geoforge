@@ -769,6 +769,67 @@ impl WorldMap {
         Ok(())
     }
 
+    /// Export geological provinces as PNG with color-coded province types
+    ///
+    /// This creates a visualization showing:
+    /// - **Red**: Collision orogens (continental-continental convergence)
+    /// - **Orange**: Subduction orogens (oceanic-continental convergence)
+    /// - **Yellow**: Accretionary orogens (mixed plate convergence)
+    /// - **White**: Unpopulated areas (no geological province)
+    ///
+    /// The visualization overlays geological provinces on the map, showing where
+    /// mountain-building processes are occurring.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    /// world.generate_geology(None)?;
+    /// world.export_geology_png("outputs", "geology.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_geology_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        use crate::geology::provinces::GeologicProvince;
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let Some(ref geology) = self.geology {
+            // Create white background (unpopulated areas)
+            let mut img = ImageBuffer::from_pixel(
+                self.width as u32,
+                self.height as u32,
+                Rgb([255, 255, 255])
+            );
+
+            // Color each province region
+            for region in geology {
+                let color: [u8; 3] = match region.characteristics.province_type {
+                    GeologicProvince::CollisionOrogen => [200, 50, 50],      // Red
+                    GeologicProvince::SubductionOrogen => [255, 140, 40],    // Orange
+                    GeologicProvince::AccretionaryOrogen => [255, 200, 50],  // Yellow
+                };
+
+                // Paint all pixels in this province
+                for &(x, y) in &region.pixels {
+                    if x < self.width && y < self.height {
+                        img.put_pixel(x as u32, y as u32, Rgb(color));
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Geological provinces not generated. Call generate_geology() first.".into());
+        }
+
+        Ok(())
+    }
+
     /// Export all available layers as PNG files
     #[cfg(feature = "export-png")]
     pub fn export_all_png(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -779,7 +840,13 @@ impl WorldMap {
             self.export_tectonics_png(output_dir, &format!("{}_tectonics.png", base_name))?;
             println!("✅ Exported tectonics: {}/{}_tectonics.png", output_dir, base_name);
         }
-        
+
+        // Export geology if available
+        if self.geology.is_some() {
+            self.export_geology_png(output_dir, &format!("{}_geology.png", base_name))?;
+            println!("✅ Exported geology: {}/{}_geology.png", output_dir, base_name);
+        }
+
         // Export elevation if available (placeholder for future implementation)
         if self.elevation.is_some() {
             // TODO: Implement export_elevation_png
@@ -804,9 +871,9 @@ impl WorldMap {
             println!("⚠️ Biomes export not yet implemented");
         }
         
-        if self.tectonics.is_none() && self.elevation.is_none() && 
-           self.temperature.is_none() && self.precipitation.is_none() && 
-           self.biomes.is_none() {
+        if self.tectonics.is_none() && self.geology.is_none() &&
+           self.elevation.is_none() && self.temperature.is_none() &&
+           self.precipitation.is_none() && self.biomes.is_none() {
             println!("⚠️ No layers available to export");
         }
         

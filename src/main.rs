@@ -86,7 +86,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n  Plate Types: {} continental, {} oceanic, {} mixed",
                  continental, oceanic, mixed);
     }
-    
+
+    // Stage 2: Geological Provinces (Orogenic Belts)
+    println!("\n🏔️  Stage 2.1: Generating orogenic belts...");
+    let orogens = world.generate_geology(None)?;
+
+    // Show orogen statistics
+    let mut collision = 0;
+    let mut subduction = 0;
+    let mut accretionary = 0;
+    for orogen in &orogens {
+        match orogen.characteristics.province_type {
+            geoforge::GeologicProvince::CollisionOrogen => collision += 1,
+            geoforge::GeologicProvince::SubductionOrogen => subduction += 1,
+            geoforge::GeologicProvince::AccretionaryOrogen => accretionary += 1,
+        }
+    }
+    println!("   Generated {} orogenic belts:", orogens.len());
+    println!("   • Collision (continental-continental):  {}", collision);
+    println!("   • Subduction (oceanic-continental):     {}", subduction);
+    println!("   • Accretionary (mixed/terrane):         {}", accretionary);
+
     // Export all tectonic data using new API
     println!("\n💾 Exporting visualizations...");
     world.tectonics().export("outputs")?;
@@ -98,16 +118,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   (Red=convergent, Blue=divergent, Green=transform)");
         println!("✅ Plate motion exported: outputs/plate_motion.png");
         println!("   (Color=direction, Brightness=speed)");
+
+        // Export geology
+        world.export_geology_png("outputs", "geology.png")?;
+        println!("✅ Geological provinces exported: outputs/geology.png");
+        println!("   (Red=collision, Orange=subduction, Yellow=accretionary)");
     }
 
     println!("✅ Complete world data saved: outputs/world.map");
 
-    println!("\n🎉 STAGE 1: TECTONIC FOUNDATION COMPLETE!");
+    println!("\n🎉 STAGES 1-2: TECTONIC & GEOLOGICAL FOUNDATION COMPLETE!");
     println!("\nPipeline executed:");
     println!("  ✅ Stage 1.1: Core Plate Generation (electrostatic physics)");
     println!("  ✅ Stage 1.2: Boundary Refinement (realistic irregularity)");
     println!("  ✅ Stage 1.3: Island Removal (contiguous plates)");
     println!("  ✅ Stage 1.4: Boundary Analysis (motion & classification)");
+    println!("  ✅ Stage 2.1: Orogenic Belts (mountain-building zones)");
     println!("\nFiles created in outputs/ directory:");
     println!("  • world.map - Complete world data (binary)");
 
@@ -116,10 +142,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  • tectonics.png - Tectonic plates (color-coded)");
         println!("  • boundaries.png - Boundary types (red/blue/green)");
         println!("  • plate_motion.png - Motion vectors (hue=direction, sat=speed)");
+        println!("  • geology.png - Orogenic belts (red/orange/yellow)");
         println!("\n📖 Motion Visualization Color Key:");
         println!("  • Red → Eastward    • Yellow → Northward");
         println!("  • Cyan → Westward   • Blue → Southward");
         println!("  • Brighter = faster, Grayer = slower");
+        println!("\n🏔️  Geology Visualization Color Key:");
+        println!("  • Red = Collision orogens (continental-continental)");
+        println!("  • Orange = Subduction orogens (oceanic-continental)");
+        println!("  • Yellow = Accretionary orogens (mixed/terrane)");
     }
 
     #[cfg(not(feature = "export-png"))]
