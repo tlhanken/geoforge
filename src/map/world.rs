@@ -855,6 +855,8 @@ impl WorldMap {
                     GeologicProvince::MidOceanRidge => [100, 200, 200],       // Cyan-green
                     GeologicProvince::AbyssalPlain => [140, 160, 160],        // Gray-blue
                     GeologicProvince::OceanTrench => [80, 120, 140],          // Dark blue-gray
+                    GeologicProvince::OceanicFractureZone => [120, 180, 170], // Teal
+                    GeologicProvince::SeamountField => [90, 170, 160],        // Dark teal
                 };
 
                 // Paint all pixels in this province
@@ -943,6 +945,8 @@ impl WorldMap {
                     GeologicProvince::MidOceanRidge => [100, 200, 200],
                     GeologicProvince::AbyssalPlain => [140, 160, 160],
                     GeologicProvince::OceanTrench => [80, 120, 140],
+                    GeologicProvince::OceanicFractureZone => [120, 180, 170],
+                    GeologicProvince::SeamountField => [90, 170, 160],
                 };
 
                 for &(x, y) in &region.pixels {

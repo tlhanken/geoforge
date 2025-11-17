@@ -198,17 +198,43 @@ impl ComprehensiveGeologyGenerator {
         regions
     }
 
-    /// Generate oceanic domains (ridges, abyssal plains, trenches)
+    /// Generate oceanic domains (ridges, abyssal plains, trenches, fracture zones, seamounts)
+    ///
+    /// Strategy:
+    /// 1. Fill ALL oceanic plate pixels with abyssal plains (background)
+    /// 2. Overlay mid-ocean ridges at divergent boundaries
+    /// 3. Overlay fracture zones at transform boundaries
+    /// 4. Overlay seamount fields randomly
     fn generate_oceanic_domains(
         &self,
         boundaries: &[BoundarySegment],
         plate_map: &TerrainMap<u16>,
         plate_stats: &HashMap<u16, PlateStats>,
-        _rng: &mut StdRng,  // Reserved for abyssal plain sampling when re-enabled
+        rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
 
-        // Generate mid-ocean ridges at divergent oceanic boundaries
+        // First: Fill ALL oceanic plates with abyssal plains as background
+        for (plate_id, stats) in plate_stats {
+            if stats.plate_type == PlateType::Oceanic {
+                // Collect all pixels belonging to this oceanic plate
+                let mut plate_pixels = Vec::new();
+                for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
+                    for (x, &pid) in row.iter().enumerate() {
+                        if pid == *plate_id {
+                            plate_pixels.push((x, y));
+                        }
+                    }
+                }
+
+                if !plate_pixels.is_empty() {
+                    let chars = ProvinceCharacteristics::abyssal_plain(stats.area_km2 as f64);
+                    regions.push(ProvinceRegion::new(plate_pixels, chars, None));
+                }
+            }
+        }
+
+        // Second: Overlay mid-ocean ridges at divergent oceanic boundaries
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type == PlateInteraction::Divergent {
                 if let (Some(a), Some(b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
@@ -230,23 +256,42 @@ impl ComprehensiveGeologyGenerator {
             }
         }
 
-        // Generate abyssal plains for oceanic plate interiors
-        // (Simplified: assign to oceanic plates far from boundaries)
-        // Note: Disabled for now to avoid visual clutter - will implement properly
-        // when we have distance-from-boundary calculations in Stage 3
-        // for (plate_id, stats) in plate_stats {
-        //     if stats.plate_type == PlateType::Oceanic && stats.area_km2 > 500_000 {
-        //         // Large oceanic plate - add abyssal plain in interior
-        //         let chars = ProvinceCharacteristics::abyssal_plain(stats.area_km2 as f64 * 0.6);
-        //
-        //         // Find interior pixels (simplified: random sampling)
-        //         let pixels = self.sample_plate_interior(*plate_id, plate_map, 0.3, rng);
-        //
-        //         if !pixels.is_empty() {
-        //             regions.push(ProvinceRegion::new(pixels, chars, None));
-        //         }
-        //     }
-        // }
+        // Third: Overlay fracture zones at transform boundaries (only for oceanic plates)
+        for (idx, boundary) in boundaries.iter().enumerate() {
+            if boundary.interaction_type == PlateInteraction::Transform {
+                if let (Some(a), Some(b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
+                    if a.plate_type == PlateType::Oceanic || b.plate_type == PlateType::Oceanic {
+                        let chars = ProvinceCharacteristics::oceanic_fracture_zone(boundary.length_km);
+
+                        let width_km = 100.0;
+                        let pixels = self.expand_boundary(&boundary.pixels,
+                            (width_km / 71.0) as usize,
+                            plate_map
+                        );
+
+                        regions.push(ProvinceRegion::new(pixels, chars, Some(idx)));
+                    }
+                }
+            }
+        }
+
+        // Fourth: Add seamount fields randomly to some oceanic plates
+        for (plate_id, stats) in plate_stats {
+            if stats.plate_type == PlateType::Oceanic && stats.area_km2 > 300_000 {
+                // 20% chance for seamount field on large oceanic plates
+                if rng.gen::<f64>() < 0.2 {
+                    let area = stats.area_km2 as f64 * 0.05; // Small portion of plate
+                    let chars = ProvinceCharacteristics::seamount_field(area);
+
+                    // Random sample of pixels from this plate
+                    let pixels = self.sample_plate_interior(*plate_id, plate_map, 0.05, rng);
+
+                    if !pixels.is_empty() {
+                        regions.push(ProvinceRegion::new(pixels, chars, None));
+                    }
+                }
+            }
+        }
 
         regions
     }

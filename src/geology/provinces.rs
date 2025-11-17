@@ -149,6 +149,19 @@ pub enum GeologicProvince {
     /// Deepest parts of the ocean where oceanic crust subducts.
     /// Example: Mariana Trench, Peru-Chile Trench
     OceanTrench,
+
+    /// Oceanic fracture zone - Transform fault system
+    ///
+    /// Large transform faults that offset mid-ocean ridge segments.
+    /// Example: Romanche Fracture Zone, Charlie-Gibbs Fracture Zone
+    OceanicFractureZone,
+
+    /// Seamount field - Scattered underwater volcanoes
+    ///
+    /// Individual or clustered submarine volcanoes on oceanic crust.
+    /// Different from hotspot tracks (which are linear chains).
+    /// Example: Musicians Seamounts, Corner Rise Seamounts
+    SeamountField,
 }
 
 impl GeologicProvince {
@@ -184,6 +197,8 @@ impl GeologicProvince {
             GeologicProvince::MidOceanRidge => "Mid-Ocean Ridge",
             GeologicProvince::AbyssalPlain => "Abyssal Plain",
             GeologicProvince::OceanTrench => "Ocean Trench",
+            GeologicProvince::OceanicFractureZone => "Oceanic Fracture Zone",
+            GeologicProvince::SeamountField => "Seamount Field",
         }
     }
 
@@ -237,6 +252,10 @@ impl GeologicProvince {
                 "Deep ocean floor (e.g., Pacific abyssal plains)",
             GeologicProvince::OceanTrench =>
                 "Deep subduction zone (e.g., Mariana Trench)",
+            GeologicProvince::OceanicFractureZone =>
+                "Transform fault system (e.g., Romanche Fracture Zone)",
+            GeologicProvince::SeamountField =>
+                "Underwater volcanic seamounts (e.g., Musicians Seamounts)",
         }
     }
 }
@@ -523,6 +542,30 @@ impl ProvinceCharacteristics {
             width_km: length_km,
             intensity,
             convergence_rate,
+        }
+    }
+
+    /// Create characteristics for oceanic fracture zones
+    pub fn oceanic_fracture_zone(length_km: f64) -> Self {
+        Self {
+            province_type: GeologicProvince::OceanicFractureZone,
+            elevation_intensity: -0.7, // Elevated above abyssal plain
+            roughness: 0.6,            // Rough from faulting
+            width_km: length_km,
+            intensity: 0.3,
+            convergence_rate: 0.0,
+        }
+    }
+
+    /// Create characteristics for seamount fields
+    pub fn seamount_field(area_km2: f64) -> Self {
+        Self {
+            province_type: GeologicProvince::SeamountField,
+            elevation_intensity: -0.2, // Rises from ocean floor but submerged
+            roughness: 0.8,            // Very rough volcanic terrain
+            width_km: (area_km2.sqrt()),
+            intensity: 0.5, // Moderate volcanic activity
+            convergence_rate: 0.0,
         }
     }
 }
