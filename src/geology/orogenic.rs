@@ -153,9 +153,9 @@ impl OrogenicBeltGenerator {
     /// Classify what type of orogen forms at a convergent boundary
     ///
     /// Based on the plate types of the two converging plates:
-    /// - Continental + Continental → Collision Orogen
-    /// - Oceanic + Continental → Subduction Orogen
-    /// - Oceanic + Oceanic → None (island arcs, handled in future stage)
+    /// - Continental + Continental → Collision Orogen (90% chance) or Accretionary (10%)
+    /// - Oceanic + Continental → Subduction Orogen (70%) or Accretionary (30%)
+    /// - Oceanic + Oceanic → None (island arcs, handled in Stage 2.3)
     ///
     /// # Arguments
     /// * `boundary` - The convergent boundary to classify
@@ -168,27 +168,45 @@ impl OrogenicBeltGenerator {
         boundary: &BoundarySegment,
         plate_stats: &HashMap<u16, PlateStats>,
     ) -> Option<GeologicProvince> {
+        use rand::{Rng, SeedableRng};
+        use rand::rngs::StdRng;
+
         let plate_a_stats = plate_stats.get(&boundary.plate_a)?;
         let plate_b_stats = plate_stats.get(&boundary.plate_b)?;
 
         let type_a = plate_a_stats.plate_type;
         let type_b = plate_b_stats.plate_type;
 
+        // Use boundary characteristics for deterministic randomness
+        let seed = (boundary.plate_a as u64) << 32 | (boundary.plate_b as u64);
+        let mut rng = StdRng::seed_from_u64(seed);
+        let roll = rng.gen::<f64>();
+
         // Classify based on plate type combination
         match (type_a, type_b) {
-            // Continental-Continental collision → Collision Orogen
+            // Continental-Continental collision
+            // Usually pure collision, sometimes accretionary complexities
             (PlateType::Continental, PlateType::Continental) => {
-                Some(GeologicProvince::CollisionOrogen)
+                if roll < 0.9 {
+                    Some(GeologicProvince::CollisionOrogen)
+                } else {
+                    Some(GeologicProvince::AccretionaryOrogen)
+                }
             }
 
-            // Oceanic-Continental → Subduction Orogen
+            // Oceanic-Continental convergence
+            // Can be pure subduction or complex accretionary systems
             (PlateType::Oceanic, PlateType::Continental)
             | (PlateType::Continental, PlateType::Oceanic) => {
-                Some(GeologicProvince::SubductionOrogen)
+                if roll < 0.7 {
+                    Some(GeologicProvince::SubductionOrogen)
+                } else {
+                    Some(GeologicProvince::AccretionaryOrogen)
+                }
             }
 
             // Oceanic-Oceanic → Skip (island arcs, not continental orogens)
-            // These will be handled in a future stage (Arc and Basin Systems)
+            // These will be handled in Stage 2.3 (Arc and Basin Systems)
             (PlateType::Oceanic, PlateType::Oceanic) => None,
         }
     }
@@ -207,6 +225,8 @@ impl OrogenicBeltGenerator {
         let base_width = match orogen_type {
             GeologicProvince::CollisionOrogen => self.config.collision_base_width_km,
             GeologicProvince::SubductionOrogen => self.config.subduction_base_width_km,
+            GeologicProvince::AccretionaryOrogen => self.config.subduction_base_width_km * 0.8,
+            _ => self.config.subduction_base_width_km, // Fallback
         };
 
         self.config.calculate_width(base_width, convergence_rate)
@@ -254,6 +274,10 @@ impl OrogenicBeltGenerator {
             GeologicProvince::SubductionOrogen => {
                 ProvinceCharacteristics::subduction_orogen(convergence_rate, width_km)
             }
+            GeologicProvince::AccretionaryOrogen => {
+                ProvinceCharacteristics::accretionary_orogen(convergence_rate, width_km)
+            }
+            _ => ProvinceCharacteristics::subduction_orogen(convergence_rate, width_km), // Fallback
         };
 
         ProvinceRegion::new(belt_pixels, characteristics, Some(boundary_idx))
@@ -381,7 +405,13 @@ mod tests {
         };
 
         let orogen_type = generator.classify_orogen_type(&boundary, &plate_stats);
-        assert_eq!(orogen_type, Some(GeologicProvince::CollisionOrogen));
+        // Continental-continental convergence produces either collision or accretionary orogens
+        assert!(
+            orogen_type == Some(GeologicProvince::CollisionOrogen) ||
+            orogen_type == Some(GeologicProvince::AccretionaryOrogen),
+            "Continental-continental should produce collision or accretionary orogen, got {:?}",
+            orogen_type
+        );
     }
 
     #[test]
@@ -424,7 +454,13 @@ mod tests {
         };
 
         let orogen_type = generator.classify_orogen_type(&boundary, &plate_stats);
-        assert_eq!(orogen_type, Some(GeologicProvince::SubductionOrogen));
+        // Oceanic-continental convergence produces either subduction or accretionary orogens
+        assert!(
+            orogen_type == Some(GeologicProvince::SubductionOrogen) ||
+            orogen_type == Some(GeologicProvince::AccretionaryOrogen),
+            "Oceanic-continental should produce subduction or accretionary orogen, got {:?}",
+            orogen_type
+        );
     }
 
     #[test]

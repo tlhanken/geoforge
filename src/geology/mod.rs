@@ -28,6 +28,8 @@
 
 pub mod provinces;
 pub mod orogenic;
+pub mod comprehensive;
 
 pub use provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 pub use orogenic::{OrogenicBeltGenerator, OrogenicConfig};
+pub use comprehensive::{ComprehensiveGeologyGenerator, ComprehensiveGeologyConfig};

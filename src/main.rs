@@ -88,18 +88,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🏔️  Stage 2.1: Generating orogenic belts...");
     let orogens = world.generate_geology(None)?;
 
-    // Show orogen statistics
-    let mut collision = 0;
-    let mut subduction = 0;
-    for orogen in &orogens {
-        match orogen.characteristics.province_type {
-            geoforge::GeologicProvince::CollisionOrogen => collision += 1,
-            geoforge::GeologicProvince::SubductionOrogen => subduction += 1,
-        }
+    // Show geology statistics
+    let mut counts = std::collections::HashMap::new();
+    for region in &orogens {
+        *counts.entry(region.characteristics.province_type).or_insert(0) += 1;
     }
-    println!("   Generated {} orogenic belts:", orogens.len());
-    println!("   • Collision (continental-continental):  {}", collision);
-    println!("   • Subduction (oceanic-continental):     {}", subduction);
+
+    println!("   Generated {} geological provinces:", orogens.len());
+    for (province_type, count) in counts.iter() {
+        println!("   • {}: {}", province_type.name(), count);
+    }
 
     // Export all tectonic data using new API
     println!("\n💾 Exporting visualizations...");
@@ -121,7 +119,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Export geology
         world.export_geology_png("outputs", "geology.png")?;
         println!("✅ Geological provinces exported: outputs/geology.png");
-        println!("   (Red=collision, Orange=subduction)");
+
+        // Export geology with boundary overlays
+        world.export_geology_with_boundaries_png("outputs", "geology_boundaries.png")?;
+        println!("✅ Geology+boundaries exported: outputs/geology_boundaries.png");
+        println!("   (Provinces in color + Red/Blue/Green boundary overlays)");
     }
 
     println!("✅ Complete world data saved: outputs/world.map");

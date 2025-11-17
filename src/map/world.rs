@@ -11,7 +11,6 @@ use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementC
 use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 use crate::tectonics::boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 use crate::tectonics::motion::{PlateMotionAssigner, PlateMotionConfig};
-use crate::geology::orogenic::{OrogenicBeltGenerator, OrogenicConfig};
 use crate::geology::provinces::ProvinceRegion;
 use std::collections::HashMap;
 use std::fs;
@@ -553,9 +552,24 @@ impl WorldMap {
     /// println!("Generated {} orogenic belts", orogens.len());
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
+    /// Generate comprehensive geological provinces (Complete Stage 2)
+    ///
+    /// This generates ALL geological provinces from tectonic data:
+    /// - Stage 2.1: Orogenic belts (collision, subduction, accretionary, extensional)
+    /// - Stage 2.2: Large Igneous Provinces (flood basalts, plateaus, hotspots)
+    /// - Stage 2.3: Arc and Basin Systems (volcanic arcs, forearc/backarc basins)
+    /// - Stage 2.4: Stable Continental Regions (cratons, platforms, intracratonic basins)
+    /// - Stage 2.5: Extensional Zones (continental rifts, extended crust)
+    /// - Stage 2.6: Oceanic Domains (mid-ocean ridges, abyssal plains, trenches)
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration (uses default if None)
+    ///
+    /// # Returns
+    /// Vector of all geological provinces
     pub fn generate_geology(
         &mut self,
-        config: Option<OrogenicConfig>
+        config: Option<crate::geology::comprehensive::ComprehensiveGeologyConfig>
     ) -> Result<Vec<ProvinceRegion>, Box<dyn std::error::Error>> {
         // Ensure tectonics exist
         let plate_map = self.tectonics.as_ref()
@@ -569,20 +583,24 @@ impl WorldMap {
             return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
         }
 
-        // Generate orogenic belts
+        // Generate all geological provinces using comprehensive generator
         let config = config.unwrap_or_default();
-        let generator = OrogenicBeltGenerator::new(config);
+        let generator = crate::geology::comprehensive::ComprehensiveGeologyGenerator::new(
+            config,
+            self.seed
+        );
 
-        let orogens = generator.generate_orogens(
+        let provinces = generator.generate_all_provinces(
             &metadata.plate_boundaries,
             &metadata.plate_stats,
+            &metadata.plate_seeds,
             plate_map,
         );
 
         // Store in geology field
-        self.geology = Some(orogens.clone());
+        self.geology = Some(provinces.clone());
 
-        Ok(orogens)
+        Ok(provinces)
     }
 
     /// Get the generated geological provinces
@@ -805,11 +823,38 @@ impl WorldMap {
                 Rgb([255, 255, 255])
             );
 
-            // Color each province region
+            // Color each province region with distinct colors (avoiding red/green/blue used by boundaries)
             for region in geology {
                 let color: [u8; 3] = match region.characteristics.province_type {
-                    GeologicProvince::CollisionOrogen => [200, 50, 50],      // Red
-                    GeologicProvince::SubductionOrogen => [255, 140, 40],    // Orange
+                    // Stage 2.1: Orogenic Belts (Purple/Pink/Magenta family)
+                    GeologicProvince::CollisionOrogen => [150, 50, 150],      // Purple (continental collision)
+                    GeologicProvince::SubductionOrogen => [255, 180, 50],     // Amber/Gold (volcanic arc)
+                    GeologicProvince::AccretionaryOrogen => [200, 100, 200],  // Light purple
+                    GeologicProvince::ExtensionalOrogen => [220, 150, 220],   // Pink
+
+                    // Stage 2.2: Large Igneous Provinces (Brown/Orange family)
+                    GeologicProvince::ContinentalFloodBasalt => [180, 100, 60],  // Dark orange-brown
+                    GeologicProvince::OceanicPlateau => [160, 120, 100],         // Brownish-gray
+                    GeologicProvince::HotspotTrack => [200, 140, 80],            // Light brown
+
+                    // Stage 2.3: Arc and Basin Systems (Yellow/Amber family)
+                    GeologicProvince::VolcanicArc => [255, 200, 0],           // Bright yellow-orange
+                    GeologicProvince::ForearcBasin => [230, 220, 180],        // Pale yellow
+                    GeologicProvince::BackarcBasin => [255, 230, 150],        // Light yellow
+
+                    // Stage 2.4: Stable Continental Regions (Tan/Beige family)
+                    GeologicProvince::Craton => [210, 180, 140],              // Tan
+                    GeologicProvince::Platform => [230, 200, 160],            // Light tan
+                    GeologicProvince::IntracratonicBasin => [190, 170, 140],  // Darker tan
+
+                    // Stage 2.5: Extensional Zones (Pink/Salmon family)
+                    GeologicProvince::ContinentalRift => [255, 160, 180],     // Pink-salmon
+                    GeologicProvince::ExtendedCrust => [255, 200, 200],       // Light pink
+
+                    // Stage 2.6: Oceanic Domains (Cyan/Turquoise family - but avoiding pure blue)
+                    GeologicProvince::MidOceanRidge => [100, 200, 200],       // Cyan-green
+                    GeologicProvince::AbyssalPlain => [140, 160, 160],        // Gray-blue
+                    GeologicProvince::OceanTrench => [80, 120, 140],          // Dark blue-gray
                 };
 
                 // Paint all pixels in this province
@@ -823,6 +868,118 @@ impl WorldMap {
             img.save(path)?;
         } else {
             return Err("Geological provinces not generated. Call generate_geology() first.".into());
+        }
+
+        Ok(())
+    }
+
+    /// Export geology with plate boundary overlays as PNG
+    ///
+    /// This creates a composite visualization showing geological provinces with
+    /// plate boundaries overlaid on top:
+    /// - **Background**: Geological provinces in distinct colors (purple, amber, brown, etc.)
+    /// - **Overlay**: Plate boundaries colored by type:
+    ///   - Red: Convergent boundaries
+    ///   - Blue: Divergent boundaries
+    ///   - Green: Transform boundaries
+    ///
+    /// This provides a complete view of how geology relates to active tectonic boundaries.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    /// world.generate_geology(None)?;
+    /// world.export_geology_with_boundaries_png("outputs", "geology_boundaries.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_geology_with_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        use crate::geology::provinces::GeologicProvince;
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref geology), Some(ref metadata)) = (&self.geology, &self.tectonic_metadata) {
+            // Create white background (unpopulated areas)
+            let mut img = ImageBuffer::from_pixel(
+                self.width as u32,
+                self.height as u32,
+                Rgb([255, 255, 255])
+            );
+
+            // First layer: Color geological provinces
+            for region in geology {
+                let color: [u8; 3] = match region.characteristics.province_type {
+                    // Stage 2.1: Orogenic Belts (Purple/Pink/Magenta family)
+                    GeologicProvince::CollisionOrogen => [150, 50, 150],      // Purple
+                    GeologicProvince::SubductionOrogen => [255, 180, 50],     // Amber/Gold
+                    GeologicProvince::AccretionaryOrogen => [200, 100, 200],  // Light purple
+                    GeologicProvince::ExtensionalOrogen => [220, 150, 220],   // Pink
+
+                    // Stage 2.2: Large Igneous Provinces (Brown/Orange family)
+                    GeologicProvince::ContinentalFloodBasalt => [180, 100, 60],
+                    GeologicProvince::OceanicPlateau => [160, 120, 100],
+                    GeologicProvince::HotspotTrack => [200, 140, 80],
+
+                    // Stage 2.3: Arc and Basin Systems (Yellow/Amber family)
+                    GeologicProvince::VolcanicArc => [255, 200, 0],
+                    GeologicProvince::ForearcBasin => [230, 220, 180],
+                    GeologicProvince::BackarcBasin => [255, 230, 150],
+
+                    // Stage 2.4: Stable Continental Regions (Tan/Beige family)
+                    GeologicProvince::Craton => [210, 180, 140],
+                    GeologicProvince::Platform => [230, 200, 160],
+                    GeologicProvince::IntracratonicBasin => [190, 170, 140],
+
+                    // Stage 2.5: Extensional Zones (Pink/Salmon family)
+                    GeologicProvince::ContinentalRift => [255, 160, 180],
+                    GeologicProvince::ExtendedCrust => [255, 200, 200],
+
+                    // Stage 2.6: Oceanic Domains (Cyan/Turquoise family)
+                    GeologicProvince::MidOceanRidge => [100, 200, 200],
+                    GeologicProvince::AbyssalPlain => [140, 160, 160],
+                    GeologicProvince::OceanTrench => [80, 120, 140],
+                };
+
+                for &(x, y) in &region.pixels {
+                    if x < self.width && y < self.height {
+                        img.put_pixel(x as u32, y as u32, Rgb(color));
+                    }
+                }
+            }
+
+            // Second layer: Overlay boundaries colored by type (same as boundaries.png)
+            if !metadata.plate_boundaries.is_empty() {
+                for boundary in &metadata.plate_boundaries {
+                    use crate::tectonics::plates::PlateInteraction;
+
+                    let color = match boundary.interaction_type {
+                        PlateInteraction::Convergent => [255, 0, 0],     // Red
+                        PlateInteraction::Divergent => [0, 128, 255],    // Blue
+                        PlateInteraction::Transform => [0, 255, 0],      // Green
+                    };
+
+                    for (x, y) in &boundary.pixels {
+                        if *x < self.width && *y < self.height {
+                            img.put_pixel(*x as u32, *y as u32, Rgb(color));
+                        }
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            if self.geology.is_none() {
+                return Err("Geological provinces not generated. Call generate_geology() first.".into());
+            }
+            if self.tectonic_metadata.is_none() {
+                return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
+            }
+            return Err("Both geology and boundary data required".into());
         }
 
         Ok(())
@@ -918,6 +1075,12 @@ impl WorldMap {
         if self.geology.is_some() {
             self.export_geology_png(output_dir, &format!("{}_geology.png", base_name))?;
             println!("✅ Exported geology: {}/{}_geology.png", output_dir, base_name);
+
+            // Also export geology with boundary overlays if boundaries are available
+            if self.tectonic_metadata.is_some() {
+                self.export_geology_with_boundaries_png(output_dir, &format!("{}_geology_boundaries.png", base_name))?;
+                println!("✅ Exported geology+boundaries: {}/{}_geology_boundaries.png", output_dir, base_name);
+            }
         }
 
         // Export elevation if available (placeholder for future implementation)

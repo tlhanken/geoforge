@@ -5,7 +5,7 @@
 //! Stage 1.2: Boundary Refinement
 //! Stage 1.3: Island Removal
 
-use geoforge::{WorldMap, BoundaryRefinementConfig, PlateSeed};
+use geoforge::{WorldMap, BoundaryRefinementConfig};
 
 #[test]
 fn test_full_pipeline_integration() {
@@ -365,27 +365,24 @@ fn test_plate_type_assignment() {
     // Should have assigned types to all plates
     let mut oceanic_count = 0;
     let mut continental_count = 0;
-    let mut mixed_count = 0;
 
     for stats in metadata.plate_stats.values() {
         match stats.plate_type {
             geoforge::PlateType::Oceanic => oceanic_count += 1,
             geoforge::PlateType::Continental => continental_count += 1,
-            geoforge::PlateType::Mixed => mixed_count += 1,
         }
     }
 
     // With 10 plates, should have a mix of types
     assert!(oceanic_count > 0, "Should have some oceanic plates");
     assert!(continental_count > 0, "Should have some continental plates");
-    
-    assert_eq!(oceanic_count + continental_count + mixed_count, 10,
+
+    assert_eq!(oceanic_count + continental_count, 10,
         "All plates should have assigned types");
 
     println!("Plate type distribution:");
     println!("  Oceanic: {}", oceanic_count);
     println!("  Continental: {}", continental_count);
-    println!("  Mixed: {}", mixed_count);
 }
 
 #[test]

@@ -39,3 +39,4 @@ pub use tectonics::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, B
 pub use tectonics::{PlateMotionAssigner, PlateMotionConfig};
 pub use geology::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 pub use geology::{OrogenicBeltGenerator, OrogenicConfig};
+pub use geology::{ComprehensiveGeologyGenerator, ComprehensiveGeologyConfig};
