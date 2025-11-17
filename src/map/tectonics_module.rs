@@ -195,8 +195,8 @@ impl<'a> TectonicsModule<'a> {
     ///
     /// Exports:
     /// - `tectonics.png` - Color-coded plates
-    /// - `boundaries.png` - Boundary types (red/blue/green)
-    /// - `plate_motion.png` - Motion vectors (hue=direction, saturation=speed)
+    /// - `tectonics_boundaries.png` - Boundary types (red/blue/green)
+    /// - `tectonics_motion.png` - Motion vectors (hue=direction, saturation=speed)
     /// - `world.map` - Complete binary world data
     ///
     /// # Arguments
@@ -223,8 +223,8 @@ impl<'a> TectonicsModule<'a> {
 
         // Export PNGs
         self.world.export_tectonics_png(output_dir, "tectonics.png")?;
-        self.world.export_boundaries_png(output_dir, "boundaries.png")?;
-        self.world.export_plate_motion_png(output_dir, "plate_motion.png")?;
+        self.world.export_boundaries_png(output_dir, "tectonics_boundaries.png")?;
+        self.world.export_plate_motion_png(output_dir, "tectonics_motion.png")?;
 
         // Export binary
         let map_path = format!("{}/world.map", output_dir);
@@ -279,7 +279,7 @@ impl<'a> TectonicsModule<'a> {
 
     /// Import tectonic plates with motion vectors from PNG
     ///
-    /// Loads both plate boundaries AND motion vectors from a single PNG file (plate_motion.png).
+    /// Loads both plate boundaries AND motion vectors from a single PNG file (tectonics_motion.png).
     /// Each unique color encodes both the plate identity and its motion:
     /// - Hue (color) = Motion direction (0-360°)
     /// - Saturation (brightness) = Motion speed (1-10 cm/year)
@@ -287,7 +287,7 @@ impl<'a> TectonicsModule<'a> {
     /// This is the standard way to import tectonic data from PNG files.
     ///
     /// # Arguments
-    /// * `path` - Path to plate_motion.png file
+    /// * `path` - Path to tectonics_motion.png file
     ///
     /// # Returns
     /// * `Ok(())` - Plates and motion imported successfully
@@ -298,7 +298,7 @@ impl<'a> TectonicsModule<'a> {
     /// # use geoforge::WorldMap;
     /// # let mut world = WorldMap::new(1800, 900, 0)?;
     /// // Import complete tectonic data including motion vectors
-    /// world.tectonics().import_png("outputs/plate_motion.png")?;
+    /// world.tectonics().import_png("outputs/tectonics_motion.png")?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[cfg(feature = "export-png")]

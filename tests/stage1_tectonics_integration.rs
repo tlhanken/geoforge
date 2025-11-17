@@ -649,12 +649,12 @@ fn test_complete_export_import_workflow() {
     // Verify files were created
     assert!(std::path::Path::new(&format!("{}/world.map", test_dir)).exists());
     assert!(std::path::Path::new(&format!("{}/tectonics.png", test_dir)).exists());
-    assert!(std::path::Path::new(&format!("{}/boundaries.png", test_dir)).exists());
-    assert!(std::path::Path::new(&format!("{}/plate_motion.png", test_dir)).exists());
+    assert!(std::path::Path::new(&format!("{}/tectonics_boundaries.png", test_dir)).exists());
+    assert!(std::path::Path::new(&format!("{}/tectonics_motion.png", test_dir)).exists());
 
     // Import from motion PNG (this is the key test - motion vectors preserved)
     let mut world2 = WorldMap::new(180, 90, 0).unwrap();
-    let motion_path = format!("{}/plate_motion.png", test_dir);
+    let motion_path = format!("{}/tectonics_motion.png", test_dir);
     world2.tectonics().import_png(&motion_path).unwrap();
 
     let metadata2 = world2.get_tectonic_metadata().unwrap();

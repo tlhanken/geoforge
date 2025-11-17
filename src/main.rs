@@ -106,14 +106,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "export-png")]
     {
         println!("✅ Plate boundaries exported: outputs/tectonics.png");
-        println!("✅ Boundary types exported: outputs/boundaries.png");
+        println!("✅ Boundary types exported: outputs/tectonics_boundaries.png");
         println!("   (Red=convergent, Blue=divergent, Green=transform)");
-        println!("✅ Plate motion exported: outputs/plate_motion.png");
+        println!("✅ Plate motion exported: outputs/tectonics_motion.png");
         println!("   (Color=direction, Brightness=speed)");
 
         // Export plate types
-        world.export_plate_types_png("outputs", "plate_types.png")?;
-        println!("✅ Plate types exported: outputs/plate_types.png");
+        world.export_plate_types_png("outputs", "tectonics_types.png")?;
+        println!("✅ Plate types exported: outputs/tectonics_types.png");
         println!("   (COOL Blue/Cyan=oceanic, WARM Red/Orange=continental)");
 
         // Export geology
@@ -141,10 +141,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "export-png")]
     {
         println!("  • tectonics.png - Tectonic plates (color-coded)");
-        println!("  • boundaries.png - Boundary types (red/blue/green)");
-        println!("  • plate_motion.png - Motion vectors (hue=direction, sat=speed)");
-        println!("  • plate_types.png - Plate character (oceanic vs continental)");
-        println!("  • geology.png - Orogenic belts (red/orange/yellow)");
+        println!("  • tectonics_boundaries.png - Boundary types (red/blue/green)");
+        println!("  • tectonics_motion.png - Motion vectors (hue=direction, sat=speed)");
+        println!("  • tectonics_types.png - Plate character (oceanic vs continental)");
+        println!("  • geology.png - Geological provinces (various colors)");
+        println!("  • geology_boundaries.png - Provinces + boundary overlays");
         println!("\n🌊 Plate Types Color Key:");
         println!("  • COOL Blue/Cyan = Oceanic plates (denser crust)");
         println!("  • WARM Red/Orange = Continental plates (lighter crust)");
