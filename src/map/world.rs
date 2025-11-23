@@ -788,6 +788,58 @@ impl WorldMap {
         Ok(())
     }
 
+    /// Export a motion direction color reference (compass rose / color wheel)
+    ///
+    /// Creates a visual reference showing how direction maps to color in plate motion visualizations.
+    /// This helps interpret the motion vectors shown in export_plate_motion_png().
+    #[cfg(feature = "export-png")]
+    pub fn export_motion_reference_png(output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        // Create 400x400 reference image
+        let size = 400;
+        let center = size as f64 / 2.0;
+        let radius = 150.0;
+
+        let mut img = ImageBuffer::new(size, size);
+
+        // Fill with white background
+        for y in 0..size {
+            for x in 0..size {
+                img.put_pixel(x, y, Rgb([255, 255, 255]));
+            }
+        }
+
+        // Draw color wheel
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x as f64 - center;
+                let dy = y as f64 - center;
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                // Only draw within circle
+                if dist < radius && dist > 50.0 {
+                    // Calculate angle (0° = North, clockwise)
+                    let angle = dy.atan2(dx).to_degrees() + 90.0;
+                    let direction = if angle < 0.0 { angle + 360.0 } else { angle };
+
+                    // Use medium speed for uniform saturation
+                    let color = motion_to_rgb(direction, 5.0);
+                    img.put_pixel(x, y, Rgb(color));
+                }
+            }
+        }
+
+        // Draw cardinal direction labels (will be in image, basic text via pixels)
+        // For now, just the colored wheel - labels can be added manually or via external tool
+
+        img.save(&path)?;
+        Ok(())
+    }
+
     /// Get RGB color for a geological province type
     ///
     /// Returns a distinct color for each province type, organized by geological category
@@ -797,21 +849,19 @@ impl WorldMap {
         use crate::geology::provinces::GeologicProvince;
 
         match province_type {
-            // Stage 2.1: Orogenic Belts - GREEN FAMILY
-            GeologicProvince::CollisionOrogen => [50, 150, 80],        // Dark green
-            GeologicProvince::SubductionOrogen => [100, 180, 120],     // Medium green
-            GeologicProvince::AccretionaryOrogen => [120, 200, 140],   // Light green
-            GeologicProvince::ExtensionalOrogen => [140, 220, 160],    // Pale green
+            // Stage 2.1: Orogenic Belts
+            GeologicProvince::CollisionOrogen => [50, 150, 80],        // Dark green (continent-continent collision)
+            GeologicProvince::AccretionaryWedge => [120, 200, 140],    // Light green (scraped sediments at trench)
 
             // Stage 2.2: Large Igneous Provinces - PURPLE FAMILY
             GeologicProvince::ContinentalFloodBasalt => [150, 50, 150],  // Purple
             GeologicProvince::OceanicPlateau => [180, 100, 180],         // Light purple
             GeologicProvince::HotspotTrack => [200, 120, 200],           // Pale purple
-            GeologicProvince::VolcanicArc => [130, 30, 130],             // Dark purple (moved from Arc/Basin)
 
-            // Stage 2.3: Arc and Basin Systems - MIDTONE GREYS
-            GeologicProvince::ForearcBasin => [160, 160, 160],         // Medium grey
-            GeologicProvince::BackarcBasin => [180, 180, 180],         // Light grey
+            // Stage 2.3: Subduction Zone Systems
+            GeologicProvince::VolcanicArc => [150, 255, 50],           // Lime green (Andean/island arc volcanic mountains)
+            GeologicProvince::ForearcBasin => [160, 160, 160],         // Medium grey (between wedge and arc)
+            GeologicProvince::BackarcBasin => [180, 180, 180],         // Light grey (extensional basin behind arc)
 
             // Stage 2.4: Stable Continental Regions (Cratons = Shield + Platform)
             GeologicProvince::Craton => [255, 140, 60],                // Orange (Shield - exposed Precambrian)
@@ -827,7 +877,8 @@ impl WorldMap {
             GeologicProvince::AbyssalPlain => [140, 160, 160],         // Gray-blue
             GeologicProvince::OceanTrench => [80, 120, 140],           // Dark blue-gray
             GeologicProvince::OceanicFractureZone => [120, 180, 170],  // Teal
-            GeologicProvince::SeamountField => [90, 170, 160],         // Dark teal
+            GeologicProvince::OceanicHotspotTrack => [100, 80, 180],   // Bluish-purple (oceanic volcanic)
+            GeologicProvince::ContinentalHotspotTrack => [120, 60, 200], // Royal purple (continental volcanic)
         }
     }
 

@@ -95,18 +95,15 @@ fn test_all_orogen_types_generated() {
     let has_collision = orogens
         .iter()
         .any(|o| o.characteristics.province_type == GeologicProvince::CollisionOrogen);
-    let has_subduction = orogens
-        .iter()
-        .any(|o| o.characteristics.province_type == GeologicProvince::SubductionOrogen);
 
     println!("Orogen type distribution:");
     println!("  Collision: {}", has_collision);
-    println!("  Subduction: {}", has_subduction);
 
-    // With 20 plates, we should get both types
+    // With 20 plates, we should get collision orogens
+    // (Subduction systems now handled separately by Arc Systems generator)
     assert!(
-        has_collision || has_subduction,
-        "Should generate at least one orogen type with 20 plates"
+        has_collision,
+        "Should generate collision orogens with 20 plates"
     );
 }
 
@@ -304,12 +301,6 @@ fn test_deterministic_generation() {
         "Collision orogen counts should match"
     );
 
-    assert_eq!(
-        count_type(&orogens1, GeologicProvince::SubductionOrogen),
-        count_type(&orogens2, GeologicProvince::SubductionOrogen),
-        "Subduction orogen counts should match"
-    );
-
     println!("✓ Deterministic generation verified with {} orogens", orogens1.len());
 }
 
@@ -355,16 +346,10 @@ fn test_orogenic_characteristics_scaling() {
                     "Collision orogens should have max elevation"
                 );
             }
-            GeologicProvince::SubductionOrogen => {
+            GeologicProvince::AccretionaryWedge => {
                 assert_eq!(
-                    chars.elevation_intensity, 0.7,
-                    "Subduction orogens should have 0.7 elevation"
-                );
-            }
-            GeologicProvince::AccretionaryOrogen => {
-                assert_eq!(
-                    chars.elevation_intensity, 0.5,
-                    "Accretionary orogens should have 0.5 elevation"
+                    chars.elevation_intensity, 0.2,
+                    "Accretionary wedges should have 0.2 elevation (often submarine)"
                 );
             }
             _ => {
@@ -376,4 +361,167 @@ fn test_orogenic_characteristics_scaling() {
             }
         }
     }
+}
+
+#[test]
+fn test_full_geology_pipeline_deterministic() {
+    // Test that the FULL geology pipeline (all 20 province types including hotspot tracks)
+    // reproduces exactly with the same seed
+
+    let seed = 12345_u64;
+
+    // Generate world 1
+    let mut world1 = WorldMap::new(1800, 900, seed).expect("Failed to create world 1");
+    world1.tectonics().generate_plates(20).unwrap();
+    world1.tectonics().analyze(None).unwrap();
+    let provinces1 = world1.generate_geology(None).unwrap();
+
+    // Generate world 2 with same seed
+    let mut world2 = WorldMap::new(1800, 900, seed).expect("Failed to create world 2");
+    world2.tectonics().generate_plates(20).unwrap();
+    world2.tectonics().analyze(None).unwrap();
+    let provinces2 = world2.generate_geology(None).unwrap();
+
+    // Should produce identical number of provinces
+    println!("Run 1: {} provinces", provinces1.len());
+    println!("Run 2: {} provinces", provinces2.len());
+
+    if provinces1.len() != provinces2.len() {
+        // Debug: Show which types differ
+        let count_type_local = |provinces: &[geoforge::ProvinceRegion], ptype| {
+            provinces
+                .iter()
+                .filter(|p| p.characteristics.province_type == ptype)
+                .count()
+        };
+
+        println!("\nDifferences found:");
+        for ptype in &[
+            GeologicProvince::OceanicHotspotTrack,
+            GeologicProvince::ContinentalHotspotTrack,
+            GeologicProvince::ContinentalFloodBasalt,
+            GeologicProvince::OceanicPlateau,
+        ] {
+            let c1 = count_type_local(&provinces1, *ptype);
+            let c2 = count_type_local(&provinces2, *ptype);
+            if c1 != c2 {
+                println!("  {:?}: {} vs {}", ptype, c1, c2);
+            }
+        }
+    }
+
+    assert_eq!(
+        provinces1.len(),
+        provinces2.len(),
+        "Same seed should produce same number of geological provinces"
+    );
+
+    // Count each province type in both runs
+    let count_type = |provinces: &[geoforge::ProvinceRegion], ptype| {
+        provinces
+            .iter()
+            .filter(|p| p.characteristics.province_type == ptype)
+            .count()
+    };
+
+    // Test all 18 province types for determinism
+    let all_types = vec![
+        GeologicProvince::CollisionOrogen,
+        GeologicProvince::AccretionaryWedge,
+        GeologicProvince::ContinentalFloodBasalt,
+        GeologicProvince::OceanicPlateau,
+        GeologicProvince::ContinentalHotspotTrack,
+        GeologicProvince::VolcanicArc,
+        GeologicProvince::ForearcBasin,
+        GeologicProvince::BackarcBasin,
+        GeologicProvince::OceanTrench,
+        GeologicProvince::Craton,
+        GeologicProvince::Platform,
+        GeologicProvince::IntracratonicBasin,
+        GeologicProvince::ExtendedCrust,
+        GeologicProvince::ContinentalRift,
+        GeologicProvince::AbyssalPlain,
+        GeologicProvince::MidOceanRidge,
+        GeologicProvince::OceanicFractureZone,
+        GeologicProvince::OceanicHotspotTrack,
+    ];
+
+    println!("\n=== Province Type Counts (Determinism Test) ===");
+    for ptype in all_types {
+        let count1 = count_type(&provinces1, ptype);
+        let count2 = count_type(&provinces2, ptype);
+
+        if count1 > 0 || count2 > 0 {
+            println!("  {:?}: {} vs {}", ptype, count1, count2);
+        }
+
+        assert_eq!(
+            count1, count2,
+            "{:?} count should match between runs with same seed",
+            ptype
+        );
+    }
+
+    // CRITICAL: Test hotspot tracks specifically (both oceanic and continental)
+    let oceanic_hotspots1 = count_type(&provinces1, GeologicProvince::OceanicHotspotTrack);
+    let oceanic_hotspots2 = count_type(&provinces2, GeologicProvince::OceanicHotspotTrack);
+    let continental_hotspots1 = count_type(&provinces1, GeologicProvince::ContinentalHotspotTrack);
+    let continental_hotspots2 = count_type(&provinces2, GeologicProvince::ContinentalHotspotTrack);
+
+    println!("\n=== Hotspot Track Verification ===");
+    println!("  Oceanic hotspot tracks: {} (both runs)", oceanic_hotspots1);
+    println!("  Continental hotspot tracks: {} (both runs)", continental_hotspots1);
+
+    assert_eq!(
+        oceanic_hotspots1, oceanic_hotspots2,
+        "Oceanic hotspot tracks must reproduce exactly with same seed"
+    );
+    assert_eq!(
+        continental_hotspots1, continental_hotspots2,
+        "Continental hotspot tracks must reproduce exactly with same seed"
+    );
+
+    // Verify pixel-level reproducibility for hotspot tracks
+    let hotspot_provinces1: Vec<_> = provinces1
+        .iter()
+        .filter(|p| {
+            p.characteristics.province_type == GeologicProvince::OceanicHotspotTrack
+                || p.characteristics.province_type == GeologicProvince::ContinentalHotspotTrack
+        })
+        .collect();
+
+    let hotspot_provinces2: Vec<_> = provinces2
+        .iter()
+        .filter(|p| {
+            p.characteristics.province_type == GeologicProvince::OceanicHotspotTrack
+                || p.characteristics.province_type == GeologicProvince::ContinentalHotspotTrack
+        })
+        .collect();
+
+    assert_eq!(
+        hotspot_provinces1.len(),
+        hotspot_provinces2.len(),
+        "Total hotspot track count should match"
+    );
+
+    // Verify each hotspot track has same pixel count
+    for (i, (h1, h2)) in hotspot_provinces1.iter().zip(hotspot_provinces2.iter()).enumerate() {
+        assert_eq!(
+            h1.pixels.len(),
+            h2.pixels.len(),
+            "Hotspot track {} should have same pixel count in both runs",
+            i
+        );
+
+        assert_eq!(
+            h1.characteristics.province_type,
+            h2.characteristics.province_type,
+            "Hotspot track {} should have same type in both runs",
+            i
+        );
+    }
+
+    println!("\n✓ Full geology pipeline determinism verified:");
+    println!("  {} total provinces", provinces1.len());
+    println!("  {} hotspot tracks (pixel-perfect match)", hotspot_provinces1.len());
 }

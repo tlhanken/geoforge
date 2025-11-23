@@ -22,9 +22,9 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
   - Plate motion assignment and boundary classification
   - Boundary visualization export
 - 🔧 **Stage 2: Geologic Provinces** - IN PROGRESS (polishing phase)
-  - 20 province types implemented (2.1-2.6 complete)
+  - 18 province types implemented (2.1-2.6 complete)
   - ~1,950 lines of code across 3 modules
-  - 16 tests passing (9 unit + 7 integration)
+  - Tests passing
   - Ready for polishing and validation
 - ✅ Comprehensive planetary parameters system
 - ✅ Stellar luminosity and insolation calculations
@@ -134,28 +134,39 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces
 
 **Implementation Status:**
-- ✅ **2.1 Orogenic Belts** - Collision, subduction, accretionary, extensional orogens
-- ✅ **2.2 Large Igneous Provinces** - Continental flood basalts, oceanic plateaus, hotspot tracks
-- ✅ **2.3 Arc and Basin Systems** - Volcanic arcs, forearc/backarc basins, trenches
-- ✅ **2.4 Stable Continental Regions** - Cratons/shields, platforms, intracratonic basins
-- ✅ **2.5 Extensional Zones** - Continental rifts, extended crust
-- ✅ **2.6 Oceanic Domains** - Mid-ocean ridges, abyssal plains, fracture zones, seamounts
+- ✅ **2.1 Collision Orogens** - Continent-continent mountain building (1 type: CollisionOrogen)
+- ✅ **2.2 Large Igneous Provinces** - Continental flood basalts, oceanic plateaus, hotspot tracks (3 types)
+- ✅ **2.3 Subduction Zone Systems** - Complete oceanic→continental transect (5 types: OceanTrench, AccretionaryWedge, ForearcBasin, VolcanicArc, BackarcBasin)
+- ✅ **2.4 Stable Continental Regions** - Cratons/shields, platforms, extended crust (3 types)
+- ⏳ **2.5 Continental Rifts** - DEFERRED (will implement when needed)
+- ✅ **2.6 Oceanic Domains** - Mid-ocean ridges, abyssal plains, fracture zones, hotspot tracks (4 types)
+- ✅ **Hotspot Tracks Refinement** - Geologically accurate visible portions only (2,400 km oceanic, 400 km continental)
+- ✅ **Module Refactoring** - Clean naming: `geology/{provinces, orogenic, generator}`
+- ✅ **Determinism Bug Fix** - Fixed HashMap iteration order causing non-deterministic generation
 
-**Polishing Phase: Next Actions**
+**Code Quality:**
+- ~1,950 lines of code across 3 modules
+- **18 province types implemented** (SubductionOrogen removed - now modeled as VolcanicArc + AccretionaryWedge; IntracratonicBasin too small-scale)
+- Tests passing
+- Clean module structure with clear naming
+- Comprehensive documentation
+- Deterministic generation verified
+
+**Polishing Phase: Remaining Actions**
 
 **Phase 1: Critical Fixes & Simplification** ⭐ HIGH PRIORITY
-- [ ] **Simplify naming conventions** - Remove vague names like "comprehensive"
-  - Rename `ComprehensiveGeologyGenerator` → `GeologyGenerator` (it's THE geology generator)
-  - Rename `ComprehensiveGeologyConfig` → `GeologyConfig`
-  - Review all type names for clarity and purpose
-- [ ] **Extract constants** - Replace magic numbers with named constants
-  - `71.0` km/pixel → dynamic calculation from map resolution
-  - Extract `EARTH_RADIUS_KM` to shared constants module
-  - Add geodetic constants: `EQUATORIAL_KM_PER_DEGREE`, widths for features
-- [ ] **Fix potential bugs**
-  - Add defensive checks for empty pixel lists in bounds calculations
-  - Validate division-by-zero scenarios in km/pixel calculations
-  - Handle edge cases in plate pixel collection
+- [x] **Simplify naming conventions** - Remove vague names like "comprehensive"
+  - Renamed `comprehensive.rs` → `generator.rs` (matches `tectonics/generator.rs` pattern)
+  - Renamed `ComprehensiveGeologyGenerator` → `GeologyGenerator`
+  - Renamed `ComprehensiveGeologyConfig` → `GeologyConfig`
+  - Module structure now clean: `geology/{provinces, orogenic, generator}`
+- [x] **Extract constants** - Replace magic numbers with named constants
+  - Replaced all `71.0` km/pixel hardcoded values → dynamic `km_per_pixel()` calculation
+  - Uses `MapProjection::km_per_pixel()` for accurate scale at any map size
+  - Added defensive min value check (0.01 km/pixel minimum)
+- [x] **Fix potential bugs**
+  - Added defensive checks in `km_per_pixel()` for zero/negative values
+  - All edge cases handled with early returns and empty checks
 
 **Phase 2: Code Quality & Refactoring** ⭐ HIGH PRIORITY
 - [ ] **Eliminate code duplication**
@@ -171,7 +182,7 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
   - Remove unnecessary complexity
 
 **Phase 3: Testing & Validation** ⭐ HIGH PRIORITY
-- [ ] **Add comprehensive geology integration test**
+- [ ] **Add full geology integration test**
   - Test `GeologyGenerator` full pipeline (currently only `OrogenicBeltGenerator` tested)
   - Verify all province categories generate correctly
   - Test province layering (foundation → active features)
@@ -180,7 +191,7 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
   - Single-pixel plates
   - Polar region provinces
   - Longitude wraparound handling
-- [ ] **Visual validation of all 20 province types** ⭐ CRITICAL
+- [ ] **Visual validation of all 18 province types** ⭐ CRITICAL
   - Generate test worlds with known configurations
   - Export PNG visualizations for each province type
   - Validate color assignments match geological meaning:
@@ -207,7 +218,7 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 
 **Phase 5: API Polish** ⭐ LOW PRIORITY
 - [ ] **Consider API improvements** (optional, evaluate need)
-  - `ComprehensiveGeologyConfig` boolean flags → enum-based `enabled_stages`?
+  - `GeologyConfig` boolean flags → enum-based `enabled_stages`?
   - Builder pattern for `ProvinceRegion`?
   - Ergonomics review with fresh eyes
 
@@ -215,6 +226,12 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 **Foundation:** Use geologic provinces to generate realistic elevation
 - **3.1** Mountain range generation based on orogenic belts
 - **3.2** Ocean floor depth modeling (ridges, trenches, abyssal plains)
+  - **Mid-ocean ridges**: Morphology depends on spreading rate (stored in `convergence_rate` field, negative value)
+    - Fast-spreading (>10 cm/yr, width ~60 km): Smooth gentle rise, NO deep rift valley (East Pacific Rise)
+    - Slow-spreading (2-5 cm/yr, width ~120 km): Deep central rift valley 1-2 km deep (Mid-Atlantic Ridge)
+    - Ultra-slow (<1 cm/yr, width ~150 km): Highly irregular, deepest rift valleys (Gakkel Ridge)
+    - All ridges: Elevated 2-3 km above abyssal plain (~2500m depth vs ~5000m)
+  - **Ocean trenches**: Narrow (75 km), deepest ocean features (-7000m to -11000m)
 - **3.3** Continental shelf and slope definition
 - **3.4** Volcanic elevation features from LIPs and arcs
 - **3.5** Erosion and sedimentation effects over geological time

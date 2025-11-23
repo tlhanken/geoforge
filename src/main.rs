@@ -111,6 +111,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("✅ Plate motion exported: outputs/tectonics_motion.png");
         println!("   (Color=direction, Brightness=speed)");
 
+        // Export motion color reference
+        WorldMap::export_motion_reference_png("outputs", "motion_reference.png")?;
+        println!("✅ Motion color reference: outputs/motion_reference.png");
+        println!("   (Color wheel showing direction → color mapping)");
+
         // Export plate types
         world.export_plate_types_png("outputs", "tectonics_types.png")?;
         println!("✅ Plate types exported: outputs/tectonics_types.png");

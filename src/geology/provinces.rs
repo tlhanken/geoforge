@@ -12,7 +12,7 @@ pub enum GeologicProvince {
     /// Collision orogen - Continental-continental convergence
     ///
     /// Forms when two continental plates collide, creating massive mountain ranges.
-    /// Example: Himalayas (India-Eurasia collision)
+    /// Example: Himalayas (India-Eurasia collision), Alps (Africa-Europe)
     ///
     /// Characteristics:
     /// - Highest elevation potential
@@ -20,41 +20,24 @@ pub enum GeologicProvince {
     /// - Significant crustal shortening
     CollisionOrogen,
 
-    /// Subduction orogen - Oceanic-continental convergence
-    ///
-    /// Forms where oceanic crust subducts beneath continental crust,
-    /// creating volcanic mountain ranges and deep ocean trenches.
-    /// Example: Andes (Nazca-South America), Cascades (Juan de Fuca-North America)
-    ///
-    /// Characteristics:
-    /// - Volcanic arc parallel to trench
-    /// - Moderate to high elevation
-    /// - Associated with deep ocean trench
-    SubductionOrogen,
+    // NOTE: SubductionOrogen removed - volcanic arc component now handled by VolcanicArc
+    // Subduction zones are represented by their component parts: OceanTrench,
+    // AccretionaryWedge, ForearcBasin, VolcanicArc, and BackarcBasin
 
-    /// Accretionary orogen - Terrane accretion
+    /// Accretionary wedge - Sediment scraped off subducting plate
     ///
-    /// Forms when exotic terranes (island arcs, oceanic plateaus, microcontinents)
-    /// are scraped off and accreted onto continental margins during subduction.
-    /// Example: Western North America (Cordilleran orogeny)
+    /// Forms at ocean trenches where sediments and oceanic crust are scraped off
+    /// the subducting plate and pile up as an accretionary prism.
+    /// Example: Offshore Japan, Olympic Mountains (Washington), Kodiak Island (Alaska)
     ///
     /// Characteristics:
-    /// - Complex, deformed geology with mixed origins
-    /// - Moderate elevation
-    /// - Irregular structure
-    AccretionaryOrogen,
+    /// - Complex deformed sediments
+    /// - Low to moderate elevation (often submarine)
+    /// - Highly fractured and faulted
+    AccretionaryWedge,
 
-    /// Extensional orogen - Core complex formation
-    ///
-    /// Forms in zones of continental extension where metamorphic core complexes
-    /// are exhumed. Often associated with rifting but different from active rifts.
-    /// Example: Basin and Range Province (western USA)
-    ///
-    /// Characteristics:
-    /// - Moderate relief with uplifted metamorphic cores
-    /// - Normal faulting and extension
-    /// - Often follows earlier compression
-    ExtensionalOrogen,
+    // NOTE: ExtensionalOrogen removed - redundant with ContinentalRift
+    // Basin and Range style features will be handled by ContinentalRift when implemented
 
     // ========== Stage 2.2: Large Igneous Provinces ==========
 
@@ -156,12 +139,19 @@ pub enum GeologicProvince {
     /// Example: Romanche Fracture Zone, Charlie-Gibbs Fracture Zone
     OceanicFractureZone,
 
-    /// Seamount field - Scattered underwater volcanoes
+    /// Oceanic hotspot track - Linear chain of volcanic seamounts
     ///
-    /// Individual or clustered submarine volcanoes on oceanic crust.
-    /// Different from hotspot tracks (which are linear chains).
-    /// Example: Musicians Seamounts, Corner Rise Seamounts
-    SeamountField,
+    /// Volcanic chain formed as oceanic plate moves over stationary mantle plume.
+    /// Creates age-progressive seamount chains.
+    /// Example: Hawaiian-Emperor Chain, Louisville Ridge
+    OceanicHotspotTrack,
+
+    /// Continental hotspot track - Linear chain of volcanic centers
+    ///
+    /// Volcanic chain formed as continental plate moves over stationary mantle plume.
+    /// Creates age-progressive volcanic fields and calderas.
+    /// Example: Yellowstone hotspot track, Anahim Volcanic Belt
+    ContinentalHotspotTrack,
 }
 
 impl GeologicProvince {
@@ -170,9 +160,7 @@ impl GeologicProvince {
         match self {
             // Stage 2.1: Orogenic Belts
             GeologicProvince::CollisionOrogen => "Collision Orogen",
-            GeologicProvince::SubductionOrogen => "Subduction Orogen",
-            GeologicProvince::AccretionaryOrogen => "Accretionary Orogen",
-            GeologicProvince::ExtensionalOrogen => "Extensional Orogen",
+            GeologicProvince::AccretionaryWedge => "Accretionary Wedge",
 
             // Stage 2.2: Large Igneous Provinces
             GeologicProvince::ContinentalFloodBasalt => "Continental Flood Basalt",
@@ -198,7 +186,8 @@ impl GeologicProvince {
             GeologicProvince::AbyssalPlain => "Abyssal Plain",
             GeologicProvince::OceanTrench => "Ocean Trench",
             GeologicProvince::OceanicFractureZone => "Oceanic Fracture Zone",
-            GeologicProvince::SeamountField => "Seamount Field",
+            GeologicProvince::OceanicHotspotTrack => "Oceanic Hotspot Track",
+            GeologicProvince::ContinentalHotspotTrack => "Continental Hotspot Track",
         }
     }
 
@@ -208,12 +197,8 @@ impl GeologicProvince {
             // Stage 2.1: Orogenic Belts
             GeologicProvince::CollisionOrogen =>
                 "Continental-continental collision zone (e.g., Himalayas)",
-            GeologicProvince::SubductionOrogen =>
-                "Oceanic-continental subduction zone (e.g., Andes)",
-            GeologicProvince::AccretionaryOrogen =>
-                "Terrane accretion zone (e.g., Western North America)",
-            GeologicProvince::ExtensionalOrogen =>
-                "Core complex formation (e.g., Basin and Range)",
+            GeologicProvince::AccretionaryWedge =>
+                "Scraped sediments at subduction zone (e.g., offshore Japan)",
 
             // Stage 2.2: Large Igneous Provinces
             GeologicProvince::ContinentalFloodBasalt =>
@@ -254,8 +239,10 @@ impl GeologicProvince {
                 "Deep subduction zone (e.g., Mariana Trench)",
             GeologicProvince::OceanicFractureZone =>
                 "Transform fault system (e.g., Romanche Fracture Zone)",
-            GeologicProvince::SeamountField =>
-                "Underwater volcanic seamounts (e.g., Musicians Seamounts)",
+            GeologicProvince::OceanicHotspotTrack =>
+                "Volcanic seamount chain from hotspot (e.g., Hawaiian-Emperor)",
+            GeologicProvince::ContinentalHotspotTrack =>
+                "Continental volcanic track from hotspot (e.g., Yellowstone)",
         }
     }
 }
@@ -323,51 +310,31 @@ impl ProvinceCharacteristics {
         }
     }
 
-    /// Create characteristics for a subduction orogen
+    // NOTE: subduction_orogen() removed - use volcanic_arc() for the magmatic arc component
+    // Subduction zones should be modeled with their individual components:
+    // - volcanic_arc() for the volcanic mountains
+    // - accretionary_wedge() for the trench sediments
+    // - forearc_basin() and backarc_basin() for the basins
+
+    /// Create characteristics for an accretionary wedge
     ///
     /// # Arguments
     /// * `convergence_rate` - Convergence rate in cm/year
     /// * `width_km` - Calculated width in kilometers
-    pub fn subduction_orogen(convergence_rate: f64, width_km: f64) -> Self {
+    pub fn accretionary_wedge(convergence_rate: f64, width_km: f64) -> Self {
         let intensity = (convergence_rate / 10.0).min(1.0);
 
         Self {
-            province_type: GeologicProvince::SubductionOrogen,
-            elevation_intensity: 0.7, // Moderate to high elevation
-            roughness: 0.8,           // Quite rugged
+            province_type: GeologicProvince::AccretionaryWedge,
+            elevation_intensity: 0.2, // Low elevation (often submarine)
+            roughness: 0.7,           // Moderately rugged (highly deformed)
             width_km,
             intensity,
             convergence_rate,
         }
     }
 
-    /// Create characteristics for an accretionary orogen
-    pub fn accretionary_orogen(convergence_rate: f64, width_km: f64) -> Self {
-        let intensity = (convergence_rate / 10.0).min(1.0);
-
-        Self {
-            province_type: GeologicProvince::AccretionaryOrogen,
-            elevation_intensity: 0.5, // Moderate elevation
-            roughness: 0.7,           // Moderately rugged
-            width_km,
-            intensity,
-            convergence_rate,
-        }
-    }
-
-    /// Create characteristics for an extensional orogen
-    pub fn extensional_orogen(extension_rate: f64, width_km: f64) -> Self {
-        let intensity = (extension_rate / 10.0).min(1.0);
-
-        Self {
-            province_type: GeologicProvince::ExtensionalOrogen,
-            elevation_intensity: 0.4, // Moderate with basins
-            roughness: 0.6,           // Moderately rough
-            width_km,
-            intensity,
-            convergence_rate: extension_rate, // Reuse field for extension rate
-        }
-    }
+    // NOTE: extensional_orogen() removed - will be replaced by continental_rift() when implemented
 
     /// Create characteristics for continental flood basalts
     pub fn continental_flood_basalt(area_km2: f64) -> Self {
@@ -557,14 +524,30 @@ impl ProvinceCharacteristics {
         }
     }
 
-    /// Create characteristics for seamount fields
-    pub fn seamount_field(area_km2: f64) -> Self {
+    /// Create characteristics for oceanic hotspot tracks
+    ///
+    /// Linear chain of volcanic seamounts formed as plate moves over mantle hotspot.
+    pub fn oceanic_hotspot_track(length_km: f64) -> Self {
         Self {
-            province_type: GeologicProvince::SeamountField,
-            elevation_intensity: -0.2, // Rises from ocean floor but submerged
-            roughness: 0.8,            // Very rough volcanic terrain
-            width_km: (area_km2.sqrt()),
-            intensity: 0.5, // Moderate volcanic activity
+            province_type: GeologicProvince::OceanicHotspotTrack,
+            elevation_intensity: -0.3, // Rises significantly from ocean floor but submerged
+            roughness: 0.9,            // Very rough volcanic seamounts
+            width_km: length_km,
+            intensity: 0.7,            // Strong volcanic signature
+            convergence_rate: 0.0,
+        }
+    }
+
+    /// Create characteristics for continental hotspot tracks
+    ///
+    /// Linear chain of volcanic centers formed as plate moves over mantle hotspot.
+    pub fn continental_hotspot_track(length_km: f64) -> Self {
+        Self {
+            province_type: GeologicProvince::ContinentalHotspotTrack,
+            elevation_intensity: 0.4,  // Moderate elevation (volcanic plateaus/calderas)
+            roughness: 0.8,            // Rough volcanic terrain
+            width_km: length_km,
+            intensity: 0.8,            // Very strong volcanic signature
             convergence_rate: 0.0,
         }
     }
@@ -624,7 +607,8 @@ mod tests {
     #[test]
     fn test_province_names() {
         assert_eq!(GeologicProvince::CollisionOrogen.name(), "Collision Orogen");
-        assert_eq!(GeologicProvince::SubductionOrogen.name(), "Subduction Orogen");
+        assert_eq!(GeologicProvince::AccretionaryWedge.name(), "Accretionary Wedge");
+        assert_eq!(GeologicProvince::VolcanicArc.name(), "Volcanic Arc");
     }
 
     #[test]
@@ -638,11 +622,11 @@ mod tests {
     }
 
     #[test]
-    fn test_subduction_characteristics() {
-        let chars = ProvinceCharacteristics::subduction_orogen(8.0, 500.0);
-        assert_eq!(chars.province_type, GeologicProvince::SubductionOrogen);
-        assert_eq!(chars.elevation_intensity, 0.7);
-        assert_eq!(chars.width_km, 500.0);
+    fn test_accretionary_wedge_characteristics() {
+        let chars = ProvinceCharacteristics::accretionary_wedge(8.0, 200.0);
+        assert_eq!(chars.province_type, GeologicProvince::AccretionaryWedge);
+        assert_eq!(chars.elevation_intensity, 0.2);
+        assert_eq!(chars.width_km, 200.0);
         assert!(chars.intensity > 0.0 && chars.intensity <= 1.0);
     }
 

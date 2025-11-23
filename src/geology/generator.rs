@@ -1,7 +1,37 @@
-//! Geological province generation (Stage 2 complete)
+//! Geological province generator (Stage 2)
 //!
-//! This module coordinates all geological province generation from tectonic data,
-//! implementing the complete Stage 2 pipeline.
+//! This module implements the main geological province generator, coordinating the complete
+//! Stage 2 pipeline to generate 18 distinct province types from tectonic plate data.
+//! Provinces are layered from oldest/deepest to youngest/highest to create realistic
+//! geological hierarchies.
+//!
+//! # Pipeline Order
+//!
+//! 1. **Foundation Layers** (Ancient/Stable):
+//!    - Oceanic base layer (abyssal plains on all oceanic plates)
+//!    - Stable continental regions (cratons, shields, platforms)
+//!    - Passive margins (extended crust at old boundaries)
+//!
+//! 2. **Active Features** (Overlay on foundation):
+//!    - Collision orogens (continent-continent mountain belts: Himalayas, Alps)
+//!    - Subduction zone systems (trench → accretionary wedge → forearc → volcanic arc → backarc)
+//!    - Oceanic features (mid-ocean ridges, fracture zones)
+//!    - Active continental rifts (volcanic rift zones)
+//!    - Large Igneous Provinces (flood basalts, oceanic plateaus)
+//!
+//! 3. **Final Overlays**:
+//!    - Hotspot tracks (linear volcanic chains, generated last to sit on top)
+//!
+//! # Province Types (18 total - IntracratonicBasin not implemented, ContinentalRift deferred)
+//!
+//! **Collision Orogens (1)**: CollisionOrogen
+//! **Subduction Systems (5)**: OceanTrench, AccretionaryWedge, ForearcBasin, VolcanicArc, BackarcBasin
+//! **LIPs (3)**: ContinentalFloodBasalt, OceanicPlateau, ContinentalHotspotTrack*
+//! **Stable (3)**: Craton, Platform, ExtendedCrust
+//! **Oceanic (4)**: AbyssalPlain, MidOceanRidge, OceanicFractureZone, OceanicHotspotTrack*
+//! **Deferred**: ContinentalRift (will be implemented later)
+//!
+//! *Hotspot tracks are generated separately as final overlays
 
 use crate::geology::provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 use crate::geology::orogenic::{OrogenicBeltGenerator, OrogenicConfig};
@@ -12,6 +42,11 @@ use crate::tectonics::plates::{PlateInteraction, PlateStats, PlateType, PlateSee
 use std::collections::{HashMap, HashSet};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+
+/// Index mapping plate IDs to their pixel coordinates
+///
+/// Built once at the start of generation to avoid O(plates × width × height) scanning.
+type PlatePixelIndex = HashMap<u16, Vec<(usize, usize)>>;
 
 /// Configuration for geological province generation
 #[derive(Debug, Clone)]
@@ -63,22 +98,30 @@ impl GeologyGenerator {
     }
 
     /// Generate all geological provinces from tectonic data
+    ///
+    /// Executes the complete Stage 2 pipeline, generating 20 distinct province types
+    /// in a layered approach from ancient/stable foundations to active overlays.
+    ///
+    /// Returns a vector of province regions sorted by generation order (oldest first).
     pub fn generate_all_provinces(
         &self,
         boundaries: &[BoundarySegment],
         plate_stats: &HashMap<u16, PlateStats>,
-        _plate_seeds: &[PlateSeed],  // Reserved for future use (hotspot tracks)
+        _plate_seeds: &[PlateSeed],  // Currently unused, plate motion stored in PlateStats
         plate_map: &TerrainMap<u16>,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
         let mut rng = StdRng::seed_from_u64(self.seed);
+
+        // Build plate pixel index once for O(width × height) instead of O(plates × width × height)
+        let plate_index = self.build_plate_pixel_index(plate_map);
 
         // ========== FOUNDATION LAYERS (Ancient/Stable) ==========
 
         // Stage 2.6a: Oceanic Base Layer - Fill all oceanic plates with abyssal plains
         // (Oldest oceanic crust, foundation for all oceanic features)
         if self.config.generate_oceanic {
-            let oceanic_base = self.generate_oceanic_base_layer(plate_map, plate_stats);
+            let oceanic_base = self.generate_oceanic_base_layer(&plate_index, plate_stats);
             regions.extend(oceanic_base);
         }
 
@@ -86,7 +129,7 @@ impl GeologyGenerator {
         // (Ancient Precambrian basement = Cratons, 1.5-4 Ga old, foundation for all continental features)
         // Shield = exposed craton core, Platform = sedimentary-covered craton
         if self.config.generate_stable_regions {
-            let stable = self.generate_stable_continental_base(plate_stats, plate_map, &mut rng);
+            let stable = self.generate_stable_continental_base(plate_stats, &plate_index, &mut rng);
             regions.extend(stable);
         }
 
@@ -115,10 +158,10 @@ impl GeologyGenerator {
             regions.extend(arcs);
         }
 
-        // Stage 2.6b: Oceanic Overlays - Ridges, fractures, seamounts
+        // Stage 2.6b: Oceanic Overlays - Ridges and fractures
         // (Active spreading and transform features on oceanic base)
         if self.config.generate_oceanic {
-            let oceanic_overlays = self.generate_oceanic_overlays(boundaries, plate_map, plate_stats, &mut rng);
+            let oceanic_overlays = self.generate_oceanic_overlays(boundaries, plate_map, plate_stats);
             regions.extend(oceanic_overlays);
         }
 
@@ -133,6 +176,14 @@ impl GeologyGenerator {
         // (Flood basalts, hotspots overlay everything)
         let lips = self.generate_large_igneous_provinces(plate_stats, plate_map, &regions, &mut rng);
         regions.extend(lips);
+
+        // FINAL OVERLAY: Hotspot tracks - Linear volcanic chains on top of all other features
+        // (These should sit on top of oceanic base, abyssal plains, and any other provinces)
+        // Generated LAST so they're visible on top of everything else
+        if self.config.generate_oceanic {
+            let hotspot_tracks = self.generate_hotspot_tracks(plate_stats, plate_map, &plate_index, &mut rng);
+            regions.extend(hotspot_tracks);
+        }
 
         regions
     }
@@ -149,6 +200,7 @@ impl GeologyGenerator {
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
+        let km_per_px = self.km_per_pixel(plate_map);
 
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type != PlateInteraction::Convergent {
@@ -159,95 +211,162 @@ impl GeologyGenerator {
             if let (Some(stats_a), Some(stats_b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
                 if stats_a.plate_type == PlateType::Oceanic && stats_b.plate_type == PlateType::Oceanic {
                     // Determine which plate subducts (older/denser)
-                    // Without plate age data, use plate ID as deterministic proxy
-                    // Lower ID = formed earlier in generation = "older"
-                    let (_subducting_plate, overriding_plate) = if boundary.plate_a < boundary.plate_b {
-                        (boundary.plate_a, boundary.plate_b)
+                    let overriding_plate = if boundary.plate_a < boundary.plate_b {
+                        boundary.plate_b
                     } else {
-                        (boundary.plate_b, boundary.plate_a)
+                        boundary.plate_a
                     };
 
-                    // 1. OCEAN TRENCH - at the boundary (deepest point)
-                    // Elevation: -2.5 to -3.0 (Mariana Trench = -11km)
-                    let trench_chars = ProvinceCharacteristics::ocean_trench(
-                        boundary.relative_velocity,
-                        boundary.length_km,
-                    );
-                    regions.push(ProvinceRegion::new(
-                        boundary.pixels.clone(),
-                        trench_chars,
-                        Some(idx)
-                    ));
+                    // Generate complete arc system sequentially
+                    self.create_ocean_trench(boundary, idx, plate_map, &mut regions);
+                    self.create_forearc_basin(boundary, overriding_plate, idx, plate_map, km_per_px, rng, &mut regions);
 
-                    // 2. FOREARC BASIN - between trench and arc (50-100km from trench)
-                    // Elevation: -0.8 to -1.2 (moderate depth, sediment accumulation)
-                    let forearc_width_km = 50.0 + rng.gen::<f64>() * 50.0;
-                    let km_per_px = self.km_per_pixel(plate_map);
-                    let forearc_pixels = self.expand_boundary_toward_plate(
-                        &boundary.pixels,
-                        overriding_plate,
-                        (forearc_width_km / km_per_px) as usize,
-                        plate_map
+                    let (arc_offset_km, arc_width_km) = self.create_volcanic_arc(
+                        boundary, overriding_plate, idx, plate_map, km_per_px, rng, &mut regions
                     );
 
-                    let forearc_chars = ProvinceCharacteristics::forearc_basin(
-                        boundary.length_km,
+                    self.create_backarc_basin(
+                        boundary, overriding_plate, idx, arc_offset_km, arc_width_km,
+                        stats_a, stats_b, plate_map, km_per_px, rng, &mut regions
                     );
-                    regions.push(ProvinceRegion::new(forearc_pixels, forearc_chars, Some(idx)));
-
-                    // 3. VOLCANIC ARC - on overriding plate (150-300km from trench)
-                    // Elevation: +1.5 to +3.0 (may emerge as islands depending on convergence rate)
-                    let arc_offset_km = 150.0 + rng.gen::<f64>() * 150.0;
-                    let arc_width_km = 100.0 + rng.gen::<f64>() * 100.0;
-
-                    let arc_pixels = self.expand_boundary_toward_plate(
-                        &boundary.pixels,
-                        overriding_plate,
-                        (arc_offset_km / km_per_px) as usize,
-                        plate_map
-                    );
-
-                    // Further expand to create arc width
-                    let arc_pixels_wide = self.expand_boundary(&arc_pixels,
-                        (arc_width_km / km_per_px / 2.0) as usize,
-                        plate_map
-                    );
-
-                    let arc_chars = ProvinceCharacteristics::volcanic_arc(
-                        boundary.relative_velocity,
-                        boundary.length_km,
-                    );
-                    regions.push(ProvinceRegion::new(arc_pixels_wide, arc_chars, Some(idx)));
-
-                    // 4. BACKARC BASIN - behind the volcanic arc (extensional)
-                    // Elevation: -0.5 to -0.8 (shallow, spreading behind arc)
-                    // Only create if there's enough space (large plates)
-                    if stats_a.area_km2 > 500_000 || stats_b.area_km2 > 500_000 {
-                        let backarc_offset_km = arc_offset_km + arc_width_km + 50.0;
-                        let backarc_width_km = 100.0 + rng.gen::<f64>() * 100.0;
-
-                        let backarc_pixels = self.expand_boundary_toward_plate(
-                            &boundary.pixels,
-                            overriding_plate,
-                            (backarc_offset_km / km_per_px) as usize,
-                            plate_map
-                        );
-
-                        let backarc_pixels_wide = self.expand_boundary(&backarc_pixels,
-                            (backarc_width_km / km_per_px / 2.0) as usize,
-                            plate_map
-                        );
-
-                        let backarc_chars = ProvinceCharacteristics::backarc_basin(
-                            boundary.length_km,
-                        );
-                        regions.push(ProvinceRegion::new(backarc_pixels_wide, backarc_chars, Some(idx)));
-                    }
                 }
             }
         }
 
         regions
+    }
+
+    /// Create ocean trench at convergent boundary
+    ///
+    /// Ocean trenches are narrow features (50-100 km wide)
+    /// Example: Mariana Trench ~70 km wide
+    fn create_ocean_trench(
+        &self,
+        boundary: &BoundarySegment,
+        boundary_idx: usize,
+        plate_map: &TerrainMap<u16>,
+        regions: &mut Vec<ProvinceRegion>,
+    ) {
+        let chars = ProvinceCharacteristics::ocean_trench(
+            boundary.relative_velocity,
+            boundary.length_km,
+        );
+
+        // Trenches are narrow: 50-100 km wide
+        let width_km = 75.0; // Average trench width
+        let km_per_px = self.km_per_pixel(plate_map);
+        let pixels = self.expand_boundary(
+            &boundary.pixels,
+            (width_km / km_per_px) as usize,
+            plate_map
+        );
+
+        regions.push(ProvinceRegion::new(
+            pixels,
+            chars,
+            Some(boundary_idx)
+        ));
+    }
+
+    /// Create forearc basin (50-100km from trench)
+    fn create_forearc_basin(
+        &self,
+        boundary: &BoundarySegment,
+        overriding_plate: u16,
+        boundary_idx: usize,
+        plate_map: &TerrainMap<u16>,
+        km_per_px: f64,
+        rng: &mut StdRng,
+        regions: &mut Vec<ProvinceRegion>,
+    ) {
+        let width_km = 50.0 + rng.gen::<f64>() * 50.0;
+        let pixels = self.expand_boundary_toward_plate(
+            &boundary.pixels,
+            overriding_plate,
+            (width_km / km_per_px) as usize,
+            plate_map
+        );
+
+        let chars = ProvinceCharacteristics::forearc_basin(boundary.length_km);
+        regions.push(ProvinceRegion::new(pixels, chars, Some(boundary_idx)));
+    }
+
+    /// Create volcanic arc (150-300km from trench)
+    ///
+    /// Returns (arc_offset_km, arc_width_km) for backarc positioning
+    fn create_volcanic_arc(
+        &self,
+        boundary: &BoundarySegment,
+        overriding_plate: u16,
+        boundary_idx: usize,
+        plate_map: &TerrainMap<u16>,
+        km_per_px: f64,
+        rng: &mut StdRng,
+        regions: &mut Vec<ProvinceRegion>,
+    ) -> (f64, f64) {
+        let offset_km = 150.0 + rng.gen::<f64>() * 150.0;
+        let width_km = 100.0 + rng.gen::<f64>() * 100.0;
+
+        let arc_center = self.expand_boundary_toward_plate(
+            &boundary.pixels,
+            overriding_plate,
+            (offset_km / km_per_px) as usize,
+            plate_map
+        );
+
+        let arc_pixels = self.expand_boundary(
+            &arc_center,
+            (width_km / km_per_px / 2.0) as usize,
+            plate_map
+        );
+
+        let chars = ProvinceCharacteristics::volcanic_arc(
+            boundary.relative_velocity,
+            boundary.length_km,
+        );
+        regions.push(ProvinceRegion::new(arc_pixels, chars, Some(boundary_idx)));
+
+        (offset_km, width_km)
+    }
+
+    /// Create backarc basin (behind volcanic arc, only for large plates)
+    fn create_backarc_basin(
+        &self,
+        boundary: &BoundarySegment,
+        overriding_plate: u16,
+        boundary_idx: usize,
+        arc_offset_km: f64,
+        arc_width_km: f64,
+        stats_a: &PlateStats,
+        stats_b: &PlateStats,
+        plate_map: &TerrainMap<u16>,
+        km_per_px: f64,
+        rng: &mut StdRng,
+        regions: &mut Vec<ProvinceRegion>,
+    ) {
+        // Only create backarc basin for large plates
+        if stats_a.area_km2 <= 500_000 && stats_b.area_km2 <= 500_000 {
+            return;
+        }
+
+        let offset_km = arc_offset_km + arc_width_km + 50.0;
+        let width_km = 100.0 + rng.gen::<f64>() * 100.0;
+
+        let backarc_center = self.expand_boundary_toward_plate(
+            &boundary.pixels,
+            overriding_plate,
+            (offset_km / km_per_px) as usize,
+            plate_map
+        );
+
+        let backarc_pixels = self.expand_boundary(
+            &backarc_center,
+            (width_km / km_per_px / 2.0) as usize,
+            plate_map
+        );
+
+        let chars = ProvinceCharacteristics::backarc_basin(boundary.length_km);
+        regions.push(ProvinceRegion::new(backarc_pixels, chars, Some(boundary_idx)));
     }
 
     /// Generate active continental rifts (volcanic rift zones like East African Rift)
@@ -305,27 +424,24 @@ impl GeologyGenerator {
     /// (ridges, trenches, arcs, etc.) will be layered on top of this base.
     fn generate_oceanic_base_layer(
         &self,
-        plate_map: &TerrainMap<u16>,
+        plate_index: &PlatePixelIndex,
         plate_stats: &HashMap<u16, PlateStats>,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
 
-        // Fill ALL oceanic plates with abyssal plains as background
-        for (plate_id, stats) in plate_stats {
-            if stats.plate_type == PlateType::Oceanic {
-                // Collect all pixels belonging to this oceanic plate
-                let mut plate_pixels = Vec::new();
-                for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
-                    for (x, &pid) in row.iter().enumerate() {
-                        if pid == *plate_id {
-                            plate_pixels.push((x, y));
-                        }
-                    }
-                }
+        // Sort plates by ID for deterministic iteration order
+        let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
+        sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
 
-                if !plate_pixels.is_empty() {
-                    let chars = ProvinceCharacteristics::abyssal_plain(stats.area_km2 as f64);
-                    regions.push(ProvinceRegion::new(plate_pixels, chars, None));
+        // Fill ALL oceanic plates with abyssal plains as background
+        for (plate_id, stats) in sorted_plates {
+            if stats.plate_type == PlateType::Oceanic {
+                // Get pixels from pre-built index (O(1) lookup)
+                if let Some(plate_pixels) = plate_index.get(plate_id) {
+                    if !plate_pixels.is_empty() {
+                        let chars = ProvinceCharacteristics::abyssal_plain(stats.area_km2 as f64);
+                        regions.push(ProvinceRegion::new(plate_pixels.clone(), chars, None));
+                    }
                 }
             }
         }
@@ -333,18 +449,18 @@ impl GeologyGenerator {
         regions
     }
 
-    /// Generate oceanic overlays: Add ridges, fractures, seamounts on top of abyssal plains
+    /// Generate oceanic overlays: Add ridges and fractures on top of abyssal plains
     ///
     /// This creates features that overlay the abyssal plain base layer:
     /// 1. Mid-ocean ridges at divergent boundaries
     /// 2. Fracture zones at transform boundaries
-    /// 3. Seamount fields (random placement)
+    ///
+    /// Note: Hotspot tracks are generated separately as final overlays in generate_all_provinces()
     fn generate_oceanic_overlays(
         &self,
         boundaries: &[BoundarySegment],
         plate_map: &TerrainMap<u16>,
         plate_stats: &HashMap<u16, PlateStats>,
-        rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
 
@@ -359,7 +475,21 @@ impl GeologyGenerator {
                             boundary.length_km,
                         );
 
-                        let width_km = 400.0;
+                        // Mid-ocean ridges: Width depends on spreading rate
+                        // Fast-spreading (>10 cm/yr): ~50-80 km wide, smooth gentle rise (East Pacific Rise)
+                        // Slow-spreading (2-5 cm/yr): ~100-150 km wide, deep rift valley (Mid-Atlantic Ridge)
+                        // Ultra-slow (<1 cm/yr): Can be wider and more irregular (Gakkel Ridge)
+                        let spreading_rate = boundary.relative_velocity; // cm/year
+                        let width_km = if spreading_rate > 10.0 {
+                            60.0  // Fast-spreading: narrow, smooth
+                        } else if spreading_rate > 5.0 {
+                            80.0  // Medium-spreading
+                        } else if spreading_rate > 2.0 {
+                            120.0 // Slow-spreading: wider with rift valley
+                        } else {
+                            150.0 // Ultra-slow: widest, most irregular
+                        };
+
                         let pixels = self.expand_boundary(&boundary.pixels,
                             (width_km / km_per_px) as usize,
                             plate_map
@@ -390,24 +520,6 @@ impl GeologyGenerator {
             }
         }
 
-        // Third: Add seamount fields randomly to some oceanic plates
-        for (plate_id, stats) in plate_stats {
-            if stats.plate_type == PlateType::Oceanic && stats.area_km2 > 300_000 {
-                // 20% chance for seamount field on large oceanic plates
-                if rng.gen::<f64>() < 0.2 {
-                    let area = stats.area_km2 as f64 * 0.05; // Small portion of plate
-                    let chars = ProvinceCharacteristics::seamount_field(area);
-
-                    // Random sample of pixels from this plate
-                    let pixels = self.sample_plate_interior(*plate_id, plate_map, 0.05, rng);
-
-                    if !pixels.is_empty() {
-                        regions.push(ProvinceRegion::new(pixels, chars, None));
-                    }
-                }
-            }
-        }
-
         regions
     }
 
@@ -428,30 +540,26 @@ impl GeologyGenerator {
     fn generate_stable_continental_base(
         &self,
         plate_stats: &HashMap<u16, PlateStats>,
-        plate_map: &TerrainMap<u16>,
+        plate_index: &PlatePixelIndex,
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
 
+        // Sort plates by ID for deterministic iteration order
+        let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
+        sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
+
         // Process each continental plate
-        for (plate_id, stats) in plate_stats {
+        for (plate_id, stats) in sorted_plates {
             if stats.plate_type != PlateType::Continental {
                 continue;
             }
 
-            // Collect all pixels belonging to this continental plate
-            let mut plate_pixels = Vec::new();
-            for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
-                for (x, &pid) in row.iter().enumerate() {
-                    if pid == *plate_id {
-                        plate_pixels.push((x, y));
-                    }
-                }
-            }
-
-            if plate_pixels.is_empty() {
-                continue;
-            }
+            // Get pixels from pre-built index (O(1) lookup)
+            let plate_pixels = match plate_index.get(plate_id) {
+                Some(pixels) if !pixels.is_empty() => pixels,
+                _ => continue,
+            };
 
             // 1. PLATFORM (PINK) - Fill ALL continental pixels as base layer
             // This is the sedimentary-covered cratonic basement
@@ -638,8 +746,12 @@ impl GeologyGenerator {
             }
         }
 
+        // CRITICAL: Sort plates by ID to ensure deterministic iteration order
+        let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
+        sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
+
         // Rarely generate LIPs on plates
-        for (plate_id, stats) in plate_stats {
+        for (plate_id, stats) in sorted_plates {
             if rng.gen::<f64>() < self.config.lip_probability {
                 let (province_type, area) = if stats.plate_type == PlateType::Continental {
                     (GeologicProvince::ContinentalFloodBasalt, stats.area_km2 as f64 * 0.1)
@@ -669,6 +781,59 @@ impl GeologyGenerator {
         regions
     }
 
+    /// Helper: Core flood-fill expansion algorithm
+    ///
+    /// Generic expansion that can be filtered by a predicate function.
+    /// This is the common logic extracted from expand_boundary variants.
+    fn expand_boundary_filtered<F>(
+        &self,
+        boundary_pixels: &[(usize, usize)],
+        distance_pixels: usize,
+        plate_map: &TerrainMap<u16>,
+        mut filter: F,
+    ) -> Vec<(usize, usize)>
+    where
+        F: FnMut(usize, usize, &TerrainMap<u16>) -> bool,
+    {
+        let mut result = HashSet::new();
+        let mut current_layer: Vec<(usize, usize)> = boundary_pixels.to_vec();
+
+        // Add initial boundary pixels
+        for &pixel in boundary_pixels {
+            result.insert(pixel);
+        }
+
+        // Iteratively expand outward
+        for _ in 0..distance_pixels {
+            let mut next_layer = Vec::new();
+
+            for &(x, y) in &current_layer {
+                let neighbors = plate_map.get_neighbors(x, y);
+                for (nx, ny) in neighbors {
+                    // Skip if already in result
+                    if result.contains(&(nx, ny)) {
+                        continue;
+                    }
+
+                    // Apply filter predicate
+                    if filter(nx, ny, plate_map) {
+                        result.insert((nx, ny));
+                        next_layer.push((nx, ny));
+                    }
+                }
+            }
+
+            // Stop if no new pixels were added
+            if next_layer.is_empty() {
+                break;
+            }
+
+            current_layer = next_layer;
+        }
+
+        result.into_iter().collect()
+    }
+
     /// Helper: expand boundary pixels in all directions
     fn expand_boundary(
         &self,
@@ -676,34 +841,8 @@ impl GeologyGenerator {
         width_pixels: usize,
         plate_map: &TerrainMap<u16>,
     ) -> Vec<(usize, usize)> {
-        let mut result = HashSet::new();
-        let mut to_expand: Vec<(usize, usize)> = boundary_pixels.to_vec();
-
-        for &pixel in boundary_pixels {
-            result.insert(pixel);
-        }
-
-        for _ in 0..width_pixels {
-            let mut next_layer = Vec::new();
-
-            for &(x, y) in &to_expand {
-                let neighbors = plate_map.get_neighbors(x, y);
-                for neighbor in neighbors {
-                    if !result.contains(&neighbor) {
-                        result.insert(neighbor);
-                        next_layer.push(neighbor);
-                    }
-                }
-            }
-
-            if next_layer.is_empty() {
-                break;
-            }
-
-            to_expand = next_layer;
-        }
-
-        result.into_iter().collect()
+        // Accept all pixels (no filtering)
+        self.expand_boundary_filtered(boundary_pixels, width_pixels, plate_map, |_, _, _| true)
     }
 
     /// Helper: expand boundary pixels toward a specific plate
@@ -717,34 +856,11 @@ impl GeologyGenerator {
         distance_pixels: usize,
         plate_map: &TerrainMap<u16>,
     ) -> Vec<(usize, usize)> {
-        let mut result = HashSet::new();
-        let mut current_layer: Vec<(usize, usize)> = boundary_pixels.to_vec();
-
-        for _ in 0..distance_pixels {
-            let mut next_layer = Vec::new();
-
-            for &(x, y) in &current_layer {
-                let neighbors = plate_map.get_neighbors(x, y);
-                for (nx, ny) in neighbors {
-                    // Only expand into pixels belonging to the target plate
-                    let idx = ny * plate_map.width + nx;
-                    if idx < plate_map.data.len() && plate_map.data[idx] == target_plate {
-                        if !result.contains(&(nx, ny)) {
-                            result.insert((nx, ny));
-                            next_layer.push((nx, ny));
-                        }
-                    }
-                }
-            }
-
-            if next_layer.is_empty() {
-                break;
-            }
-
-            current_layer = next_layer;
-        }
-
-        result.into_iter().collect()
+        // Only accept pixels belonging to the target plate
+        self.expand_boundary_filtered(boundary_pixels, distance_pixels, plate_map, move |x, y, map| {
+            let idx = y * map.width + x;
+            idx < map.data.len() && map.data[idx] == target_plate
+        })
     }
 
     /// Helper: sample interior pixels from a plate
@@ -768,6 +884,53 @@ impl GeologyGenerator {
         pixels
     }
 
+    /// Helper: find pixels in deep plate interior (far from boundaries)
+    ///
+    /// Filters for pixels that are at least `min_distance` pixels away from any plate boundary.
+    /// This ensures features like hotspots spawn in plate centers, not near edges.
+    fn find_deep_interior_pixels(
+        &self,
+        plate_id: u16,
+        plate_map: &TerrainMap<u16>,
+        min_distance: usize,
+    ) -> Vec<(usize, usize)> {
+        let mut interior = Vec::new();
+
+        for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
+            for (x, &pid) in row.iter().enumerate() {
+                if pid != plate_id {
+                    continue;
+                }
+
+                // Check if all neighbors within min_distance are same plate
+                let mut is_interior = true;
+                'check: for dy in -(min_distance as i32)..=(min_distance as i32) {
+                    for dx in -(min_distance as i32)..=(min_distance as i32) {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+
+                        if nx < 0 || ny < 0 || nx >= plate_map.width as i32 || ny >= plate_map.height as i32 {
+                            is_interior = false;
+                            break 'check;
+                        }
+
+                        let idx = (ny as usize) * plate_map.width + (nx as usize);
+                        if idx < plate_map.data.len() && plate_map.data[idx] != plate_id {
+                            is_interior = false;
+                            break 'check;
+                        }
+                    }
+                }
+
+                if is_interior {
+                    interior.push((x, y));
+                }
+            }
+        }
+
+        interior
+    }
+
     /// Helper: Calculate kilometers per pixel for the given map
     ///
     /// Uses the map's projection resolution and the planetary radius
@@ -779,5 +942,228 @@ impl GeologyGenerator {
         let km_per_px = plate_map.projection.km_per_pixel(self.planetary_params.radius_km);
         // Guard against zero or negative values (should never happen with valid inputs)
         km_per_px.max(0.01)
+    }
+
+    /// Build an index mapping plate IDs to their pixel coordinates
+    ///
+    /// This scans the map once to build a lookup table, avoiding O(plates × pixels) complexity.
+    /// Complexity: O(width × height)
+    fn build_plate_pixel_index(&self, plate_map: &TerrainMap<u16>) -> PlatePixelIndex {
+        let mut index: PlatePixelIndex = HashMap::new();
+
+        for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
+            for (x, &plate_id) in row.iter().enumerate() {
+                index.entry(plate_id)
+                    .or_insert_with(Vec::new)
+                    .push((x, y));
+            }
+        }
+
+        index
+    }
+
+    /// Generate rare hotspot tracks (linear volcanic chains)
+    ///
+    /// Creates age-progressive volcanic chains as plates move over stationary mantle hotspots.
+    /// Earth has ~40-50 major hotspots globally, so these are very rare (2-5 per world).
+    ///
+    /// # Geological Process
+    ///
+    /// Hotspots are stationary plumes of hot mantle material that melt through moving plates,
+    /// creating volcanic features. As the plate moves, new volcanoes form while older ones
+    /// become extinct and erode, creating an age-progressive chain.
+    ///
+    /// # Chain Properties
+    ///
+    /// - **Direction**: Opposite to plate motion (oldest features in direction of motion)
+    /// - **Length**: Based on plate velocity × time, representing only VISIBLE portions:
+    ///   - Oceanic: 2,400 km max (Hawaiian Islands + atolls, 10-28 Ma)
+    ///   - Continental: 400 km max (Yellowstone calderas, 2-5 Ma)
+    /// - **Stopping**: Chains stop at plate boundaries where they get subducted/destroyed
+    /// - **Location**: Deep in plate interiors (200-400+ km from boundaries)
+    ///
+    /// # Examples
+    ///
+    /// - **Oceanic**: Hawaiian-Emperor chain (6,200 km total, but only ~2,400 km visible)
+    /// - **Continental**: Yellowstone hotspot track (Snake River Plain calderas)
+    ///
+    /// # Parameters
+    ///
+    /// - Only generated on large plates (>2M km²)
+    /// - 10-15% probability per large plate
+    /// - Results in 2-5 hotspots globally for typical 20-plate world
+    fn generate_hotspot_tracks(
+        &self,
+        plate_stats: &HashMap<u16, PlateStats>,
+        plate_map: &TerrainMap<u16>,
+        _plate_index: &PlatePixelIndex,
+        rng: &mut StdRng,
+    ) -> Vec<ProvinceRegion> {
+        let mut regions = Vec::new();
+
+        // CRITICAL: Sort plates by ID to ensure deterministic iteration order
+        // HashMap iteration order is non-deterministic, which would cause RNG
+        // to be called in different sequences on different runs
+        let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
+        sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
+
+        for (plate_id, stats) in sorted_plates {
+            // Only on large plates (>2M km²), very rare
+            if stats.area_km2 < 2_000_000 {
+                continue;
+            }
+
+            // ~10-15% chance per large plate = 2-5 hotspots globally for typical world
+            let probability = if stats.area_km2 > 10_000_000 {
+                0.15 // Pacific-sized plates more likely
+            } else {
+                0.10
+            };
+
+            if rng.gen::<f64>() > probability {
+                continue;
+            }
+
+            // Pick random hotspot location in DEEP PLATE INTERIOR (far from boundaries)
+            // Hotspots form in plate centers, not at edges
+            // Require at least 10-20 pixels from any boundary (200-400 km)
+            let min_distance = if stats.area_km2 > 10_000_000 {
+                20 // Large plates: 400+ km from edge
+            } else {
+                10 // Medium plates: 200+ km from edge
+            };
+
+            let interior_pixels = self.find_deep_interior_pixels(*plate_id, plate_map, min_distance);
+
+            if interior_pixels.is_empty() {
+                continue; // No suitable deep interior location found
+            }
+
+            let hotspot_idx = rng.gen_range(0..interior_pixels.len());
+            let hotspot_location = interior_pixels[hotspot_idx];
+
+            // Calculate chain direction (OPPOSITE to plate motion)
+            let plate_azimuth = stats.seed.motion_direction;
+            let chain_azimuth = (plate_azimuth + 180.0) % 360.0;
+
+            // Calculate chain length based on VISIBLE, geologically active portions only
+            //
+            // We don't include heavily eroded/subsided portions that are about to be subducted.
+            // This focuses on terrain-significant features.
+            //
+            // Oceanic example: Hawaiian chain
+            //   - Total length: 6,200 km (0-70 Ma)
+            //   - Visible portion: ~2,400 km (Hawaiian Islands + Northwestern Hawaiian atolls, 0-28 Ma)
+            //   - Old seamounts (28-70 Ma): heavily subsided, eroded flat, not terrain-significant
+            //
+            // Continental example: Yellowstone hotspot track
+            //   - Total length: ~800 km (0-16 Ma)
+            //   - Visible portion: ~400 km (recent calderas 0-5 Ma)
+            //   - Older calderas (5-16 Ma): buried under basalt flows, not visible
+            //
+            // Formula: length = velocity (cm/yr) × time (Ma) × 10,000 (conversion factor)
+            let (time_ma, max_length_km) = if stats.plate_type == PlateType::Oceanic {
+                // Oceanic: 10-28 Ma (young islands/atolls), max 2,400 km
+                (10.0 + rng.gen::<f64>() * 18.0, 2400.0)
+            } else {
+                // Continental: 2-5 Ma (recent calderas), max 400 km
+                (2.0 + rng.gen::<f64>() * 3.0, 400.0)
+            };
+
+            let chain_length_km = (stats.seed.motion_speed * time_ma * 10_000.0).min(max_length_km);
+
+            if chain_length_km < 200.0 {
+                continue; // Too short to be visible
+            }
+
+            // Create linear chain from hotspot location
+            let chain_pixels = self.create_linear_chain(
+                hotspot_location,
+                chain_azimuth,
+                chain_length_km,
+                *plate_id,
+                plate_map,
+            );
+
+            if chain_pixels.is_empty() {
+                continue;
+            }
+
+            // Widen slightly for visibility
+            // Real seamount chains: 50-200 km wide
+            // At ~22 km/pixel, 1-2 pixels = 22-44 km is realistic
+            let km_per_px = self.km_per_pixel(plate_map);
+            let width_km = if stats.plate_type == PlateType::Oceanic {
+                50.0 // Oceanic: narrow seamount chain
+            } else {
+                100.0 // Continental: wider volcanic field
+            };
+            let width_pixels = ((width_km / km_per_px) as usize).max(1);
+            let widened = self.expand_boundary(&chain_pixels, width_pixels, plate_map);
+
+            // Determine province type based on plate character
+            let chars = if stats.plate_type == PlateType::Oceanic {
+                ProvinceCharacteristics::oceanic_hotspot_track(chain_length_km)
+            } else {
+                ProvinceCharacteristics::continental_hotspot_track(chain_length_km)
+            };
+
+            regions.push(ProvinceRegion::new(widened, chars, None));
+        }
+
+        regions
+    }
+
+    /// Create a linear chain of pixels from a starting point along an azimuth
+    ///
+    /// Generates pixels in a line opposite to plate motion direction.
+    /// Stops at plate boundaries (where chains get subducted/destroyed).
+    /// Chain lengths represent geologically active/visible portions only.
+    fn create_linear_chain(
+        &self,
+        start: (usize, usize),
+        azimuth_degrees: f64,
+        length_km: f64,
+        plate_id: u16,
+        plate_map: &TerrainMap<u16>,
+    ) -> Vec<(usize, usize)> {
+        let mut chain = Vec::new();
+        chain.push(start);
+
+        let km_per_px = self.km_per_pixel(plate_map);
+        let num_steps = (length_km / km_per_px) as usize;
+
+        // Convert azimuth to radians and calculate direction vector
+        let azimuth_rad = azimuth_degrees.to_radians();
+        let dx = azimuth_rad.sin();
+        let dy = -azimuth_rad.cos(); // Negative because y increases downward
+
+        let mut x = start.0 as f64;
+        let mut y = start.1 as f64;
+
+        for _ in 0..num_steps {
+            x += dx;
+            y += dy;
+
+            let xi = x.round() as i32;
+            let yi = y.round() as i32;
+
+            // Check map bounds
+            if xi < 0 || yi < 0 || xi >= plate_map.width as i32 || yi >= plate_map.height as i32 {
+                break;
+            }
+
+            let (xu, yu) = (xi as usize, yi as usize);
+
+            // Stop at plate boundaries (subduction destroys the chain)
+            let idx = yu * plate_map.width + xu;
+            if idx >= plate_map.data.len() || plate_map.data[idx] != plate_id {
+                break;
+            }
+
+            chain.push((xu, yu));
+        }
+
+        chain
     }
 }

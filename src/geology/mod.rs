@@ -1,35 +1,52 @@
-//! Geological province generation from tectonic data
+//! Geological province generation from tectonic data (Stage 2)
 //!
-//! This module implements Stage 2 of the Geoforge pipeline: converting tectonic plate
-//! boundaries and motion into realistic geological provinces.
+//! This module implements the complete Stage 2 pipeline: converting tectonic plate
+//! boundaries and motion into 19 distinct geological province types.
 //!
-//! # Stage 2.1: Orogenic Belts
+//! # Complete Stage 2 Implementation
 //!
-//! Mountain-building zones created at convergent plate boundaries:
-//! - **Collision Orogens**: Continental-continental convergence (e.g., Himalayas)
-//! - **Subduction Orogens**: Oceanic-continental convergence (e.g., Andes)
+//! **Stage 2.1: Orogenic Belts** (3 types)
+//! - Collision, Subduction, and Accretionary orogens
 //!
-//! Note: Oceanic-oceanic convergence (island arcs) will be handled in a future stage.
+//! **Stage 2.2: Large Igneous Provinces** (3 types)
+//! - Continental flood basalts, oceanic plateaus, hotspot tracks
+//!
+//! **Stage 2.3: Arc and Basin Systems** (4 types)
+//! - Volcanic arcs, trenches, forearc/backarc basins
+//!
+//! **Stage 2.4: Stable Continental Regions** (3 types)
+//! - Cratons/shields, platforms, extended crust
+//!
+//! **Stage 2.6: Oceanic Domains** (4 types)
+//! - Abyssal plains, mid-ocean ridges, fracture zones, hotspot tracks
+//!
+//! **Deferred to Future**: Continental Rifts (Stage 2.5)
+//! - Will be implemented when needed
+//!
+//! # Architecture
+//!
+//! - `provinces`: Province type definitions and characteristics
+//! - `orogenic`: Specialized generator for orogenic belts
+//! - `generator`: Main generator coordinating all 19 province types
 //!
 //! # Usage
 //!
 //! ```rust,no_run
-//! use geoforge::geology::orogenic::{OrogenicBeltGenerator, OrogenicConfig};
 //! use geoforge::map::world::WorldMap;
 //!
 //! let mut world = WorldMap::new(1800, 900, 42).unwrap();
 //! world.tectonics().generate_plates(15).unwrap();
-//! world.analyze_boundaries(None).unwrap();
+//! world.tectonics().analyze(None).unwrap();
 //!
-//! // Generate orogenic belts from convergent boundaries
-//! let orogens = world.generate_geology(None).unwrap();
-//! println!("Generated {} orogenic belts", orogens.len());
+//! // Generate all geological provinces
+//! let provinces = world.generate_geology(None).unwrap();
+//! println!("Generated {} geological provinces", provinces.len());
 //! ```
 
 pub mod provinces;
 pub mod orogenic;
-pub mod comprehensive;
+pub mod generator;
 
 pub use provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 pub use orogenic::{OrogenicBeltGenerator, OrogenicConfig};
-pub use comprehensive::{GeologyGenerator, GeologyConfig};
+pub use generator::{GeologyGenerator, GeologyConfig};
