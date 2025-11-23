@@ -200,7 +200,6 @@ impl GeologyGenerator {
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
-        let km_per_px = self.km_per_pixel(plate_map);
 
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type != PlateInteraction::Convergent {
@@ -219,15 +218,15 @@ impl GeologyGenerator {
 
                     // Generate complete arc system sequentially
                     self.create_ocean_trench(boundary, idx, plate_map, &mut regions);
-                    self.create_forearc_basin(boundary, overriding_plate, idx, plate_map, km_per_px, rng, &mut regions);
+                    self.create_forearc_basin(boundary, overriding_plate, idx, plate_map, rng, &mut regions);
 
                     let (arc_offset_km, arc_width_km) = self.create_volcanic_arc(
-                        boundary, overriding_plate, idx, plate_map, km_per_px, rng, &mut regions
+                        boundary, overriding_plate, idx, plate_map, rng, &mut regions
                     );
 
                     self.create_backarc_basin(
                         boundary, overriding_plate, idx, arc_offset_km, arc_width_km,
-                        stats_a, stats_b, plate_map, km_per_px, rng, &mut regions
+                        stats_a, stats_b, plate_map, rng, &mut regions
                     );
                 }
             }
@@ -254,12 +253,9 @@ impl GeologyGenerator {
 
         // Trenches are narrow: 50-100 km wide
         let width_km = 75.0; // Average trench width
-        let km_per_px = self.km_per_pixel(plate_map);
-        let pixels = self.expand_boundary(
-            &boundary.pixels,
-            (width_km / km_per_px) as usize,
-            plate_map
-        );
+
+        // Use spherical-aware expansion to account for latitude
+        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
         regions.push(ProvinceRegion::new(
             pixels,
@@ -275,15 +271,16 @@ impl GeologyGenerator {
         overriding_plate: u16,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
-        km_per_px: f64,
         rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) {
         let width_km = 50.0 + rng.gen::<f64>() * 50.0;
-        let pixels = self.expand_boundary_toward_plate(
+
+        // Use spherical-aware expansion
+        let pixels = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
-            (width_km / km_per_px) as usize,
+            width_km,
             plate_map
         );
 
@@ -300,23 +297,24 @@ impl GeologyGenerator {
         overriding_plate: u16,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
-        km_per_px: f64,
         rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
         let offset_km = 150.0 + rng.gen::<f64>() * 150.0;
         let width_km = 100.0 + rng.gen::<f64>() * 100.0;
 
-        let arc_center = self.expand_boundary_toward_plate(
+        // Use spherical-aware expansion for offset
+        let arc_center = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
-            (offset_km / km_per_px) as usize,
+            offset_km,
             plate_map
         );
 
-        let arc_pixels = self.expand_boundary(
+        // Use spherical-aware expansion for width (half on each side)
+        let arc_pixels = self.expand_boundary_spherical(
             &arc_center,
-            (width_km / km_per_px / 2.0) as usize,
+            width_km / 2.0,
             plate_map
         );
 
@@ -340,7 +338,6 @@ impl GeologyGenerator {
         stats_a: &PlateStats,
         stats_b: &PlateStats,
         plate_map: &TerrainMap<u16>,
-        km_per_px: f64,
         rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) {
@@ -352,16 +349,18 @@ impl GeologyGenerator {
         let offset_km = arc_offset_km + arc_width_km + 50.0;
         let width_km = 100.0 + rng.gen::<f64>() * 100.0;
 
-        let backarc_center = self.expand_boundary_toward_plate(
+        // Use spherical-aware expansion for offset
+        let backarc_center = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
-            (offset_km / km_per_px) as usize,
+            offset_km,
             plate_map
         );
 
-        let backarc_pixels = self.expand_boundary(
+        // Use spherical-aware expansion for width (half on each side)
+        let backarc_pixels = self.expand_boundary_spherical(
             &backarc_center,
-            (width_km / km_per_px / 2.0) as usize,
+            width_km / 2.0,
             plate_map
         );
 
@@ -403,11 +402,9 @@ impl GeologyGenerator {
                     );
 
                     let width_km = 250.0 + rng.gen::<f64>() * 150.0;
-                    let km_per_px = self.km_per_pixel(plate_map);
-                    let pixels = self.expand_boundary(&boundary.pixels,
-                        (width_km / km_per_px) as usize,
-                        plate_map
-                    );
+
+                    // Use spherical-aware expansion
+                    let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                     regions.push(ProvinceRegion::new(pixels, characteristics, Some(idx)));
                 }
@@ -465,7 +462,6 @@ impl GeologyGenerator {
         let mut regions = Vec::new();
 
         // First: Overlay mid-ocean ridges at divergent oceanic boundaries
-        let km_per_px = self.km_per_pixel(plate_map);
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type == PlateInteraction::Divergent {
                 if let (Some(a), Some(b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
@@ -490,10 +486,8 @@ impl GeologyGenerator {
                             150.0 // Ultra-slow: widest, most irregular
                         };
 
-                        let pixels = self.expand_boundary(&boundary.pixels,
-                            (width_km / km_per_px) as usize,
-                            plate_map
-                        );
+                        // Use spherical-aware expansion to account for latitude
+                        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                         regions.push(ProvinceRegion::new(pixels, chars, Some(idx)));
                     }
@@ -509,10 +503,9 @@ impl GeologyGenerator {
                         let chars = ProvinceCharacteristics::oceanic_fracture_zone(boundary.length_km);
 
                         let width_km = 100.0;
-                        let pixels = self.expand_boundary(&boundary.pixels,
-                            (width_km / km_per_px) as usize,
-                            plate_map
-                        );
+
+                        // Use spherical-aware expansion
+                        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                         regions.push(ProvinceRegion::new(pixels, chars, Some(idx)));
                     }
@@ -693,11 +686,8 @@ impl GeologyGenerator {
                     80.0 + 50.0 // 130 km
                 };
 
-                let km_per_px = self.km_per_pixel(plate_map);
-                let pixels = self.expand_boundary(&boundary.pixels,
-                    (width_km / km_per_px) as usize,
-                    plate_map
-                );
+                // Use spherical-aware expansion
+                let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                 // Filter to only include continental pixels
                 let continental_pixels: Vec<(usize, usize)> = pixels.iter()
@@ -861,6 +851,102 @@ impl GeologyGenerator {
             let idx = y * map.width + x;
             idx < map.data.len() && map.data[idx] == target_plate
         })
+    }
+
+    /// Helper: Spherical-aware expansion with latitude-dependent distance
+    ///
+    /// Unlike `expand_boundary()` which uses fixed pixel distance, this accounts for
+    /// latitude: near poles, we need to expand MORE pixels to cover the same km distance
+    /// because pixels are "narrower" east-west at high latitudes.
+    ///
+    /// Uses average latitude of boundary to determine expansion distance.
+    ///
+    /// # Arguments
+    /// * `boundary_pixels` - Starting pixels
+    /// * `target_width_km` - Desired width in kilometers
+    /// * `plate_map` - The terrain map
+    ///
+    /// # Returns
+    /// Expanded pixel set with latitude-corrected distances
+    fn expand_boundary_spherical(
+        &self,
+        boundary_pixels: &[(usize, usize)],
+        target_width_km: f64,
+        plate_map: &TerrainMap<u16>,
+    ) -> Vec<(usize, usize)> {
+        if boundary_pixels.is_empty() {
+            return Vec::new();
+        }
+
+        // Calculate average latitude of the boundary
+        let avg_lat = {
+            let mut sum = 0.0;
+            for &(x, y) in boundary_pixels {
+                let (lat, _) = plate_map.projection.pixel_to_coords(x, y);
+                sum += lat;
+            }
+            sum / boundary_pixels.len() as f64
+        };
+
+        // Calculate effective km per pixel at this latitude
+        let km_per_px_ns = self.km_per_pixel(plate_map);
+        let lat_rad = avg_lat.to_radians();
+        // At high latitudes, pixels are compressed east-west by cos(lat)
+        // So we need MORE iterations to cover the same km
+        let latitude_factor = lat_rad.cos().abs().max(0.1); // Avoid division by zero near poles
+        let effective_km_per_px = km_per_px_ns * latitude_factor;
+
+        // Calculate pixel distance needed at this latitude
+        let distance_pixels = (target_width_km / effective_km_per_px).ceil() as usize;
+
+        // Use standard expansion with corrected pixel distance
+        self.expand_boundary(boundary_pixels, distance_pixels, plate_map)
+    }
+
+    /// Helper: Spherical-aware expansion toward a specific plate
+    ///
+    /// Like `expand_boundary_spherical()` but only expands onto the target plate.
+    ///
+    /// # Arguments
+    /// * `boundary_pixels` - Starting pixels
+    /// * `target_plate` - Plate ID to expand toward
+    /// * `target_width_km` - Desired width in kilometers
+    /// * `plate_map` - The terrain map
+    ///
+    /// # Returns
+    /// Expanded pixel set with latitude-corrected distances, filtered to target plate
+    fn expand_boundary_toward_plate_spherical(
+        &self,
+        boundary_pixels: &[(usize, usize)],
+        target_plate: u16,
+        target_width_km: f64,
+        plate_map: &TerrainMap<u16>,
+    ) -> Vec<(usize, usize)> {
+        if boundary_pixels.is_empty() {
+            return Vec::new();
+        }
+
+        // Calculate average latitude of the boundary
+        let avg_lat = {
+            let mut sum = 0.0;
+            for &(x, y) in boundary_pixels {
+                let (lat, _) = plate_map.projection.pixel_to_coords(x, y);
+                sum += lat;
+            }
+            sum / boundary_pixels.len() as f64
+        };
+
+        // Calculate effective km per pixel at this latitude
+        let km_per_px_ns = self.km_per_pixel(plate_map);
+        let lat_rad = avg_lat.to_radians();
+        let latitude_factor = lat_rad.cos().abs().max(0.1);
+        let effective_km_per_px = km_per_px_ns * latitude_factor;
+
+        // Calculate pixel distance needed at this latitude
+        let distance_pixels = (target_width_km / effective_km_per_px).ceil() as usize;
+
+        // Use standard expansion with corrected pixel distance
+        self.expand_boundary_toward_plate(boundary_pixels, target_plate, distance_pixels, plate_map)
     }
 
     /// Helper: sample interior pixels from a plate
@@ -1091,15 +1177,14 @@ impl GeologyGenerator {
 
             // Widen slightly for visibility
             // Real seamount chains: 50-200 km wide
-            // At ~22 km/pixel, 1-2 pixels = 22-44 km is realistic
-            let km_per_px = self.km_per_pixel(plate_map);
             let width_km = if stats.plate_type == PlateType::Oceanic {
                 50.0 // Oceanic: narrow seamount chain
             } else {
                 100.0 // Continental: wider volcanic field
             };
-            let width_pixels = ((width_km / km_per_px) as usize).max(1);
-            let widened = self.expand_boundary(&chain_pixels, width_pixels, plate_map);
+
+            // Use spherical-aware expansion
+            let widened = self.expand_boundary_spherical(&chain_pixels, width_km, plate_map);
 
             // Determine province type based on plate character
             let chars = if stats.plate_type == PlateType::Oceanic {

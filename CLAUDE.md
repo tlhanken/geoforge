@@ -151,6 +151,7 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - Clean module structure with clear naming
 - Comprehensive documentation
 - Deterministic generation verified
+- **Spherical-aware expansion**: Mid-ocean ridges and trenches now account for latitude compression (more pixels at high latitudes to maintain consistent km width)
 
 **Polishing Phase: Remaining Actions**
 
