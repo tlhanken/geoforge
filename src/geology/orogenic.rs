@@ -4,6 +4,7 @@
 
 use crate::geology::provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 use crate::map::terrain::TerrainMap;
+use crate::map::spherical::PlanetaryParams;
 use crate::tectonics::boundary_analysis::BoundarySegment;
 use crate::tectonics::plates::{PlateInteraction, PlateStats, PlateType};
 use std::collections::{HashMap, HashSet};
@@ -87,12 +88,14 @@ impl OrogenicConfig {
 /// Generator for orogenic belts from tectonic boundaries
 pub struct OrogenicBeltGenerator {
     config: OrogenicConfig,
+    /// Planetary parameters (for map scale calculations and other properties)
+    planetary_params: PlanetaryParams,
 }
 
 impl OrogenicBeltGenerator {
-    /// Create a new orogenic belt generator with default configuration
-    pub fn new(config: OrogenicConfig) -> Self {
-        Self { config }
+    /// Create a new orogenic belt generator with configuration and planetary parameters
+    pub fn new(config: OrogenicConfig, planetary_params: PlanetaryParams) -> Self {
+        Self { config, planetary_params }
     }
 
     /// Generate orogenic belts from convergent plate boundaries
@@ -140,6 +143,7 @@ impl OrogenicBeltGenerator {
                     width_km,
                     boundary.relative_velocity,
                     plate_map,
+                    plate_stats,
                     boundary_idx,
                 );
 
@@ -242,6 +246,7 @@ impl OrogenicBeltGenerator {
     /// * `width_km` - Width of the belt in kilometers
     /// * `convergence_rate` - Convergence rate in cm/year
     /// * `plate_map` - The tectonic plate map (for distance calculations)
+    /// * `plate_stats` - Plate statistics for filtering by type
     /// * `boundary_idx` - Index of the source boundary
     ///
     /// # Returns
@@ -253,18 +258,16 @@ impl OrogenicBeltGenerator {
         width_km: f64,
         convergence_rate: f64,
         plate_map: &TerrainMap<u16>,
+        plate_stats: &HashMap<u16, PlateStats>,
         boundary_idx: usize,
     ) -> ProvinceRegion {
-        // Calculate approximate km per pixel (at equator, using latitude resolution)
-        // For a more accurate calculation, would need to know the planetary radius
-        const EARTH_RADIUS_KM: f64 = 6371.0;
-        let degrees_per_pixel = plate_map.projection.lat_resolution;
-        let km_per_pixel = degrees_per_pixel.to_radians() * EARTH_RADIUS_KM;
+        // Calculate km per pixel using the map's projection and planetary radius
+        let km_per_pixel = plate_map.projection.km_per_pixel(self.planetary_params.radius_km);
 
         let width_pixels = (width_km / km_per_pixel).ceil() as usize;
 
-        // Expand boundary pixels into a belt
-        let belt_pixels = self.expand_boundary_pixels(&boundary.pixels, width_pixels, plate_map);
+        // Expand boundary pixels into a belt (CONTINENTAL PLATES ONLY)
+        let belt_pixels = self.expand_boundary_pixels(&boundary.pixels, width_pixels, plate_map, plate_stats);
 
         // Create characteristics based on orogen type
         let characteristics = match orogen_type {
@@ -283,22 +286,25 @@ impl OrogenicBeltGenerator {
         ProvinceRegion::new(belt_pixels, characteristics, Some(boundary_idx))
     }
 
-    /// Expand boundary pixels into a belt region
+    /// Expand boundary pixels into a belt region (CONTINENTAL PLATES ONLY)
     ///
     /// Uses flood-fill expansion to create a belt perpendicular to the boundary.
+    /// **IMPORTANT**: Only expands onto CONTINENTAL plates. Orogens cannot form on oceanic crust.
     ///
     /// # Arguments
     /// * `boundary_pixels` - Initial boundary pixels
     /// * `width_pixels` - How many pixels to expand on each side
-    /// * `plate_map` - The map (for bounds checking)
+    /// * `plate_map` - The map (for bounds checking and plate ID lookup)
+    /// * `plate_stats` - Plate statistics for filtering by plate type
     ///
     /// # Returns
-    /// Expanded set of pixels forming the belt
+    /// Expanded set of pixels forming the belt (continental pixels only)
     fn expand_boundary_pixels(
         &self,
         boundary_pixels: &[(usize, usize)],
         width_pixels: usize,
         plate_map: &TerrainMap<u16>,
+        plate_stats: &HashMap<u16, PlateStats>,
     ) -> Vec<(usize, usize)> {
         let mut result = HashSet::new();
         let mut to_expand: Vec<(usize, usize)> = boundary_pixels.to_vec();
@@ -308,7 +314,7 @@ impl OrogenicBeltGenerator {
             result.insert(pixel);
         }
 
-        // Expand iteratively
+        // Expand iteratively, ONLY onto continental plates
         for _ in 0..width_pixels {
             let mut next_layer = Vec::new();
 
@@ -316,10 +322,21 @@ impl OrogenicBeltGenerator {
                 // Get neighbors
                 let neighbors = plate_map.get_neighbors(x, y);
 
-                for neighbor in neighbors {
-                    if !result.contains(&neighbor) {
-                        result.insert(neighbor);
-                        next_layer.push(neighbor);
+                for (nx, ny) in neighbors {
+                    if !result.contains(&(nx, ny)) {
+                        // Check if this pixel is on a continental plate
+                        let idx = ny * plate_map.width + nx;
+                        if idx < plate_map.data.len() {
+                            let plate_id = plate_map.data[idx];
+
+                            // ONLY expand onto CONTINENTAL plates
+                            if let Some(stats) = plate_stats.get(&plate_id) {
+                                if stats.plate_type == PlateType::Continental {
+                                    result.insert((nx, ny));
+                                    next_layer.push((nx, ny));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -368,7 +385,10 @@ mod tests {
 
     #[test]
     fn test_orogen_classification_collision() {
-        let generator = OrogenicBeltGenerator::new(OrogenicConfig::default());
+        let generator = OrogenicBeltGenerator::new(
+            OrogenicConfig::default(),
+            PlanetaryParams::earth()
+        );
         let mut plate_stats = HashMap::new();
 
         // Create two continental plates
@@ -416,7 +436,10 @@ mod tests {
 
     #[test]
     fn test_orogen_classification_subduction() {
-        let generator = OrogenicBeltGenerator::new(OrogenicConfig::default());
+        let generator = OrogenicBeltGenerator::new(
+            OrogenicConfig::default(),
+            PlanetaryParams::earth()
+        );
         let mut plate_stats = HashMap::new();
 
         // Oceanic plate
@@ -465,7 +488,10 @@ mod tests {
 
     #[test]
     fn test_width_calculation_by_type() {
-        let generator = OrogenicBeltGenerator::new(OrogenicConfig::default());
+        let generator = OrogenicBeltGenerator::new(
+            OrogenicConfig::default(),
+            PlanetaryParams::earth()
+        );
 
         let collision_width = generator.calculate_orogen_width(
             GeologicProvince::CollisionOrogen,

@@ -21,6 +21,11 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
   - Island removal for plate contiguity
   - Plate motion assignment and boundary classification
   - Boundary visualization export
+- 🔧 **Stage 2: Geologic Provinces** - IN PROGRESS (polishing phase)
+  - 20 province types implemented (2.1-2.6 complete)
+  - ~1,950 lines of code across 3 modules
+  - 16 tests passing (9 unit + 7 integration)
+  - Ready for polishing and validation
 - ✅ Comprehensive planetary parameters system
 - ✅ Stellar luminosity and insolation calculations
 - ✅ Physics-based orbital mechanics (inverse square law)
@@ -125,42 +130,86 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Visualization export** - Color-coded boundary types (red=convergent, blue=divergent, green=transform)
 - **Note:** Foundation for Stage 2 (geologic provinces) and Stage 3 (elevation)
 
-### **Stage 2: Geologic Provinces** ⏳ PLANNED
+### **Stage 2: Geologic Provinces** 🔧 IN PROGRESS (Polishing)
 **Foundation:** Use tectonic plates to determine geological characteristics and provinces
 
-**2.1 Orogenic Belts (Mountain-building zones)**
-- **Collision orogeny** - Continental plate convergence (Himalayas-style)
-- **Subduction orogeny** - Oceanic-continental convergence (Andes-style)  
-- **Accretionary orogeny** - Terrane accretion and exotic block collision
-- **Extensional orogeny** - Core complex formation in rifting zones
+**Implementation Status:**
+- ✅ **2.1 Orogenic Belts** - Collision, subduction, accretionary, extensional orogens
+- ✅ **2.2 Large Igneous Provinces** - Continental flood basalts, oceanic plateaus, hotspot tracks
+- ✅ **2.3 Arc and Basin Systems** - Volcanic arcs, forearc/backarc basins, trenches
+- ✅ **2.4 Stable Continental Regions** - Cratons/shields, platforms, intracratonic basins
+- ✅ **2.5 Extensional Zones** - Continental rifts, extended crust
+- ✅ **2.6 Oceanic Domains** - Mid-ocean ridges, abyssal plains, fracture zones, seamounts
 
-**2.2 Large Igneous Provinces (LIPs)**
-- **Continental flood basalts** - Massive volcanic provinces (Deccan Traps-style)
-- **Oceanic plateaus** - Underwater volcanic provinces
-- **Hotspot tracks** - Volcanic island chains and seamount trails
-- **Dyke swarms** - Radiating intrusive networks
+**Polishing Phase: Next Actions**
 
-**2.3 Arc and Basin Systems**
-- **Volcanic arcs** - Active subduction zone volcanism
-- **Forearc basins** - Sedimentary basins between trench and arc
-- **Backarc basins** - Extensional basins behind volcanic arcs
-- **Backarc ridges** - Spreading centers in backarc regions
+**Phase 1: Critical Fixes & Simplification** ⭐ HIGH PRIORITY
+- [ ] **Simplify naming conventions** - Remove vague names like "comprehensive"
+  - Rename `ComprehensiveGeologyGenerator` → `GeologyGenerator` (it's THE geology generator)
+  - Rename `ComprehensiveGeologyConfig` → `GeologyConfig`
+  - Review all type names for clarity and purpose
+- [ ] **Extract constants** - Replace magic numbers with named constants
+  - `71.0` km/pixel → dynamic calculation from map resolution
+  - Extract `EARTH_RADIUS_KM` to shared constants module
+  - Add geodetic constants: `EQUATORIAL_KM_PER_DEGREE`, widths for features
+- [ ] **Fix potential bugs**
+  - Add defensive checks for empty pixel lists in bounds calculations
+  - Validate division-by-zero scenarios in km/pixel calculations
+  - Handle edge cases in plate pixel collection
 
-**2.4 Stable Continental Regions**
-- **Cratons/Shields** - Ancient, stable continental cores (>1.5 Ga)
-- **Platforms** - Stable cratonic areas with thin sedimentary cover
-- **Intracratonic basins** - Subsided regions within stable cratons
+**Phase 2: Code Quality & Refactoring** ⭐ HIGH PRIORITY
+- [ ] **Eliminate code duplication**
+  - Refactor `expand_boundary()` and `expand_boundary_toward_plate()` - extract common flood-fill pattern
+  - Consolidate repeated plate pixel collection loops (performance issue)
+- [ ] **Optimize performance**
+  - Build `PlatePixelIndex` once during generation instead of scanning per-plate
+  - Reduces O(plates × width × height) to O(width × height + plates)
+  - Profile and optimize HashSet→Vec conversions in expansion
+- [ ] **Simplify complex functions**
+  - Break down large functions (e.g., `generate_arc_systems` at 106 lines)
+  - Extract helper methods for clarity
+  - Remove unnecessary complexity
 
-**2.5 Extensional Zones**
-- **Continental rifts** - Active extension and normal faulting
-- **Extended crust** - Thinned continental crust from extension
-- **Transitional crust** - Continent-ocean boundary zones
+**Phase 3: Testing & Validation** ⭐ HIGH PRIORITY
+- [ ] **Add comprehensive geology integration test**
+  - Test `GeologyGenerator` full pipeline (currently only `OrogenicBeltGenerator` tested)
+  - Verify all province categories generate correctly
+  - Test province layering (foundation → active features)
+- [ ] **Add edge case tests**
+  - Empty boundary lists
+  - Single-pixel plates
+  - Polar region provinces
+  - Longitude wraparound handling
+- [ ] **Visual validation of all 20 province types** ⭐ CRITICAL
+  - Generate test worlds with known configurations
+  - Export PNG visualizations for each province type
+  - Validate color assignments match geological meaning:
+    - Collision orogens: High elevation (browns/whites)
+    - Subduction orogens: Moderate-high elevation (browns)
+    - Oceanic features: Blues (depth-based gradients)
+    - Continental stable: Greens/tans (low elevation)
+    - Volcanic: Reds/oranges (active features)
+  - Verify behavior: width, roughness, intensity all sensible
+  - Check for overlaps, gaps, or rendering issues
 
-**2.6 Oceanic Domains**
-- **Mid-ocean ridges** - Active seafloor spreading centers
-- **Abyssal plains** - Deep oceanic basins with sediment cover
-- **Oceanic fracture zones** - Transform fault systems
-- **Deep ocean trenches** - Subduction zone depocenters
+**Phase 4: Documentation** ⭐ MEDIUM PRIORITY
+- [ ] **Add module-level usage examples**
+  - Complete example in `provinces.rs`, `orogenic.rs`, `geology/mod.rs`
+  - Show common workflows and configurations
+- [ ] **Enhance province documentation**
+  - Add elevation ranges to each province type (+4000m to +8000m for collision orogens)
+  - Add typical width ranges (500-2000 km for collision zones)
+  - Add more real-world examples per province type
+- [ ] **Document constants and formulas**
+  - Explain km/pixel calculations
+  - Document width scaling formulas
+  - Add references to geological literature where appropriate
+
+**Phase 5: API Polish** ⭐ LOW PRIORITY
+- [ ] **Consider API improvements** (optional, evaluate need)
+  - `ComprehensiveGeologyConfig` boolean flags → enum-based `enabled_stages`?
+  - Builder pattern for `ProvinceRegion`?
+  - Ergonomics review with fresh eyes
 
 ### **Stage 3: Elevation Generation** ⏳ PLANNED
 **Foundation:** Use geologic provinces to generate realistic elevation
@@ -219,9 +268,9 @@ cargo check --features export-full
 ```
 
 ## Current Branch
-- Working on: `spherical_coords_tectonics`
+- Working on: `stage2_geologic_provinces`
 - Main branch: `main`
-- Recent focus: Spherical coordinate system and tectonics improvements
+- Recent focus: Polishing Stage 2 geologic provinces implementation
 
 ## Dependencies
 - `rand = "0.8"` - Random number generation

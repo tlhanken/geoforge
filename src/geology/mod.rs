@@ -32,4 +32,4 @@ pub mod comprehensive;
 
 pub use provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 pub use orogenic::{OrogenicBeltGenerator, OrogenicConfig};
-pub use comprehensive::{ComprehensiveGeologyGenerator, ComprehensiveGeologyConfig};
+pub use comprehensive::{GeologyGenerator, GeologyConfig};

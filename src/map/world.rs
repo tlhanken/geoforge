@@ -569,7 +569,7 @@ impl WorldMap {
     /// Vector of all geological provinces
     pub fn generate_geology(
         &mut self,
-        config: Option<crate::geology::comprehensive::ComprehensiveGeologyConfig>
+        config: Option<crate::geology::GeologyConfig>
     ) -> Result<Vec<ProvinceRegion>, Box<dyn std::error::Error>> {
         // Ensure tectonics exist
         let plate_map = self.tectonics.as_ref()
@@ -583,11 +583,12 @@ impl WorldMap {
             return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
         }
 
-        // Generate all geological provinces using comprehensive generator
+        // Generate all geological provinces
         let config = config.unwrap_or_default();
-        let generator = crate::geology::comprehensive::ComprehensiveGeologyGenerator::new(
+        let generator = crate::geology::GeologyGenerator::new(
             config,
-            self.seed
+            self.seed,
+            self.planetary_params.clone()
         );
 
         let provinces = generator.generate_all_provinces(
@@ -787,15 +788,63 @@ impl WorldMap {
         Ok(())
     }
 
+    /// Get RGB color for a geological province type
+    ///
+    /// Returns a distinct color for each province type, organized by geological category
+    /// and avoiding boundary colors (red/blue/green).
+    #[cfg(feature = "export-png")]
+    fn get_province_color(province_type: crate::geology::provinces::GeologicProvince) -> [u8; 3] {
+        use crate::geology::provinces::GeologicProvince;
+
+        match province_type {
+            // Stage 2.1: Orogenic Belts - GREEN FAMILY
+            GeologicProvince::CollisionOrogen => [50, 150, 80],        // Dark green
+            GeologicProvince::SubductionOrogen => [100, 180, 120],     // Medium green
+            GeologicProvince::AccretionaryOrogen => [120, 200, 140],   // Light green
+            GeologicProvince::ExtensionalOrogen => [140, 220, 160],    // Pale green
+
+            // Stage 2.2: Large Igneous Provinces - PURPLE FAMILY
+            GeologicProvince::ContinentalFloodBasalt => [150, 50, 150],  // Purple
+            GeologicProvince::OceanicPlateau => [180, 100, 180],         // Light purple
+            GeologicProvince::HotspotTrack => [200, 120, 200],           // Pale purple
+            GeologicProvince::VolcanicArc => [130, 30, 130],             // Dark purple (moved from Arc/Basin)
+
+            // Stage 2.3: Arc and Basin Systems - MIDTONE GREYS
+            GeologicProvince::ForearcBasin => [160, 160, 160],         // Medium grey
+            GeologicProvince::BackarcBasin => [180, 180, 180],         // Light grey
+
+            // Stage 2.4: Stable Continental Regions (Cratons = Shield + Platform)
+            GeologicProvince::Craton => [255, 140, 60],                // Orange (Shield - exposed Precambrian)
+            GeologicProvince::Platform => [255, 150, 200],             // Pink (Platform - sedimentary cover)
+            GeologicProvince::IntracratonicBasin => [160, 120, 180],   // Purple-grey (subsided basin)
+
+            // Stage 2.5: Extensional Zones - YELLOW COLORS
+            GeologicProvince::ContinentalRift => [255, 220, 60],       // Bright yellow
+            GeologicProvince::ExtendedCrust => [255, 240, 120],        // Pale yellow
+
+            // Stage 2.6: Oceanic Domains - CYAN/TURQUOISE FAMILY (unchanged)
+            GeologicProvince::MidOceanRidge => [100, 200, 200],        // Cyan-green
+            GeologicProvince::AbyssalPlain => [140, 160, 160],         // Gray-blue
+            GeologicProvince::OceanTrench => [80, 120, 140],           // Dark blue-gray
+            GeologicProvince::OceanicFractureZone => [120, 180, 170],  // Teal
+            GeologicProvince::SeamountField => [90, 170, 160],         // Dark teal
+        }
+    }
+
     /// Export geological provinces as PNG with color-coded province types
     ///
     /// This creates a visualization showing:
-    /// - **Red**: Collision orogens (continental-continental convergence)
-    /// - **Orange**: Subduction orogens (oceanic-continental convergence)
+    /// - **Green family**: Orogenic belts (mountain-building zones)
+    /// - **Purple family**: Large igneous provinces and volcanic arcs
+    /// - **Grey**: Arc and basin systems
+    /// - **Orange**: Shields (exposed Precambrian craton cores)
+    /// - **Pink**: Platforms (sedimentary-covered cratons)
+    /// - **Purple-grey**: Intracratonic basins (subsided regions within cratons)
+    /// - **Yellow**: Extensional zones (rifts and extended crust)
+    /// - **Cyan/Turquoise**: Oceanic domains
     /// - **White**: Unpopulated areas (no geological province)
     ///
-    /// The visualization overlays geological provinces on the map, showing where
-    /// mountain-building processes are occurring.
+    /// Note: Cratons = Shields + Platforms (ancient stable continental basement)
     ///
     /// # Example
     /// ```no_run
@@ -810,7 +859,6 @@ impl WorldMap {
     #[cfg(feature = "export-png")]
     pub fn export_geology_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         use image::{ImageBuffer, Rgb};
-        use crate::geology::provinces::GeologicProvince;
 
         fs::create_dir_all(output_dir)?;
         let path = std::path::Path::new(output_dir).join(filename);
@@ -823,41 +871,9 @@ impl WorldMap {
                 Rgb([255, 255, 255])
             );
 
-            // Color each province region with distinct colors (avoiding red/green/blue used by boundaries)
+            // Color each province region using the centralized color function
             for region in geology {
-                let color: [u8; 3] = match region.characteristics.province_type {
-                    // Stage 2.1: Orogenic Belts (Purple/Pink/Magenta family)
-                    GeologicProvince::CollisionOrogen => [150, 50, 150],      // Purple (continental collision)
-                    GeologicProvince::SubductionOrogen => [255, 180, 50],     // Amber/Gold (volcanic arc)
-                    GeologicProvince::AccretionaryOrogen => [200, 100, 200],  // Light purple
-                    GeologicProvince::ExtensionalOrogen => [220, 150, 220],   // Pink
-
-                    // Stage 2.2: Large Igneous Provinces (Brown/Orange family)
-                    GeologicProvince::ContinentalFloodBasalt => [180, 100, 60],  // Dark orange-brown
-                    GeologicProvince::OceanicPlateau => [160, 120, 100],         // Brownish-gray
-                    GeologicProvince::HotspotTrack => [200, 140, 80],            // Light brown
-
-                    // Stage 2.3: Arc and Basin Systems (Yellow/Amber family)
-                    GeologicProvince::VolcanicArc => [255, 200, 0],           // Bright yellow-orange
-                    GeologicProvince::ForearcBasin => [230, 220, 180],        // Pale yellow
-                    GeologicProvince::BackarcBasin => [255, 230, 150],        // Light yellow
-
-                    // Stage 2.4: Stable Continental Regions (Tan/Beige family)
-                    GeologicProvince::Craton => [210, 180, 140],              // Tan
-                    GeologicProvince::Platform => [230, 200, 160],            // Light tan
-                    GeologicProvince::IntracratonicBasin => [190, 170, 140],  // Darker tan
-
-                    // Stage 2.5: Extensional Zones (Pink/Salmon family)
-                    GeologicProvince::ContinentalRift => [255, 160, 180],     // Pink-salmon
-                    GeologicProvince::ExtendedCrust => [255, 200, 200],       // Light pink
-
-                    // Stage 2.6: Oceanic Domains (Cyan/Turquoise family - but avoiding pure blue)
-                    GeologicProvince::MidOceanRidge => [100, 200, 200],       // Cyan-green
-                    GeologicProvince::AbyssalPlain => [140, 160, 160],        // Gray-blue
-                    GeologicProvince::OceanTrench => [80, 120, 140],          // Dark blue-gray
-                    GeologicProvince::OceanicFractureZone => [120, 180, 170], // Teal
-                    GeologicProvince::SeamountField => [90, 170, 160],        // Dark teal
-                };
+                let color = Self::get_province_color(region.characteristics.province_type);
 
                 // Paint all pixels in this province
                 for &(x, y) in &region.pixels {
@@ -900,7 +916,6 @@ impl WorldMap {
     #[cfg(feature = "export-png")]
     pub fn export_geology_with_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         use image::{ImageBuffer, Rgb};
-        use crate::geology::provinces::GeologicProvince;
 
         fs::create_dir_all(output_dir)?;
         let path = std::path::Path::new(output_dir).join(filename);
@@ -913,41 +928,9 @@ impl WorldMap {
                 Rgb([255, 255, 255])
             );
 
-            // First layer: Color geological provinces
+            // First layer: Color geological provinces using centralized color function
             for region in geology {
-                let color: [u8; 3] = match region.characteristics.province_type {
-                    // Stage 2.1: Orogenic Belts (Purple/Pink/Magenta family)
-                    GeologicProvince::CollisionOrogen => [150, 50, 150],      // Purple
-                    GeologicProvince::SubductionOrogen => [255, 180, 50],     // Amber/Gold
-                    GeologicProvince::AccretionaryOrogen => [200, 100, 200],  // Light purple
-                    GeologicProvince::ExtensionalOrogen => [220, 150, 220],   // Pink
-
-                    // Stage 2.2: Large Igneous Provinces (Brown/Orange family)
-                    GeologicProvince::ContinentalFloodBasalt => [180, 100, 60],
-                    GeologicProvince::OceanicPlateau => [160, 120, 100],
-                    GeologicProvince::HotspotTrack => [200, 140, 80],
-
-                    // Stage 2.3: Arc and Basin Systems (Yellow/Amber family)
-                    GeologicProvince::VolcanicArc => [255, 200, 0],
-                    GeologicProvince::ForearcBasin => [230, 220, 180],
-                    GeologicProvince::BackarcBasin => [255, 230, 150],
-
-                    // Stage 2.4: Stable Continental Regions (Tan/Beige family)
-                    GeologicProvince::Craton => [210, 180, 140],
-                    GeologicProvince::Platform => [230, 200, 160],
-                    GeologicProvince::IntracratonicBasin => [190, 170, 140],
-
-                    // Stage 2.5: Extensional Zones (Pink/Salmon family)
-                    GeologicProvince::ContinentalRift => [255, 160, 180],
-                    GeologicProvince::ExtendedCrust => [255, 200, 200],
-
-                    // Stage 2.6: Oceanic Domains (Cyan/Turquoise family)
-                    GeologicProvince::MidOceanRidge => [100, 200, 200],
-                    GeologicProvince::AbyssalPlain => [140, 160, 160],
-                    GeologicProvince::OceanTrench => [80, 120, 140],
-                    GeologicProvince::OceanicFractureZone => [120, 180, 170],
-                    GeologicProvince::SeamountField => [90, 170, 160],
-                };
+                let color = Self::get_province_color(region.characteristics.province_type);
 
                 for &(x, y) in &region.pixels {
                     if x < self.width && y < self.height {

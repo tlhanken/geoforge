@@ -28,7 +28,7 @@ fn test_orogenic_belt_generation_full_pipeline() {
 
     // Generate orogenic belts
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
 
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
@@ -84,7 +84,7 @@ fn test_all_orogen_types_generated() {
 
     // Generate orogenic belts
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
         &metadata.plate_stats,
@@ -127,7 +127,7 @@ fn test_dynamic_width_scaling() {
     let metadata = world.get_tectonic_metadata().unwrap();
 
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
         &metadata.plate_stats,
@@ -167,7 +167,7 @@ fn test_orogenic_belt_pixel_expansion() {
     let metadata = world.get_tectonic_metadata().unwrap();
 
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
         &metadata.plate_stats,
@@ -220,7 +220,7 @@ fn test_convergence_rate_filtering() {
 
     let config = OrogenicConfig::default();
     let min_rate = config.min_convergence_rate;
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
         &metadata.plate_stats,
@@ -260,7 +260,7 @@ fn test_deterministic_generation() {
     let metadata1 = world1.get_tectonic_metadata().unwrap();
 
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config.clone());
+    let generator = OrogenicBeltGenerator::new(config.clone(), world1.planetary_params.clone());
     let orogens1 = generator.generate_orogens(
         &metadata1.plate_boundaries,
         &metadata1.plate_stats,
@@ -276,7 +276,7 @@ fn test_deterministic_generation() {
     let plate_map2 = world2.tectonics.as_ref().unwrap();
     let metadata2 = world2.get_tectonic_metadata().unwrap();
 
-    let generator2 = OrogenicBeltGenerator::new(config);
+    let generator2 = OrogenicBeltGenerator::new(config, world2.planetary_params.clone());
     let orogens2 = generator2.generate_orogens(
         &metadata2.plate_boundaries,
         &metadata2.plate_stats,
@@ -324,7 +324,7 @@ fn test_orogenic_characteristics_scaling() {
     let metadata = world.get_tectonic_metadata().unwrap();
 
     let config = OrogenicConfig::default();
-    let generator = OrogenicBeltGenerator::new(config);
+    let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
     let orogens = generator.generate_orogens(
         &metadata.plate_boundaries,
         &metadata.plate_stats,

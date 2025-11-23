@@ -71,12 +71,26 @@ impl MapProjection {
         let lat_rad = lat.to_radians();
         let delta_lat_rad = self.lat_resolution.to_radians();
         let delta_lon_rad = self.lon_resolution.to_radians();
-        
+
         // Area of spherical rectangle
-        let area = radius_km * radius_km * delta_lon_rad * 
+        let area = radius_km * radius_km * delta_lon_rad *
                    (lat_rad + delta_lat_rad / 2.0).sin().abs() * delta_lat_rad.abs();
-        
+
         area
+    }
+
+    /// Get approximate linear distance per pixel (km) for the map
+    ///
+    /// This calculates the north-south distance represented by one pixel.
+    /// Note: East-west distance varies with latitude due to spherical geometry.
+    ///
+    /// # Arguments
+    /// * `radius_km` - Planetary radius in kilometers
+    ///
+    /// # Returns
+    /// Kilometers per pixel in the north-south direction
+    pub fn km_per_pixel(&self, radius_km: f64) -> f64 {
+        self.lat_resolution.to_radians() * radius_km
     }
 }
 
