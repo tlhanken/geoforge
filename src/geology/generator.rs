@@ -335,7 +335,7 @@ impl GeologyGenerator {
         _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
-        let offset_km = wedge_width_km + 50.0; // Start 50 km after wedge ends
+        let offset_km = wedge_width_km; // Start immediately after wedge ends (no gap)
 
         // Dynamic width based on convergence rate (faster subduction = more deformation/subsidence)
         // Base: 100 km, scales up to 200 km at high convergence rates
@@ -345,27 +345,26 @@ impl GeologyGenerator {
         let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (200 km)
         let width_km = base_width_km * clamped_multiplier;
 
-        // Expand from offset position
-        let forearc_center = self.expand_boundary_toward_plate_spherical(
+        // Expand unidirectionally: from offset to offset+width
+        // This creates a "ring" that doesn't overlap with previous features
+        let outer_edge = self.expand_boundary_toward_plate_spherical(
+            &boundary.pixels,
+            overriding_plate,
+            offset_km + width_km,
+            plate_map
+        );
+
+        let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
             plate_map
         );
 
-        // Expand to full width (half on each side of center)
-        let expanded = self.expand_boundary_spherical(
-            &forearc_center,
-            width_km / 2.0,
-            plate_map
-        );
-
-        // Filter to only pixels on the overriding plate
-        let pixels: Vec<(usize, usize)> = expanded.iter()
-            .filter(|&&(x, y)| {
-                let plate_id = plate_map.data[y * plate_map.width + x];
-                plate_id == overriding_plate
-            })
+        // Forearc basin = outer edge minus inner edge
+        let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
+        let pixels: Vec<(usize, usize)> = outer_edge.iter()
+            .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
 
@@ -389,7 +388,7 @@ impl GeologyGenerator {
         _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
-        let offset_km = forearc_offset_km + forearc_width_km + 100.0; // Start 100 km after forearc
+        let offset_km = forearc_offset_km + forearc_width_km; // Start immediately after forearc ends (no gap)
 
         // Dynamic width based on convergence rate (faster subduction = more vigorous magmatism)
         // Base: 50 km, scales up to 100 km at high convergence rates
@@ -399,27 +398,26 @@ impl GeologyGenerator {
         let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (100 km)
         let width_km = base_width_km * clamped_multiplier;
 
-        // Use spherical-aware expansion for offset
-        let arc_center = self.expand_boundary_toward_plate_spherical(
+        // Expand unidirectionally: from offset to offset+width
+        // This creates a "ring" that doesn't overlap with previous features
+        let outer_edge = self.expand_boundary_toward_plate_spherical(
+            &boundary.pixels,
+            overriding_plate,
+            offset_km + width_km,
+            plate_map
+        );
+
+        let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
             plate_map
         );
 
-        // Use spherical-aware expansion for width (half on each side)
-        let expanded = self.expand_boundary_spherical(
-            &arc_center,
-            width_km / 2.0,
-            plate_map
-        );
-
-        // Filter to only pixels on the overriding plate
-        let arc_pixels: Vec<(usize, usize)> = expanded.iter()
-            .filter(|&&(x, y)| {
-                let plate_id = plate_map.data[y * plate_map.width + x];
-                plate_id == overriding_plate
-            })
+        // Volcanic arc = outer edge minus inner edge
+        let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
+        let arc_pixels: Vec<(usize, usize)> = outer_edge.iter()
+            .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
 
@@ -451,7 +449,7 @@ impl GeologyGenerator {
             return;
         }
 
-        let offset_km = arc_offset_km + arc_width_km + 100.0;
+        let offset_km = arc_offset_km + arc_width_km; // Start immediately after arc ends (no gap)
 
         // Dynamic width based on convergence rate (faster subduction = more backarc extension)
         // Base: 200 km, scales up to 400 km at high convergence rates
@@ -461,27 +459,26 @@ impl GeologyGenerator {
         let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (400 km)
         let width_km = base_width_km * clamped_multiplier;
 
-        // Use spherical-aware expansion for offset
-        let backarc_center = self.expand_boundary_toward_plate_spherical(
+        // Expand unidirectionally: from offset to offset+width
+        // This creates a "ring" that doesn't overlap with previous features
+        let outer_edge = self.expand_boundary_toward_plate_spherical(
+            &boundary.pixels,
+            overriding_plate,
+            offset_km + width_km,
+            plate_map
+        );
+
+        let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
             plate_map
         );
 
-        // Use spherical-aware expansion for width (half on each side)
-        let expanded = self.expand_boundary_spherical(
-            &backarc_center,
-            width_km / 2.0,
-            plate_map
-        );
-
-        // Filter to only pixels on the overriding plate
-        let backarc_pixels: Vec<(usize, usize)> = expanded.iter()
-            .filter(|&&(x, y)| {
-                let plate_id = plate_map.data[y * plate_map.width + x];
-                plate_id == overriding_plate
-            })
+        // Backarc basin = outer edge minus inner edge
+        let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
+        let backarc_pixels: Vec<(usize, usize)> = outer_edge.iter()
+            .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
 
