@@ -209,19 +209,24 @@ impl GeologyGenerator {
             // Check if both plates are oceanic
             if let (Some(stats_a), Some(stats_b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
                 if stats_a.plate_type == PlateType::Oceanic && stats_b.plate_type == PlateType::Oceanic {
-                    // Determine which plate subducts (older/denser)
-                    let overriding_plate = if boundary.plate_a < boundary.plate_b {
-                        boundary.plate_b
+                    // Determine which plate subducts (older/denser - lower ID)
+                    let (subducting_plate, overriding_plate) = if boundary.plate_a < boundary.plate_b {
+                        (boundary.plate_a, boundary.plate_b)
                     } else {
-                        boundary.plate_a
+                        (boundary.plate_b, boundary.plate_a)
                     };
 
-                    // Generate complete arc system sequentially
-                    self.create_ocean_trench(boundary, idx, plate_map, &mut regions);
-                    self.create_forearc_basin(boundary, overriding_plate, idx, plate_map, rng, &mut regions);
+                    // Generate complete subduction zone transect sequentially:
+                    // Oceanic plate → Trench → Accretionary Wedge → Forearc → Volcanic Arc → Backarc → Continental plate
+                    self.create_ocean_trench(boundary, subducting_plate, idx, plate_map, &mut regions);
+
+                    let wedge_width_km = self.create_accretionary_wedge(boundary, overriding_plate, idx, plate_map, rng, &mut regions);
+                    let (forearc_offset_km, forearc_width_km) = self.create_forearc_basin(
+                        boundary, overriding_plate, wedge_width_km, idx, plate_map, rng, &mut regions
+                    );
 
                     let (arc_offset_km, arc_width_km) = self.create_volcanic_arc(
-                        boundary, overriding_plate, idx, plate_map, rng, &mut regions
+                        boundary, overriding_plate, forearc_offset_km, forearc_width_km, idx, plate_map, rng, &mut regions
                     );
 
                     self.create_backarc_basin(
@@ -235,13 +240,14 @@ impl GeologyGenerator {
         regions
     }
 
-    /// Create ocean trench at convergent boundary
+    /// Create ocean trench at convergent boundary (on subducting plate side only)
     ///
-    /// Ocean trenches are narrow features (50-100 km wide)
+    /// Ocean trenches are narrow features on the subducting plate
     /// Example: Mariana Trench ~70 km wide
     fn create_ocean_trench(
         &self,
         boundary: &BoundarySegment,
+        subducting_plate: u16,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
         regions: &mut Vec<ProvinceRegion>,
@@ -251,11 +257,20 @@ impl GeologyGenerator {
             boundary.length_km,
         );
 
-        // Trenches are narrow: 50-100 km wide
-        let width_km = 75.0; // Average trench width
+        // Trenches: narrow feature right at the boundary, extending slightly onto subducting plate
+        // Expand minimally (50 km) to make visible on map
+        let trench_width_km = 50.0;
 
-        // Use spherical-aware expansion to account for latitude
-        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
+        let expanded = self.expand_boundary_spherical(&boundary.pixels, trench_width_km / 2.0, plate_map);
+
+        // Filter to only subducting plate pixels
+        let pixels: Vec<(usize, usize)> = expanded.iter()
+            .filter(|&&(x, y)| {
+                let plate_id = plate_map.data[y * plate_map.width + x];
+                plate_id == subducting_plate
+            })
+            .copied()
+            .collect();
 
         regions.push(ProvinceRegion::new(
             pixels,
@@ -264,8 +279,14 @@ impl GeologyGenerator {
         ));
     }
 
-    /// Create forearc basin (50-100km from trench)
-    fn create_forearc_basin(
+    /// Create accretionary wedge (on overriding plate side, adjacent to trench)
+    ///
+    /// Accretionary wedges are sediments scraped off the subducting plate
+    /// and piled up on the overriding plate side. Width: 50-150 km
+    /// Example: Barbados accretionary wedge ~100 km wide
+    ///
+    /// Returns the width in km for positioning the next feature
+    fn create_accretionary_wedge(
         &self,
         boundary: &BoundarySegment,
         overriding_plate: u16,
@@ -273,10 +294,10 @@ impl GeologyGenerator {
         plate_map: &TerrainMap<u16>,
         rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
-    ) {
-        let width_km = 50.0 + rng.gen::<f64>() * 50.0;
+    ) -> f64 {
+        let width_km = 100.0 + rng.gen::<f64>() * 100.0; // 100-200 km
 
-        // Use spherical-aware expansion
+        // Expand onto overriding plate (opposite side from trench)
         let pixels = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
@@ -284,24 +305,79 @@ impl GeologyGenerator {
             plate_map
         );
 
-        let chars = ProvinceCharacteristics::forearc_basin(boundary.length_km);
+        let chars = ProvinceCharacteristics::accretionary_wedge(
+            boundary.relative_velocity,
+            width_km
+        );
         regions.push(ProvinceRegion::new(pixels, chars, Some(boundary_idx)));
+
+        width_km
     }
 
-    /// Create volcanic arc (150-300km from trench)
+    /// Create forearc basin (behind accretionary wedge)
+    ///
+    /// Starts after the accretionary wedge and extends inland
+    ///
+    /// Returns (offset_km, width_km) for positioning the next feature
+    fn create_forearc_basin(
+        &self,
+        boundary: &BoundarySegment,
+        overriding_plate: u16,
+        wedge_width_km: f64,
+        boundary_idx: usize,
+        plate_map: &TerrainMap<u16>,
+        rng: &mut StdRng,
+        regions: &mut Vec<ProvinceRegion>,
+    ) -> (f64, f64) {
+        let offset_km = wedge_width_km + 50.0; // Start 50 km after wedge ends
+        let width_km = 150.0 + rng.gen::<f64>() * 150.0; // 150-300 km
+
+        // Expand from offset position
+        let forearc_center = self.expand_boundary_toward_plate_spherical(
+            &boundary.pixels,
+            overriding_plate,
+            offset_km,
+            plate_map
+        );
+
+        // Expand to full width (half on each side of center)
+        let expanded = self.expand_boundary_spherical(
+            &forearc_center,
+            width_km / 2.0,
+            plate_map
+        );
+
+        // Filter to only pixels on the overriding plate
+        let pixels: Vec<(usize, usize)> = expanded.iter()
+            .filter(|&&(x, y)| {
+                let plate_id = plate_map.data[y * plate_map.width + x];
+                plate_id == overriding_plate
+            })
+            .copied()
+            .collect();
+
+        let chars = ProvinceCharacteristics::forearc_basin(boundary.length_km);
+        regions.push(ProvinceRegion::new(pixels, chars, Some(boundary_idx)));
+
+        (offset_km, width_km)
+    }
+
+    /// Create volcanic arc (behind forearc basin)
     ///
     /// Returns (arc_offset_km, arc_width_km) for backarc positioning
     fn create_volcanic_arc(
         &self,
         boundary: &BoundarySegment,
         overriding_plate: u16,
+        forearc_offset_km: f64,
+        forearc_width_km: f64,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
         rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
-        let offset_km = 150.0 + rng.gen::<f64>() * 150.0;
-        let width_km = 100.0 + rng.gen::<f64>() * 100.0;
+        let offset_km = forearc_offset_km + forearc_width_km + 100.0; // Start 100 km after forearc
+        let width_km = 200.0 + rng.gen::<f64>() * 200.0;  // 200-400 km wide
 
         // Use spherical-aware expansion for offset
         let arc_center = self.expand_boundary_toward_plate_spherical(
@@ -312,11 +388,20 @@ impl GeologyGenerator {
         );
 
         // Use spherical-aware expansion for width (half on each side)
-        let arc_pixels = self.expand_boundary_spherical(
+        let expanded = self.expand_boundary_spherical(
             &arc_center,
             width_km / 2.0,
             plate_map
         );
+
+        // Filter to only pixels on the overriding plate
+        let arc_pixels: Vec<(usize, usize)> = expanded.iter()
+            .filter(|&&(x, y)| {
+                let plate_id = plate_map.data[y * plate_map.width + x];
+                plate_id == overriding_plate
+            })
+            .copied()
+            .collect();
 
         let chars = ProvinceCharacteristics::volcanic_arc(
             boundary.relative_velocity,
@@ -346,8 +431,8 @@ impl GeologyGenerator {
             return;
         }
 
-        let offset_km = arc_offset_km + arc_width_km + 50.0;
-        let width_km = 100.0 + rng.gen::<f64>() * 100.0;
+        let offset_km = arc_offset_km + arc_width_km + 100.0;
+        let width_km = 200.0 + rng.gen::<f64>() * 200.0; // 200-400 km wide
 
         // Use spherical-aware expansion for offset
         let backarc_center = self.expand_boundary_toward_plate_spherical(
@@ -358,11 +443,20 @@ impl GeologyGenerator {
         );
 
         // Use spherical-aware expansion for width (half on each side)
-        let backarc_pixels = self.expand_boundary_spherical(
+        let expanded = self.expand_boundary_spherical(
             &backarc_center,
             width_km / 2.0,
             plate_map
         );
+
+        // Filter to only pixels on the overriding plate
+        let backarc_pixels: Vec<(usize, usize)> = expanded.iter()
+            .filter(|&&(x, y)| {
+                let plate_id = plate_map.data[y * plate_map.width + x];
+                plate_id == overriding_plate
+            })
+            .copied()
+            .collect();
 
         let chars = ProvinceCharacteristics::backarc_basin(boundary.length_km);
         regions.push(ProvinceRegion::new(backarc_pixels, chars, Some(boundary_idx)));

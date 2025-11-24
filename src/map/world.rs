@@ -851,7 +851,7 @@ impl WorldMap {
         match province_type {
             // Stage 2.1: Orogenic Belts
             GeologicProvince::CollisionOrogen => [50, 150, 80],        // Dark green (continent-continent collision)
-            GeologicProvince::AccretionaryWedge => [120, 200, 140],    // Light green (scraped sediments at trench)
+            GeologicProvince::AccretionaryWedge => [255, 200, 100],    // Tan/beige (scraped sediments at trench)
 
             // Stage 2.2: Large Igneous Provinces - PURPLE FAMILY
             GeologicProvince::ContinentalFloodBasalt => [150, 50, 150],  // Purple
@@ -859,13 +859,13 @@ impl WorldMap {
             GeologicProvince::HotspotTrack => [200, 120, 200],           // Pale purple
 
             // Stage 2.3: Subduction Zone Systems
-            GeologicProvince::VolcanicArc => [150, 255, 50],           // Lime green (Andean/island arc volcanic mountains)
+            GeologicProvince::VolcanicArc => [255, 50, 50],            // Bright red (Andean/island arc volcanic mountains)
             GeologicProvince::ForearcBasin => [160, 160, 160],         // Medium grey (between wedge and arc)
             GeologicProvince::BackarcBasin => [180, 180, 180],         // Light grey (extensional basin behind arc)
 
             // Stage 2.4: Stable Continental Regions (Cratons = Shield + Platform)
             GeologicProvince::Craton => [255, 140, 60],                // Orange (Shield - exposed Precambrian)
-            GeologicProvince::Platform => [255, 150, 200],             // Pink (Platform - sedimentary cover)
+            GeologicProvince::Platform => [255, 150, 200],             // Pink (sedimentary cover)
             GeologicProvince::IntracratonicBasin => [160, 120, 180],   // Purple-grey (subsided basin)
 
             // Stage 2.5: Extensional Zones - YELLOW COLORS
@@ -874,8 +874,8 @@ impl WorldMap {
 
             // Stage 2.6: Oceanic Domains - CYAN/TURQUOISE FAMILY (unchanged)
             GeologicProvince::MidOceanRidge => [100, 200, 200],        // Cyan-green
-            GeologicProvince::AbyssalPlain => [140, 160, 160],         // Gray-blue
-            GeologicProvince::OceanTrench => [80, 120, 140],           // Dark blue-gray
+            GeologicProvince::AbyssalPlain => [70, 130, 180],         // Ocean blue
+            GeologicProvince::OceanTrench => [0, 50, 100],             // Deep dark blue
             GeologicProvince::OceanicFractureZone => [120, 180, 170],  // Teal
             GeologicProvince::OceanicHotspotTrack => [100, 80, 180],   // Bluish-purple (oceanic volcanic)
             GeologicProvince::ContinentalHotspotTrack => [120, 60, 200], // Royal purple (continental volcanic)

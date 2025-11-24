@@ -20,11 +20,6 @@ pub struct OrogenicConfig {
     /// Earth examples: Himalayas ~2000 km, Alps ~1000 km
     pub collision_base_width_km: f64,
 
-    /// Base width for subduction orogens in km (oceanic-continental)
-    ///
-    /// Earth examples: Andes ~500 km, Cascades ~300 km
-    pub subduction_base_width_km: f64,
-
     /// Minimum convergence rate to create an orogen (cm/year)
     ///
     /// Boundaries with slower convergence are considered inactive.
@@ -46,7 +41,6 @@ impl Default for OrogenicConfig {
         Self {
             // Base widths (km)
             collision_base_width_km: 1000.0,
-            subduction_base_width_km: 400.0,
 
             // Activity thresholds
             min_convergence_rate: 2.0, // cm/year
@@ -62,12 +56,10 @@ impl OrogenicConfig {
     /// Create a new configuration with custom settings
     pub fn new(
         collision_base_width_km: f64,
-        subduction_base_width_km: f64,
         min_convergence_rate: f64,
     ) -> Self {
         Self {
             collision_base_width_km,
-            subduction_base_width_km,
             min_convergence_rate,
             ..Default::default()
         }
@@ -339,7 +331,6 @@ mod tests {
     fn test_default_config() {
         let config = OrogenicConfig::default();
         assert_eq!(config.collision_base_width_km, 1000.0);
-        assert_eq!(config.subduction_base_width_km, 400.0);
         assert_eq!(config.min_convergence_rate, 2.0);
     }
 
