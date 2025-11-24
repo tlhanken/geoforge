@@ -282,7 +282,7 @@ impl GeologyGenerator {
     /// Create accretionary wedge (on overriding plate side, adjacent to trench)
     ///
     /// Accretionary wedges are sediments scraped off the subducting plate
-    /// and piled up on the overriding plate side. Width: 50-150 km
+    /// and piled up on the overriding plate side. Width: 100-200 km
     /// Example: Barbados accretionary wedge ~100 km wide
     ///
     /// Returns the width in km for positioning the next feature
@@ -330,7 +330,7 @@ impl GeologyGenerator {
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
         let offset_km = wedge_width_km + 50.0; // Start 50 km after wedge ends
-        let width_km = 150.0 + rng.gen::<f64>() * 150.0; // 150-300 km
+        let width_km = 100.0 + rng.gen::<f64>() * 100.0; // 100-200 km
 
         // Expand from offset position
         let forearc_center = self.expand_boundary_toward_plate_spherical(
@@ -377,7 +377,7 @@ impl GeologyGenerator {
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
         let offset_km = forearc_offset_km + forearc_width_km + 100.0; // Start 100 km after forearc
-        let width_km = 200.0 + rng.gen::<f64>() * 200.0;  // 200-400 km wide
+        let width_km = 50.0 + rng.gen::<f64>() * 50.0;  // 50-100 km wide (arc is narrow zone of volcanism)
 
         // Use spherical-aware expansion for offset
         let arc_center = self.expand_boundary_toward_plate_spherical(

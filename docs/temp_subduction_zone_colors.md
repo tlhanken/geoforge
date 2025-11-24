@@ -118,11 +118,13 @@ Sequence from boundary moving inland:
 |---------|---------------|----------------|-------|
 | Ocean Trench | 50 | 50 | Just boundary pixels |
 | Accretionary Wedge | 100 | 200 | |
-| Forearc Basin | 150 | 300 | |
-| Volcanic Arc | 200 | 400 | Plus 300-600 km offset from trench |
-| Backarc Basin | 200 | 400 | |
+| Forearc Basin | 100 | 200 | Earth analogs: Chile Central Valley 80-100 km |
+| Volcanic Arc | 50 | 100 | Earth analogs: Andes 60-70 km, arc is narrow zone |
+| Backarc Basin | 200 | 400 | Earth analogs: Mariana Trough 100s of km |
 
-**Total Subduction Zone Width:** ~750-1350 km from trench to end of backarc
+**Total Subduction Zone Width:** ~550-1000 km from trench to end of backarc
+
+**Rationale:** Widths based on Earth measurements from Mariana/Tonga (oceanic-oceanic) and Andes/Chile (oceanic-continental) subduction systems. Volcanic arc is narrow because it represents the specific zone where magma breaks through to surface, not a broad region.
 
 ---
 
