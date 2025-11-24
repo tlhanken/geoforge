@@ -292,10 +292,16 @@ impl GeologyGenerator {
         overriding_plate: u16,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
-        rng: &mut StdRng,
+        _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> f64 {
-        let width_km = 100.0 + rng.gen::<f64>() * 100.0; // 100-200 km
+        // Dynamic width based on convergence rate (faster subduction = more sediment scraped off)
+        // Base: 100 km, scales up to 200 km at high convergence rates
+        let base_width_km = 100.0;
+        let rate_above_min = (boundary.relative_velocity - 2.0).max(0.0); // 2 cm/yr minimum
+        let multiplier = 1.0 + (0.15 * rate_above_min); // 15% wider per cm/year above minimum
+        let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (200 km)
+        let width_km = base_width_km * clamped_multiplier;
 
         // Expand onto overriding plate (opposite side from trench)
         let pixels = self.expand_boundary_toward_plate_spherical(
@@ -326,11 +332,18 @@ impl GeologyGenerator {
         wedge_width_km: f64,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
-        rng: &mut StdRng,
+        _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
         let offset_km = wedge_width_km + 50.0; // Start 50 km after wedge ends
-        let width_km = 100.0 + rng.gen::<f64>() * 100.0; // 100-200 km
+
+        // Dynamic width based on convergence rate (faster subduction = more deformation/subsidence)
+        // Base: 100 km, scales up to 200 km at high convergence rates
+        let base_width_km = 100.0;
+        let rate_above_min = (boundary.relative_velocity - 2.0).max(0.0); // 2 cm/yr minimum
+        let multiplier = 1.0 + (0.15 * rate_above_min); // 15% wider per cm/year above minimum
+        let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (200 km)
+        let width_km = base_width_km * clamped_multiplier;
 
         // Expand from offset position
         let forearc_center = self.expand_boundary_toward_plate_spherical(
@@ -373,11 +386,18 @@ impl GeologyGenerator {
         forearc_width_km: f64,
         boundary_idx: usize,
         plate_map: &TerrainMap<u16>,
-        rng: &mut StdRng,
+        _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) -> (f64, f64) {
         let offset_km = forearc_offset_km + forearc_width_km + 100.0; // Start 100 km after forearc
-        let width_km = 50.0 + rng.gen::<f64>() * 50.0;  // 50-100 km wide (arc is narrow zone of volcanism)
+
+        // Dynamic width based on convergence rate (faster subduction = more vigorous magmatism)
+        // Base: 50 km, scales up to 100 km at high convergence rates
+        let base_width_km = 50.0;
+        let rate_above_min = (boundary.relative_velocity - 2.0).max(0.0); // 2 cm/yr minimum
+        let multiplier = 1.0 + (0.15 * rate_above_min); // 15% wider per cm/year above minimum
+        let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (100 km)
+        let width_km = base_width_km * clamped_multiplier;
 
         // Use spherical-aware expansion for offset
         let arc_center = self.expand_boundary_toward_plate_spherical(
@@ -423,7 +443,7 @@ impl GeologyGenerator {
         stats_a: &PlateStats,
         stats_b: &PlateStats,
         plate_map: &TerrainMap<u16>,
-        rng: &mut StdRng,
+        _rng: &mut StdRng,
         regions: &mut Vec<ProvinceRegion>,
     ) {
         // Only create backarc basin for large plates
@@ -432,7 +452,14 @@ impl GeologyGenerator {
         }
 
         let offset_km = arc_offset_km + arc_width_km + 100.0;
-        let width_km = 200.0 + rng.gen::<f64>() * 200.0; // 200-400 km wide
+
+        // Dynamic width based on convergence rate (faster subduction = more backarc extension)
+        // Base: 200 km, scales up to 400 km at high convergence rates
+        let base_width_km = 200.0;
+        let rate_above_min = (boundary.relative_velocity - 2.0).max(0.0); // 2 cm/yr minimum
+        let multiplier = 1.0 + (0.15 * rate_above_min); // 15% wider per cm/year above minimum
+        let clamped_multiplier = multiplier.min(2.0); // Max 2x base width (400 km)
+        let width_km = base_width_km * clamped_multiplier;
 
         // Use spherical-aware expansion for offset
         let backarc_center = self.expand_boundary_toward_plate_spherical(

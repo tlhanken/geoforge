@@ -114,17 +114,26 @@ Sequence from boundary moving inland:
 
 ## Current Width Settings (as of latest commit)
 
-| Feature | Min Width (km) | Max Width (km) | Notes |
-|---------|---------------|----------------|-------|
-| Ocean Trench | 50 | 50 | Just boundary pixels |
-| Accretionary Wedge | 100 | 200 | |
-| Forearc Basin | 100 | 200 | Earth analogs: Chile Central Valley 80-100 km |
-| Volcanic Arc | 50 | 100 | Earth analogs: Andes 60-70 km, arc is narrow zone |
-| Backarc Basin | 200 | 400 | Earth analogs: Mariana Trough 100s of km |
+| Feature | Base Width (km) | Max Width (km) | Scaling Factor | Notes |
+|---------|----------------|----------------|----------------|-------|
+| Ocean Trench | 50 | 50 | Fixed | Just boundary pixels |
+| Accretionary Wedge | 100 | 200 | Convergence-based | Scales with subduction rate |
+| Forearc Basin | 100 | 200 | Convergence-based | Earth analogs: Chile Central Valley 80-100 km |
+| Volcanic Arc | 50 | 100 | Convergence-based | Earth analogs: Andes 60-70 km, arc is narrow zone |
+| Backarc Basin | 200 | 400 | Convergence-based | Earth analogs: Mariana Trough 100s of km |
 
 **Total Subduction Zone Width:** ~550-1000 km from trench to end of backarc
 
-**Rationale:** Widths based on Earth measurements from Mariana/Tonga (oceanic-oceanic) and Andes/Chile (oceanic-continental) subduction systems. Volcanic arc is narrow because it represents the specific zone where magma breaks through to surface, not a broad region.
+**Width Scaling Formula:**
+- `width = base_width × multiplier`
+- `multiplier = 1.0 + (0.15 × (convergence_rate - 2.0))`
+- `multiplier` is clamped to max 2.0x (reaching max width at ~8.7 cm/yr)
+- Minimum threshold: 2.0 cm/yr
+
+**Rationale:**
+- Widths based on Earth measurements from Mariana/Tonga (oceanic-oceanic) and Andes/Chile (oceanic-continental) subduction systems
+- Volcanic arc is narrow because it represents the specific zone where magma breaks through to surface, not a broad region
+- Faster subduction creates wider features: more vigorous magmatism (volcanic arc), more sediment accumulation (accretionary wedge), greater deformation (forearc basin), and more extension (backarc basin)
 
 ---
 
