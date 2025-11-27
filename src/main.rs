@@ -10,8 +10,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return import_png_mode(&args[2]);
     }
 
+    // TODO: Make seed a pass in via feature, or set specific seed only if random seed not enabled.  Polish this whole experience.  Passing in a seed is probably desired behavior.
+
     // Create a new world map
-    let seed = 097243067;
+    let mut seed = 2837; 
+
+    // Seed references:
+    // General Test, good set of oceanic interactions: 097243067, 
+    // Monocontinent with all boundary interactions: 2837, 
+    // Good continent Continent collision: 3487130930717999446
+    
+    #[cfg(feature = "random-seed")]
+    {
+        seed = rand::random::<u64>();
+        println!("World Seed: {}", seed);
+    }
+
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
     let mut world = WorldMap::new(1800, 900, seed)?;
 
