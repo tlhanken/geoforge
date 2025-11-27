@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // TODO: Make seed a pass in via feature, or set specific seed only if random seed not enabled.  Polish this whole experience.  Passing in a seed is probably desired behavior.
 
     // Create a new world map
-    let mut seed = 2837; 
+    let seed = 2837; 
 
     // Seed references:
     // General Test, good set of oceanic interactions: 097243067, 

@@ -73,10 +73,10 @@ impl MapProjection {
         let delta_lon_rad = self.lon_resolution.to_radians();
 
         // Area of spherical rectangle
-        let area = radius_km * radius_km * delta_lon_rad *
-                   (lat_rad + delta_lat_rad / 2.0).sin().abs() * delta_lat_rad.abs();
+        
 
-        area
+        radius_km * radius_km * delta_lon_rad *
+                   (lat_rad + delta_lat_rad / 2.0).sin().abs() * delta_lat_rad.abs()
     }
 
     /// Get approximate linear distance per pixel (km) for the map

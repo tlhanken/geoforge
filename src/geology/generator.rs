@@ -1158,7 +1158,7 @@ impl GeologyGenerator {
         for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
             for (x, &plate_id) in row.iter().enumerate() {
                 index.entry(plate_id)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((x, y));
             }
         }
