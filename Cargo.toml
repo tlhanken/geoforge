@@ -18,6 +18,7 @@ default = []
 export-png = ["dep:image"]
 export-tiff = ["dep:gdal"]
 export-full = ["export-png", "export-tiff"]
+random-seed = []
 
 [[bin]]
 name = "geoforge"

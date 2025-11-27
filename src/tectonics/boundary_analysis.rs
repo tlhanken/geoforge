@@ -152,7 +152,7 @@ impl BoundaryAnalyzer {
                         };
 
                         boundary_pixels.entry(plate_pair)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push((x, y));
                     }
                 }

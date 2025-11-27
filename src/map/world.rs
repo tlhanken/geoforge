@@ -11,6 +11,7 @@ use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementC
 use crate::tectonics::island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
 use crate::tectonics::boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 use crate::tectonics::motion::{PlateMotionAssigner, PlateMotionConfig};
+use crate::geology::provinces::ProvinceRegion;
 use std::collections::HashMap;
 use std::fs;
 
@@ -78,6 +79,7 @@ pub struct WorldMap {
 
     // World generation layers
     pub tectonics: Option<TerrainMap<u16>>,
+    pub geology: Option<Vec<ProvinceRegion>>,  // Stage 2: Geological provinces
     pub elevation: Option<TerrainMap<f32>>,
     pub temperature: Option<TerrainMap<f32>>,
     pub precipitation: Option<TerrainMap<f32>>,
@@ -110,6 +112,7 @@ impl WorldMap {
             seed,
             planetary_params,
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,
@@ -525,6 +528,87 @@ impl WorldMap {
         Ok(stats)
     }
 
+    /// Generate geological provinces from tectonic data (Stage 2.1: Orogenic Belts)
+    ///
+    /// This analyzes convergent plate boundaries and creates orogenic belts (mountain-building zones).
+    /// Requires that tectonics have been generated and boundaries have been analyzed.
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration for orogenic belt generation
+    ///
+    /// # Returns
+    /// Vector of province regions representing orogenic belts
+    ///
+    /// # Example
+    /// ```no_run
+    /// use geoforge::{WorldMap, OrogenicConfig};
+    ///
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    ///
+    /// // Generate orogenic belts with default config
+    /// let orogens = world.generate_geology(None)?;
+    /// println!("Generated {} orogenic belts", orogens.len());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    /// Generate comprehensive geological provinces (Complete Stage 2)
+    ///
+    /// This generates ALL geological provinces from tectonic data:
+    /// - Stage 2.1: Orogenic belts (collision, subduction, accretionary, extensional)
+    /// - Stage 2.2: Large Igneous Provinces (flood basalts, plateaus, hotspots)
+    /// - Stage 2.3: Arc and Basin Systems (volcanic arcs, forearc/backarc basins)
+    /// - Stage 2.4: Stable Continental Regions (cratons, platforms, intracratonic basins)
+    /// - Stage 2.5: Extensional Zones (continental rifts, extended crust)
+    /// - Stage 2.6: Oceanic Domains (mid-ocean ridges, abyssal plains, trenches)
+    ///
+    /// # Arguments
+    /// * `config` - Optional configuration (uses default if None)
+    ///
+    /// # Returns
+    /// Vector of all geological provinces
+    pub fn generate_geology(
+        &mut self,
+        config: Option<crate::geology::GeologyConfig>
+    ) -> Result<Vec<ProvinceRegion>, Box<dyn std::error::Error>> {
+        // Ensure tectonics exist
+        let plate_map = self.tectonics.as_ref()
+            .ok_or("Tectonics not generated. Call tectonics().generate_plates() first.")?;
+
+        // Ensure metadata exists with boundaries
+        let metadata = self.tectonic_metadata.as_ref()
+            .ok_or("Tectonic metadata not found. Call tectonics().generate_plates() first.")?;
+
+        if metadata.plate_boundaries.is_empty() {
+            return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
+        }
+
+        // Generate all geological provinces
+        let config = config.unwrap_or_default();
+        let generator = crate::geology::GeologyGenerator::new(
+            config,
+            self.seed,
+            self.planetary_params.clone()
+        );
+
+        let provinces = generator.generate_all_provinces(
+            &metadata.plate_boundaries,
+            &metadata.plate_stats,
+            &metadata.plate_seeds,
+            plate_map,
+        );
+
+        // Store in geology field
+        self.geology = Some(provinces.clone());
+
+        Ok(provinces)
+    }
+
+    /// Get the generated geological provinces
+    pub fn get_geology(&self) -> Option<&Vec<ProvinceRegion>> {
+        self.geology.as_ref()
+    }
+
     /// Calculate plate statistics from a terrain map and seeds
     fn calculate_plate_stats_from_map(&self, tectonic_map: &TerrainMap<u16>, plate_seeds: &[PlateSeed]) -> HashMap<u16, PlateStats> {
         let mut plate_areas = HashMap::new();
@@ -704,6 +788,316 @@ impl WorldMap {
         Ok(())
     }
 
+    /// Export a motion direction color reference (compass rose / color wheel)
+    ///
+    /// Creates a visual reference showing how direction maps to color in plate motion visualizations.
+    /// This helps interpret the motion vectors shown in export_plate_motion_png().
+    #[cfg(feature = "export-png")]
+    pub fn export_motion_reference_png(output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        // Create 400x400 reference image
+        let size = 400;
+        let center = size as f64 / 2.0;
+        let radius = 150.0;
+
+        let mut img = ImageBuffer::new(size, size);
+
+        // Fill with white background
+        for y in 0..size {
+            for x in 0..size {
+                img.put_pixel(x, y, Rgb([255, 255, 255]));
+            }
+        }
+
+        // Draw color wheel
+        for y in 0..size {
+            for x in 0..size {
+                let dx = x as f64 - center;
+                let dy = y as f64 - center;
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                // Only draw within circle
+                if dist < radius && dist > 50.0 {
+                    // Calculate angle (0° = North, clockwise)
+                    let angle = dy.atan2(dx).to_degrees() + 90.0;
+                    let direction = if angle < 0.0 { angle + 360.0 } else { angle };
+
+                    // Use medium speed for uniform saturation
+                    let color = motion_to_rgb(direction, 5.0);
+                    img.put_pixel(x, y, Rgb(color));
+                }
+            }
+        }
+
+        // Draw cardinal direction labels (will be in image, basic text via pixels)
+        // For now, just the colored wheel - labels can be added manually or via external tool
+
+        img.save(&path)?;
+        Ok(())
+    }
+
+    /// Get RGB color for a geological province type
+    ///
+    /// Returns a distinct color for each province type, organized by geological category
+    /// and avoiding boundary colors (red/blue/green).
+    #[cfg(feature = "export-png")]
+    fn get_province_color(province_type: crate::geology::provinces::GeologicProvince) -> [u8; 3] {
+        use crate::geology::provinces::GeologicProvince;
+
+        match province_type {
+            // Stage 2.1: Orogenic Belts
+            GeologicProvince::CollisionOrogen => [50, 150, 80],        // Dark green (continent-continent collision)
+            GeologicProvince::AccretionaryWedge => [255, 200, 100],    // Tan/beige (scraped sediments at trench)
+
+            // Stage 2.2: Large Igneous Provinces - PURPLE FAMILY
+            GeologicProvince::ContinentalFloodBasalt => [150, 50, 150],  // Purple
+            GeologicProvince::OceanicPlateau => [180, 100, 180],         // Light purple
+            GeologicProvince::HotspotTrack => [200, 120, 200],           // Pale purple
+
+            // Stage 2.3: Subduction Zone Systems
+            GeologicProvince::VolcanicArc => [255, 50, 50],            // Bright red (Andean/island arc volcanic mountains)
+            GeologicProvince::ForearcBasin => [160, 160, 160],         // Medium grey (between wedge and arc)
+            GeologicProvince::BackarcBasin => [180, 180, 180],         // Light grey (extensional basin behind arc)
+
+            // Stage 2.4: Stable Continental Regions (Cratons = Shield + Platform)
+            GeologicProvince::Craton => [255, 140, 60],                // Orange (Shield - exposed Precambrian)
+            GeologicProvince::Platform => [255, 150, 200],             // Pink (sedimentary cover)
+            GeologicProvince::IntracratonicBasin => [160, 120, 180],   // Purple-grey (subsided basin)
+
+            // Stage 2.5: Extensional Zones - YELLOW COLORS
+            GeologicProvince::ContinentalRift => [255, 220, 60],       // Bright yellow
+            GeologicProvince::ExtendedCrust => [255, 240, 120],        // Pale yellow
+
+            // Stage 2.6: Oceanic Domains - CYAN/TURQUOISE FAMILY (unchanged)
+            GeologicProvince::MidOceanRidge => [100, 200, 200],        // Cyan-green
+            GeologicProvince::AbyssalPlain => [70, 130, 180],         // Ocean blue
+            GeologicProvince::OceanTrench => [0, 50, 100],             // Deep dark blue
+            GeologicProvince::OceanicFractureZone => [120, 180, 170],  // Teal
+            GeologicProvince::OceanicHotspotTrack => [100, 80, 180],   // Bluish-purple (oceanic volcanic)
+            GeologicProvince::ContinentalHotspotTrack => [120, 60, 200], // Royal purple (continental volcanic)
+        }
+    }
+
+    /// Export geological provinces as PNG with color-coded province types
+    ///
+    /// This creates a visualization showing:
+    /// - **Green family**: Orogenic belts (mountain-building zones)
+    /// - **Purple family**: Large igneous provinces and volcanic arcs
+    /// - **Grey**: Arc and basin systems
+    /// - **Orange**: Shields (exposed Precambrian craton cores)
+    /// - **Pink**: Platforms (sedimentary-covered cratons)
+    /// - **Purple-grey**: Intracratonic basins (subsided regions within cratons)
+    /// - **Yellow**: Extensional zones (rifts and extended crust)
+    /// - **Cyan/Turquoise**: Oceanic domains
+    /// - **White**: Unpopulated areas (no geological province)
+    ///
+    /// Note: Cratons = Shields + Platforms (ancient stable continental basement)
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    /// world.generate_geology(None)?;
+    /// world.export_geology_png("outputs", "geology.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_geology_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let Some(ref geology) = self.geology {
+            // Create white background (unpopulated areas)
+            let mut img = ImageBuffer::from_pixel(
+                self.width as u32,
+                self.height as u32,
+                Rgb([255, 255, 255])
+            );
+
+            // Color each province region using the centralized color function
+            for region in geology {
+                let color = Self::get_province_color(region.characteristics.province_type);
+
+                // Paint all pixels in this province
+                for &(x, y) in &region.pixels {
+                    if x < self.width && y < self.height {
+                        img.put_pixel(x as u32, y as u32, Rgb(color));
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Geological provinces not generated. Call generate_geology() first.".into());
+        }
+
+        Ok(())
+    }
+
+    /// Export geology with plate boundary overlays as PNG
+    ///
+    /// This creates a composite visualization showing geological provinces with
+    /// plate boundaries overlaid on top:
+    /// - **Background**: Geological provinces in distinct colors (purple, amber, brown, etc.)
+    /// - **Overlay**: Plate boundaries colored by type:
+    ///   - Red: Convergent boundaries
+    ///   - Blue: Divergent boundaries
+    ///   - Green: Transform boundaries
+    ///
+    /// This provides a complete view of how geology relates to active tectonic boundaries.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.analyze_boundaries(None)?;
+    /// world.generate_geology(None)?;
+    /// world.export_geology_with_boundaries_png("outputs", "geology_boundaries.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_geology_with_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref geology), Some(ref metadata)) = (&self.geology, &self.tectonic_metadata) {
+            // Create white background (unpopulated areas)
+            let mut img = ImageBuffer::from_pixel(
+                self.width as u32,
+                self.height as u32,
+                Rgb([255, 255, 255])
+            );
+
+            // First layer: Color geological provinces using centralized color function
+            for region in geology {
+                let color = Self::get_province_color(region.characteristics.province_type);
+
+                for &(x, y) in &region.pixels {
+                    if x < self.width && y < self.height {
+                        img.put_pixel(x as u32, y as u32, Rgb(color));
+                    }
+                }
+            }
+
+            // Second layer: Overlay boundaries colored by type (same as boundaries.png)
+            if !metadata.plate_boundaries.is_empty() {
+                for boundary in &metadata.plate_boundaries {
+                    use crate::tectonics::plates::PlateInteraction;
+
+                    let color = match boundary.interaction_type {
+                        PlateInteraction::Convergent => [255, 0, 0],     // Red
+                        PlateInteraction::Divergent => [0, 128, 255],    // Blue
+                        PlateInteraction::Transform => [0, 255, 0],      // Green
+                    };
+
+                    for (x, y) in &boundary.pixels {
+                        if *x < self.width && *y < self.height {
+                            img.put_pixel(*x as u32, *y as u32, Rgb(color));
+                        }
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            if self.geology.is_none() {
+                return Err("Geological provinces not generated. Call generate_geology() first.".into());
+            }
+            if self.tectonic_metadata.is_none() {
+                return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
+            }
+            return Err("Both geology and boundary data required".into());
+        }
+
+        Ok(())
+    }
+
+    /// Export plate types as PNG with oceanic (cool) vs continental (warm) colors
+    ///
+    /// This creates a visualization showing plate character/composition:
+    /// - **Blue/Cyan shades** (COOL): Oceanic plates (denser crust, can subduct)
+    /// - **Red/Orange shades** (WARM): Continental plates (lighter crust, resists subduction)
+    /// - **Purple/Magenta shades**: Mixed plates (both oceanic and continental crust)
+    ///
+    /// Each plate gets a unique color within its type category, making it easy to
+    /// distinguish individual plates while seeing the oceanic vs continental distribution.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use geoforge::WorldMap;
+    /// let mut world = WorldMap::new(1800, 900, 42)?;
+    /// world.tectonics().generate_plates(15)?;
+    /// world.export_plate_types_png("outputs", "plate_types.png")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    #[cfg(feature = "export-png")]
+    pub fn export_plate_types_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use image::{ImageBuffer, Rgb};
+        use rand::prelude::*;
+
+        fs::create_dir_all(output_dir)?;
+        let path = std::path::Path::new(output_dir).join(filename);
+
+        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+            let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
+
+            // Generate colors for each plate based on its type
+            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> = std::collections::HashMap::new();
+            let mut rng = StdRng::seed_from_u64(self.seed);
+
+            for (plate_id, stats) in &metadata.plate_stats {
+                let color = match stats.plate_type {
+                    // Oceanic plates: COOL blue/cyan shades (very clear)
+                    PlateType::Oceanic => {
+                        let hue = rng.gen_range(190..230) as f64; // Blue to cyan (tighter range)
+                        let sat = rng.gen_range(70..100) as f64 / 100.0; // High saturation
+                        let val = rng.gen_range(60..95) as f64 / 100.0;  // Bright
+                        crate::utils::color::hsv_to_rgb(hue, sat, val)
+                    }
+                    // Continental plates: WARM red/orange/yellow shades (very clear)
+                    PlateType::Continental => {
+                        let hue = rng.gen_range(0..50) as f64; // Red to orange (avoiding yellow-green)
+                        let sat = rng.gen_range(70..100) as f64 / 100.0; // High saturation
+                        let val = rng.gen_range(60..95) as f64 / 100.0;  // Bright
+                        crate::utils::color::hsv_to_rgb(hue, sat, val)
+                    }
+                };
+                plate_colors.insert(*plate_id, color);
+            }
+
+            // Paint the map
+            for (y, row) in tectonic_map.data.chunks(self.width).enumerate() {
+                for (x, &plate_id) in row.iter().enumerate() {
+                    if plate_id > 0 {
+                        if let Some(&color) = plate_colors.get(&plate_id) {
+                            img.put_pixel(x as u32, y as u32, Rgb(color));
+                        }
+                    } else {
+                        // Black for no plate (shouldn't happen)
+                        img.put_pixel(x as u32, y as u32, Rgb([0, 0, 0]));
+                    }
+                }
+            }
+
+            img.save(path)?;
+        } else {
+            return Err("Tectonic layer not generated or metadata missing".into());
+        }
+
+        Ok(())
+    }
+
     /// Export all available layers as PNG files
     #[cfg(feature = "export-png")]
     pub fn export_all_png(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -714,7 +1108,19 @@ impl WorldMap {
             self.export_tectonics_png(output_dir, &format!("{}_tectonics.png", base_name))?;
             println!("✅ Exported tectonics: {}/{}_tectonics.png", output_dir, base_name);
         }
-        
+
+        // Export geology if available
+        if self.geology.is_some() {
+            self.export_geology_png(output_dir, &format!("{}_geology.png", base_name))?;
+            println!("✅ Exported geology: {}/{}_geology.png", output_dir, base_name);
+
+            // Also export geology with boundary overlays if boundaries are available
+            if self.tectonic_metadata.is_some() {
+                self.export_geology_with_boundaries_png(output_dir, &format!("{}_geology_boundaries.png", base_name))?;
+                println!("✅ Exported geology+boundaries: {}/{}_geology_boundaries.png", output_dir, base_name);
+            }
+        }
+
         // Export elevation if available (placeholder for future implementation)
         if self.elevation.is_some() {
             // TODO: Implement export_elevation_png
@@ -739,9 +1145,9 @@ impl WorldMap {
             println!("⚠️ Biomes export not yet implemented");
         }
         
-        if self.tectonics.is_none() && self.elevation.is_none() && 
-           self.temperature.is_none() && self.precipitation.is_none() && 
-           self.biomes.is_none() {
+        if self.tectonics.is_none() && self.geology.is_none() &&
+           self.elevation.is_none() && self.temperature.is_none() &&
+           self.precipitation.is_none() && self.biomes.is_none() {
             println!("⚠️ No layers available to export");
         }
         
@@ -836,11 +1242,10 @@ impl WorldMap {
             file.write_all(&(stats.pixels as u32).to_le_bytes())?;
             file.write_all(&stats.percentage.to_le_bytes())?;
             file.write_all(&stats.area_km2.to_le_bytes())?;
-            // plate_type as u8: Oceanic=0, Continental=1, Mixed=2
+            // plate_type as u8: Oceanic=0, Continental=1
             let type_byte = match stats.plate_type {
                 crate::tectonics::plates::PlateType::Oceanic => 0u8,
                 crate::tectonics::plates::PlateType::Continental => 1u8,
-                crate::tectonics::plates::PlateType::Mixed => 2u8,
             };
             file.write_all(&[type_byte])?;
         }
@@ -922,6 +1327,7 @@ impl WorldMap {
             seed,
             planetary_params: PlanetaryParams::earth(), // Default to Earth parameters for loaded files
             tectonics: None,
+            geology: None,
             elevation: None,
             temperature: None,
             precipitation: None,
@@ -1023,7 +1429,6 @@ impl WorldMap {
             let plate_type = match type_byte {
                 0 => crate::tectonics::plates::PlateType::Oceanic,
                 1 => crate::tectonics::plates::PlateType::Continental,
-                2 => crate::tectonics::plates::PlateType::Mixed,
                 _ => return Err(format!("Invalid plate type: {}", type_byte).into()),
             };
 

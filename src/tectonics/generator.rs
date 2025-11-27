@@ -288,7 +288,7 @@ impl TectonicPlateGenerator {
     /// Validate the generated plate map for consistency
     pub fn validate(&self) -> Result<(), PlateError> {
         // Check all pixels are assigned
-        if self.plate_map.data.iter().any(|&p| p == 0) {
+        if self.plate_map.data.contains(&0) {
             return Err(PlateError::InvalidParameters("Unassigned pixels found".to_string()));
         }
 
