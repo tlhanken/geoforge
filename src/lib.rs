@@ -27,6 +27,7 @@ pub mod tectonics;
 pub mod geology;
 pub mod utils;
 pub mod io;
+pub mod error;
 
 // Re-export main types for convenience
 pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap};

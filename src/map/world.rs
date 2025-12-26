@@ -14,9 +14,11 @@ use crate::tectonics::motion::{PlateMotionAssigner, PlateMotionConfig};
 use crate::geology::provinces::ProvinceRegion;
 use std::collections::HashMap;
 use std::fs;
+use serde::{Serialize, Deserialize};
+use bincode;
 
 /// Metadata for Stage 1: Tectonic Foundation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TectonicMetadata {
     /// Plate seed points with motion information
     pub plate_seeds: Vec<PlateSeed>,
@@ -69,247 +71,16 @@ impl TectonicMetadata {
     }
     /// Write complete TectonicMetadata to file
     pub fn write_to_file(file: &mut fs::File, metadata: &TectonicMetadata) -> Result<(), Box<dyn std::error::Error>> {
-        use std::io::Write;
-
-        // Write plate_seeds
-        file.write_all(&(metadata.plate_seeds.len() as u32).to_le_bytes())?;
-        for seed in &metadata.plate_seeds {
-            file.write_all(&seed.id.to_le_bytes())?;
-            file.write_all(&(seed.x as u32).to_le_bytes())?;
-            file.write_all(&(seed.y as u32).to_le_bytes())?;
-            file.write_all(&seed.lat.to_le_bytes())?;
-            file.write_all(&seed.lon.to_le_bytes())?;
-            file.write_all(&seed.motion_direction.to_le_bytes())?;
-            file.write_all(&seed.motion_speed.to_le_bytes())?;
-        }
-
-        // Write plate_stats
-        file.write_all(&(metadata.plate_stats.len() as u32).to_le_bytes())?;
-        for (plate_id, stats) in &metadata.plate_stats {
-            file.write_all(&plate_id.to_le_bytes())?;
-            file.write_all(&(stats.pixels as u32).to_le_bytes())?;
-            file.write_all(&stats.percentage.to_le_bytes())?;
-            file.write_all(&stats.area_km2.to_le_bytes())?;
-            // plate_type as u8: Oceanic=0, Continental=1
-            let type_byte = match stats.plate_type {
-                crate::tectonics::plates::PlateType::Oceanic => 0u8,
-                crate::tectonics::plates::PlateType::Continental => 1u8,
-            };
-            file.write_all(&[type_byte])?;
-        }
-
-        // Write plate_boundaries
-        file.write_all(&(metadata.plate_boundaries.len() as u32).to_le_bytes())?;
-        for boundary in &metadata.plate_boundaries {
-            file.write_all(&boundary.plate_a.to_le_bytes())?;
-            file.write_all(&boundary.plate_b.to_le_bytes())?;
-            file.write_all(&(boundary.pixels.len() as u32).to_le_bytes())?;
-            for &(x, y) in &boundary.pixels {
-                file.write_all(&(x as u32).to_le_bytes())?;
-                file.write_all(&(y as u32).to_le_bytes())?;
-            }
-            // interaction_type as u8: Convergent=0, Divergent=1, Transform=2
-            let interaction_byte = match boundary.interaction_type {
-                crate::tectonics::PlateInteraction::Convergent => 0u8,
-                crate::tectonics::PlateInteraction::Divergent => 1u8,
-                crate::tectonics::PlateInteraction::Transform => 2u8,
-            };
-            file.write_all(&[interaction_byte])?;
-            file.write_all(&boundary.relative_velocity.to_le_bytes())?;
-            file.write_all(&boundary.length_km.to_le_bytes())?;
-        }
-
-        // Write boundary_stats (optional)
-        let has_boundary_stats = metadata.boundary_stats.is_some();
-        file.write_all(&[if has_boundary_stats { 1u8 } else { 0u8 }])?;
-        if let Some(ref stats) = metadata.boundary_stats {
-            file.write_all(&(stats.total_boundaries as u32).to_le_bytes())?;
-            file.write_all(&(stats.convergent_count as u32).to_le_bytes())?;
-            file.write_all(&(stats.divergent_count as u32).to_le_bytes())?;
-            file.write_all(&(stats.transform_count as u32).to_le_bytes())?;
-            file.write_all(&stats.total_length_km.to_le_bytes())?;
-            file.write_all(&stats.average_relative_velocity.to_le_bytes())?;
-        }
-
+        bincode::serialize_into(file, metadata)?;
         Ok(())
     }
 
     /// Read complete TectonicMetadata from buffer
     pub fn read_from_buffer(buffer: &[u8], cursor: &mut usize) -> Result<TectonicMetadata, Box<dyn std::error::Error>> {
-        // Read plate_seeds
-        let seed_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-        *cursor += 4;
-
-        let mut plate_seeds = Vec::with_capacity(seed_count);
-        for _ in 0..seed_count {
-            let id = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
-            *cursor += 2;
-            let x = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let y = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let lat = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let lon = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let motion_direction = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let motion_speed = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-
-            plate_seeds.push(PlateSeed::new(id, x, y, lat, lon, motion_direction, motion_speed));
-        }
-
-        // Read plate_stats
-        let stats_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-        *cursor += 4;
-
-        let mut plate_stats = HashMap::new();
-        for _ in 0..stats_count {
-            let plate_id = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
-            *cursor += 2;
-            let pixels = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let percentage = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let area_km2 = u64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let type_byte = buffer[*cursor];
-            *cursor += 1;
-            let plate_type = match type_byte {
-                0 => crate::tectonics::plates::PlateType::Oceanic,
-                1 => crate::tectonics::plates::PlateType::Continental,
-                _ => return Err(format!("Invalid plate type: {}", type_byte).into()),
-            };
-
-            // Find the corresponding seed
-            let seed = plate_seeds.iter()
-                .find(|s| s.id == plate_id)
-                .ok_or_else(|| format!("No seed found for plate {}", plate_id))?
-                .clone();
-
-            let stats = crate::tectonics::plates::PlateStats {
-                pixels,
-                percentage,
-                area_km2,
-                seed,
-                plate_type,
-            };
-            plate_stats.insert(plate_id, stats);
-        }
-
-        // Read plate_boundaries
-        let boundary_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-        *cursor += 4;
-
-        let mut plate_boundaries = Vec::with_capacity(boundary_count);
-        for _ in 0..boundary_count {
-            let plate_a = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
-            *cursor += 2;
-            let plate_b = u16::from_le_bytes([buffer[*cursor], buffer[*cursor+1]]);
-            *cursor += 2;
-            let pixel_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-
-            let mut pixels = Vec::with_capacity(pixel_count);
-            for _ in 0..pixel_count {
-                let x = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-                *cursor += 4;
-                let y = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-                *cursor += 4;
-                pixels.push((x, y));
-            }
-
-            let interaction_byte = buffer[*cursor];
-            *cursor += 1;
-            let interaction_type = match interaction_byte {
-                0 => crate::tectonics::PlateInteraction::Convergent,
-                1 => crate::tectonics::PlateInteraction::Divergent,
-                2 => crate::tectonics::PlateInteraction::Transform,
-                _ => return Err(format!("Invalid interaction type: {}", interaction_byte).into()),
-            };
-
-            let relative_velocity = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let length_km = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-
-            plate_boundaries.push(crate::tectonics::BoundarySegment {
-                plate_a,
-                plate_b,
-                pixels,
-                interaction_type,
-                relative_velocity,
-                length_km,
-            });
-        }
-
-        // Read boundary_stats (optional)
-        let has_boundary_stats = buffer[*cursor] != 0;
-        *cursor += 1;
-
-        let boundary_stats = if has_boundary_stats {
-            let total_boundaries = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let convergent_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let divergent_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let transform_count = u32::from_le_bytes([buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3]]) as usize;
-            *cursor += 4;
-            let total_length_km = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-            let average_relative_velocity = f64::from_le_bytes([
-                buffer[*cursor], buffer[*cursor+1], buffer[*cursor+2], buffer[*cursor+3],
-                buffer[*cursor+4], buffer[*cursor+5], buffer[*cursor+6], buffer[*cursor+7]
-            ]);
-            *cursor += 8;
-
-            Some(crate::tectonics::BoundaryStatistics {
-                total_boundaries,
-                convergent_count,
-                divergent_count,
-                transform_count,
-                total_length_km,
-                average_relative_velocity,
-            })
-        } else {
-            None
-        };
-
-        Ok(TectonicMetadata {
-            plate_seeds,
-            plate_stats,
-            plate_boundaries,
-            boundary_stats,
-        })
+        let mut reader = std::io::Cursor::new(&buffer[*cursor..]);
+        let metadata: TectonicMetadata = bincode::deserialize_from(&mut reader)?;
+        *cursor += reader.position() as usize;
+        Ok(metadata)
     }
 }
 

@@ -1,9 +1,10 @@
 //! Tectonic plate data structures and utilities
 
 use crate::map::spherical::SphericalPoint;
+use serde::{Serialize, Deserialize};
 
 /// Represents a tectonic plate seed point with motion information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateSeed {
     pub id: u16,
     pub x: usize,
@@ -56,7 +57,7 @@ impl PlateSeed {
 }
 
 /// Statistics about a generated tectonic plate
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateStats {
     pub pixels: usize,
     pub percentage: f64,
@@ -108,7 +109,7 @@ impl PlateStats {
 /// their dominant crust type. In reality, many plates contain both types
 /// (e.g., North American plate has continental interior + Atlantic ocean floor),
 /// but we classify based on the dominant character for geological modeling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlateType {
     /// Oceanic plate (denser, subducts beneath continental)
     Oceanic,
@@ -138,7 +139,7 @@ impl PlateType {
 }
 
 /// Type of plate interaction at boundaries
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlateInteraction {
     /// Plates moving apart (divergent boundary)
     Divergent,
@@ -149,7 +150,7 @@ pub enum PlateInteraction {
 }
 
 /// Information about plate boundary characteristics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateBoundary {
     pub plate_a: u16,
     pub plate_b: u16,

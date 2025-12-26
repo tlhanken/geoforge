@@ -10,6 +10,7 @@ use rand::SeedableRng;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use rayon::prelude::*;
 
 
 /// Method used for tectonic plate generation
@@ -40,10 +41,10 @@ impl TectonicPlateGenerator {
     /// Create a new tectonic plate generator with specific seed
     pub fn with_seed(width: usize, height: usize, num_plates: usize, seed: u64) -> Result<Self, PlateError> {
         if width == 0 || height == 0 {
-            return Err(PlateError::InvalidParameters("Width and height must be > 0".to_string()));
+            return Err(PlateError::Config("Width and height must be > 0".to_string()));
         }
         if num_plates == 0 || num_plates > u16::MAX as usize {
-            return Err(PlateError::InvalidParameters("Invalid number of plates".to_string()));
+            return Err(PlateError::Config("Invalid number of plates".to_string()));
         }
 
         let generator = Self {
@@ -89,15 +90,19 @@ impl TectonicPlateGenerator {
         self.plate_seeds = charges_to_seeds(&charges, self.width, self.height, &mut self.rng);
         
         // Generate plates using Voronoi from equilibrium positions
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let point = self.plate_map.get_spherical_point(x, y);
+        let width = self.width;
+        let plate_seeds = &self.plate_seeds;
+        let projection = self.plate_map.projection.clone();
+
+        self.plate_map.data.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
+            for (x, pixel) in row.iter_mut().enumerate() {
+                let point = projection.get_spherical_point(x, y);
 
                 let mut nearest_plate = 1;
                 let mut min_distance = f64::INFINITY;
 
                 // Find closest seed using geodesic distance
-                for seed in &self.plate_seeds {
+                for seed in plate_seeds {
                     let distance = point.distance_to(seed.spherical_point());
                     if distance < min_distance {
                         min_distance = distance;
@@ -105,13 +110,9 @@ impl TectonicPlateGenerator {
                     }
                 }
 
-                self.plate_map.set(x, y, nearest_plate);
+                *pixel = nearest_plate;
             }
-
-            if y % 100 == 0 {
-                println!("Progress: {:.1}%", (y as f64 / self.height as f64) * 100.0);
-            }
-        }
+        });
         
         Ok(())
     }
@@ -127,7 +128,7 @@ impl TectonicPlateGenerator {
     ///
     /// # Example
     /// ```no_run
-    /// use geoforge::{TectonicPlateGenerator, BoundaryRefinementConfig};
+    /// use geoforge::{TectonicPlateGenerator, GenerationMethod, BoundaryRefinementConfig};
     ///
     /// let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
     /// generator.generate(GenerationMethod::Electrostatic)?;
@@ -298,13 +299,13 @@ impl TectonicPlateGenerator {
     pub fn validate(&self) -> Result<(), PlateError> {
         // Check all pixels are assigned
         if self.plate_map.data.contains(&0) {
-            return Err(PlateError::InvalidParameters("Unassigned pixels found".to_string()));
+            return Err(PlateError::Simulation("Unassigned pixels found".to_string()));
         }
 
         // Check all plate IDs are valid
         let max_plate_id = self.num_plates as u16;
         if self.plate_map.data.iter().any(|&p| p > max_plate_id) {
-            return Err(PlateError::InvalidParameters("Invalid plate ID found".to_string()));
+            return Err(PlateError::Simulation("Invalid plate ID found".to_string()));
         }
 
         // Check all plates have at least some pixels
@@ -317,7 +318,7 @@ impl TectonicPlateGenerator {
 
         for (i, &count) in plate_counts.iter().enumerate().skip(1) {
             if count == 0 {
-                return Err(PlateError::InvalidParameters(format!("Plate {} has no pixels", i)));
+                return Err(PlateError::Simulation(format!("Plate {} has no pixels", i)));
             }
         }
 

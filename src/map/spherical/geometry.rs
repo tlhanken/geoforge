@@ -1,9 +1,10 @@
 //! Spherical geometry utilities for tectonic plate generation
 
 use std::f64::consts::PI;
+use serde::{Serialize, Deserialize};
 
 /// 3D point on unit sphere
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SphericalPoint {
     pub x: f64,
     pub y: f64,

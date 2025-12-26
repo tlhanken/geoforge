@@ -7,6 +7,7 @@
 use crate::map::terrain::TerrainMap;
 use crate::tectonics::plates::PlateInteraction;
 use std::collections::HashSet;
+use rayon::prelude::*;
 
 /// Configuration for boundary refinement
 #[derive(Debug, Clone)]
@@ -162,11 +163,16 @@ impl BoundaryRefiner {
         println!("  Warping amplitude: {:.2}° ({:.0} pixels at equator)",
                  amplitude_degrees, self.config.noise_amplitude);
 
-        // Process each pixel with 3D spherical warping
-        for y in 0..plate_map.height {
-            for x in 0..plate_map.width {
+        // Pre-calculate projection data to avoid borrow checker issues
+        let projection = plate_map.projection.clone();
+        let width = plate_map.width;
+        let height = plate_map.height;
+
+        // Process each row in parallel
+        plate_map.data.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
+            for (x, pixel) in row.iter_mut().enumerate() {
                 // Get current pixel's geographic coordinates
-                let (lat, lon) = plate_map.projection.pixel_to_coords(x, y);
+                let (lat, lon) = projection.pixel_to_coords(x, y);
 
                 // Convert to 3D Cartesian coordinates on unit sphere
                 let lat_rad = lat.to_radians();
@@ -217,28 +223,21 @@ impl BoundaryRefiner {
                 let warped_lon = warped_y.atan2(warped_x).to_degrees();
 
                 // Convert to pixel coordinates
-                let (sample_x, sample_y) = plate_map.projection.coords_to_pixel(warped_lat, warped_lon);
+                let (sample_x, sample_y) = projection.coords_to_pixel(warped_lat, warped_lon);
 
                 // Bounds check
-                let sample_x = sample_x.min(plate_map.width - 1);
-                let sample_y = sample_y.min(plate_map.height - 1);
+                let sample_x = sample_x.min(width - 1);
+                let sample_y = sample_y.min(height - 1);
 
                 // Sample from warped position
-                let sampled_plate = original_data[plate_map.get_index(sample_x, sample_y)];
-
-                // Assign to current position
-                let idx = plate_map.get_index(x, y);
-                plate_map.data[idx] = sampled_plate;
+                let idx = sample_y * width + sample_x;
+                *pixel = original_data[idx];
             }
-
-            if y % 100 == 0 && y > 0 {
-                println!("    Progress: {:.1}%", (y as f64 / plate_map.height as f64) * 100.0);
-            }
-        }
+        });
     }
 
     /// Multi-octave 3D noise with channel parameter
-    fn multi_octave_noise_3d(&mut self, x: f64, y: f64, z: f64, channel: u64) -> f64 {
+    fn multi_octave_noise_3d(&self, x: f64, y: f64, z: f64, channel: u64) -> f64 {
         let mut total = 0.0;
         let mut amplitude = 1.0;
         let mut frequency = 1.0;
@@ -321,34 +320,59 @@ impl BoundaryRefiner {
 
     /// Smooth boundaries to prevent over-jaggedness
     fn smooth_boundaries(&mut self, plate_map: &mut TerrainMap<u16>, iterations: usize) {
+        let width = plate_map.width;
+        let height = plate_map.height;
+
         for iter in 0..iterations {
             let original_data = plate_map.data.clone();
-            let mut changed = 0;
+            
+            let changed: usize = plate_map.data.par_chunks_mut(width).enumerate().map(|(y, row)| {
+                // Skip borders
+                if y == 0 || y == height - 1 {
+                    return 0;
+                }
+                
+                let mut local_changed = 0;
+                
+                for (x, pixel) in row.iter_mut().enumerate() {
+                    // Skip borders
+                    if x == 0 || x == width - 1 {
+                        continue;
+                    }
+                    
+                    let current_plate = original_data[y * width + x];
 
-            for y in 1..plate_map.height - 1 {
-                for x in 1..plate_map.width - 1 {
-                    let idx = plate_map.get_index(x, y);
-                    let current_plate = original_data[idx];
-
-                    // Check if this is a boundary pixel
-                    let neighbors = plate_map.get_neighbors(x, y);
+                    // Check neighbors (inline logic to avoid borrowing plate_map)
                     let mut plate_counts = std::collections::HashMap::new();
 
-                    for (nx, ny) in neighbors {
-                        let neighbor_plate = original_data[plate_map.get_index(nx, ny)];
-                        *plate_counts.entry(neighbor_plate).or_insert(0) += 1;
+                    for dy in -1i32..=1 {
+                        for dx in -1i32..=1 {
+                            if dx == 0 && dy == 0 { continue; }
+                            
+                            let ny = y as i32 + dy;
+                            let mut nx = x as i32 + dx;
+                            
+                            // Wrapping
+                            if nx < 0 { nx = width as i32 - 1; }
+                            else if nx >= width as i32 { nx = 0; }
+                            
+                            let neighbor_idx = (ny as usize) * width + (nx as usize);
+                            let neighbor_plate = original_data[neighbor_idx];
+                            *plate_counts.entry(neighbor_plate).or_insert(0) += 1;
+                        }
                     }
 
                     // If current plate is a minority among neighbors, consider changing it
                     if let Some((&most_common, &count)) = plate_counts.iter().max_by_key(|(_, &c)| c) {
                         // Only smooth very isolated pixels
                         if most_common != current_plate && count >= 6 {
-                            plate_map.data[idx] = most_common;
-                            changed += 1;
+                            *pixel = most_common;
+                            local_changed += 1;
                         }
                     }
                 }
-            }
+                local_changed
+            }).sum();
 
             if changed > 0 {
                 println!("    Iteration {}/{}: smoothed {} pixels", iter + 1, iterations, changed);

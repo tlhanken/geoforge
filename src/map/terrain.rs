@@ -92,6 +92,12 @@ impl MapProjection {
     pub fn km_per_pixel(&self, radius_km: f64) -> f64 {
         self.lat_resolution.to_radians() * radius_km
     }
+
+    /// Convert pixel to 3D point on unit sphere
+    pub fn get_spherical_point(&self, x: usize, y: usize) -> SphericalPoint {
+        let (lat, lon) = self.pixel_to_coords(x, y);
+        SphericalPoint::from_lat_lon(lat, lon)
+    }
 }
 
 impl<T> TerrainMap<T> {
@@ -169,8 +175,9 @@ impl<T> TerrainMap<T> {
     }
     
     /// Get neighboring pixel coordinates (8-connected, with longitude wraparound)
-    pub fn get_neighbors(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
-        let mut neighbors = Vec::new();
+    /// Returns SmallVec to avoid heap allocation for small number of elements
+    pub fn get_neighbors(&self, x: usize, y: usize) -> smallvec::SmallVec<[(usize, usize); 8]> {
+        let mut neighbors = smallvec::SmallVec::new();
         
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
@@ -202,8 +209,7 @@ impl<T> TerrainMap<T> {
     
     /// Convert each pixel to its corresponding 3D point on the unit sphere
     pub fn get_spherical_point(&self, x: usize, y: usize) -> SphericalPoint {
-        let (lat, lon) = self.projection.pixel_to_coords(x, y);
-        SphericalPoint::from_lat_lon(lat, lon)
+        self.projection.get_spherical_point(x, y)
     }
     
     /// Fill map with a function of coordinates

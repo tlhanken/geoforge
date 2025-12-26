@@ -19,23 +19,4 @@ pub use island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats}
 pub use boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
 pub use motion::{PlateMotionAssigner, PlateMotionConfig};
 
-
-/// Errors that can occur during plate generation
-#[derive(Debug)]
-pub enum PlateError {
-    SeedPlacementFailed,
-    InvalidMethod(String),
-    InvalidParameters(String),
-}
-
-impl std::fmt::Display for PlateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PlateError::SeedPlacementFailed => write!(f, "Failed to place seeds with minimum distance"),
-            PlateError::InvalidMethod(method) => write!(f, "Invalid generation method: {}", method),
-            PlateError::InvalidParameters(msg) => write!(f, "Invalid parameters: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for PlateError {}
+pub use crate::error::GeoforgeError as PlateError;

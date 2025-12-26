@@ -1,4 +1,6 @@
-use geoforge::{WorldMap, MapExporter};
+use geoforge::WorldMap;
+#[cfg(feature = "export-png")]
+use geoforge::MapExporter;
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
