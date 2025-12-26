@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 //! Orogenic belt generation from convergent plate boundaries
 //!
 //! This module implements Stage 2.1: Mountain-building zones created at convergent boundaries.

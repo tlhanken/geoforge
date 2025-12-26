@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 //! Geological province generator (Stage 2)
 //!
 //! This module implements the main geological province generator, coordinating the complete
@@ -431,6 +432,7 @@ impl GeologyGenerator {
     }
 
     /// Create backarc basin (behind volcanic arc, only for large plates)
+    #[allow(clippy::too_many_arguments)]
     fn create_backarc_basin(
         &self,
         boundary: &BoundarySegment,

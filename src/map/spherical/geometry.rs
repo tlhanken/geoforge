@@ -104,7 +104,7 @@ impl SphericalPoint {
             let dlat = angular_distance * angle.sin();
             let dlon = angular_distance * angle.cos() / lat_rad.cos().max(0.001);
             
-            let new_lat = (lat_rad + dlat).max(-PI/2.0).min(PI/2.0);
+            let new_lat = (lat_rad + dlat).clamp(-PI / 2.0, PI / 2.0);
             let new_lon = lon_rad + dlon;
             
             let neighbor = SphericalPoint {

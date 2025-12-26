@@ -7,6 +7,7 @@ use crate::tectonics::{
     BoundaryAnalysisConfig, BoundaryStatistics, IslandRemovalConfig, IslandRemovalStats,
     BoundaryRefinementConfig,
 };
+use crate::io::export::MapExporter;
 use std::error::Error;
 
 /// Tectonic operations interface for WorldMap

@@ -1,4 +1,5 @@
-use geoforge::WorldMap;
+use geoforge::{WorldMap, MapExporter};
+use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Realistic World Generation");
@@ -29,23 +30,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
     let mut world = WorldMap::new(1800, 900, seed)?;
 
+    let start_time = Instant::now();
+
     // Run complete Stage 1 pipeline using new API
     println!("\n🌍 Running complete Stage 1: Tectonic Foundation pipeline...");
     println!("\n⚡ Stage 1.1: Generating tectonic plates...");
+    let t1_start = Instant::now();
     world.tectonics().generate_plates(20)?;
+    let t1_duration = t1_start.elapsed();
 
     println!("🎨 Stage 1.2: Refining plate boundaries...");
+    let t2_start = Instant::now();
     world.tectonics().roughen_boundaries(None)?;
+    let t2_duration = t2_start.elapsed();
 
     println!("🏝️  Stage 1.3: Removing plate islands...");
+    let t3_start = Instant::now();
     let island_stats = world.tectonics().deisland(None)?;
+    let t3_duration = t3_start.elapsed();
     if island_stats.islands_removed > 0 {
         println!("   Removed {} islands ({} pixels reassigned)",
                  island_stats.islands_removed, island_stats.pixels_reassigned);
     }
 
     println!("🔍 Stage 1.4: Analyzing plate boundaries...");
+    let t4_start = Instant::now();
     let boundary_stats = world.tectonics().analyze(None)?;
+    let t4_duration = t4_start.elapsed();
     println!("   Found {} plate boundaries:", boundary_stats.total_boundaries);
     println!("   • Convergent (colliding):    {}", boundary_stats.convergent_count);
     println!("   • Divergent (spreading):     {}", boundary_stats.divergent_count);
@@ -100,7 +111,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Stage 2: Geological Provinces (Orogenic Belts)
     println!("\n🏔️  Stage 2.1: Generating orogenic belts...");
+    let t5_start = Instant::now();
     let orogens = world.generate_geology(None)?;
+    let t5_duration = t5_start.elapsed();
 
     // Show geology statistics
     let mut counts = std::collections::HashMap::new();
@@ -115,6 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Export all tectonic data using new API
     println!("\n💾 Exporting visualizations...");
+    let export_start = Instant::now();
     world.tectonics().export("outputs")?;
 
     #[cfg(feature = "export-png")]
@@ -126,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("   (Color=direction, Brightness=speed)");
 
         // Export motion color reference
-        WorldMap::export_motion_reference_png("outputs", "motion_reference.png")?;
+        world.export_motion_reference_png("outputs", "motion_reference.png")?;
         println!("✅ Motion color reference: outputs/motion_reference.png");
         println!("   (Color wheel showing direction → color mapping)");
 
@@ -144,16 +158,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("✅ Geology+boundaries exported: outputs/geology_boundaries.png");
         println!("   (Provinces in color + Red/Blue/Green boundary overlays)");
     }
+    let export_duration = export_start.elapsed();
+    let total_duration = start_time.elapsed();
 
     println!("✅ Complete world data saved: outputs/world.map");
 
     println!("\n🎉 STAGES 1-2: TECTONIC & GEOLOGICAL FOUNDATION COMPLETE!");
-    println!("\nPipeline executed:");
-    println!("  ✅ Stage 1.1: Core Plate Generation (electrostatic physics)");
-    println!("  ✅ Stage 1.2: Boundary Refinement (realistic irregularity)");
-    println!("  ✅ Stage 1.3: Island Removal (contiguous plates)");
-    println!("  ✅ Stage 1.4: Boundary Analysis (motion & classification)");
-    println!("  ✅ Stage 2.1: Orogenic Belts (mountain-building zones)");
+    println!("\nPipeline executed in {:.2?}:", total_duration);
+    println!("  ✅ Stage 1.1: Core Plate Generation   ({:.2?})", t1_duration);
+    println!("  ✅ Stage 1.2: Boundary Refinement     ({:.2?})", t2_duration);
+    println!("  ✅ Stage 1.3: Island Removal          ({:.2?})", t3_duration);
+    println!("  ✅ Stage 1.4: Boundary Analysis       ({:.2?})", t4_duration);
+    println!("  ✅ Stage 2.1: Orogenic Belts          ({:.2?})", t5_duration);
+    println!("  ✅ Exports                            ({:.2?})", export_duration);
     println!("\nFiles created in outputs/ directory:");
     println!("  • world.map - Complete world data (binary)");
 

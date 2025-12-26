@@ -12,7 +12,7 @@ pub mod island_removal;
 pub mod boundary_analysis;
 pub mod motion;
 
-pub use generator::TectonicPlateGenerator;
+pub use generator::{TectonicPlateGenerator, GenerationMethod};
 pub use plates::{PlateSeed, PlateStats, PlateType, PlateInteraction, PlateBoundary};
 pub use boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
 pub use island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};

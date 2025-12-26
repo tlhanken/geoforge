@@ -201,7 +201,7 @@ impl PlanetaryParams {
         // Venus with its 243-day rotation has extreme temperature uniformity
         // Fast-rotating planets have less temperature variation
         let earth_ratio = self.rotation_period_hours / 24.0;
-        (earth_ratio.ln() + 1.0).max(0.1).min(5.0)
+        (earth_ratio.ln() + 1.0).clamp(0.1, 5.0)
     }
     
     /// Calculate solar radiation variation due to orbital eccentricity

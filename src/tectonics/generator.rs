@@ -12,6 +12,13 @@ use std::fs;
 use std::path::Path;
 
 
+/// Method used for tectonic plate generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerationMethod {
+    /// Electrostatic physics simulation (charged particles reaching equilibrium)
+    Electrostatic,
+}
+
 /// Generator for realistic tectonic plates using electrostatic physics simulation
 pub struct TectonicPlateGenerator {
     pub width: usize,
@@ -123,7 +130,7 @@ impl TectonicPlateGenerator {
     /// use geoforge::{TectonicPlateGenerator, BoundaryRefinementConfig};
     ///
     /// let mut generator = TectonicPlateGenerator::with_seed(1800, 900, 15, 42)?;
-    /// generator.generate("electrostatic")?;
+    /// generator.generate(GenerationMethod::Electrostatic)?;
     ///
     /// // Apply boundary refinement (Stage 1.2)
     /// let config = BoundaryRefinementConfig::with_seed(42)
@@ -137,13 +144,15 @@ impl TectonicPlateGenerator {
         refiner.refine_boundaries(&mut self.plate_map);
     }
 
-    /// Main generation function using electrostatic physics simulation
-    pub fn generate(&mut self, _method: &str) -> Result<&Vec<u16>, PlateError> {
-        println!("Generating {} tectonic plates using electrostatic physics... (seed: {})",
-                 self.num_plates, self.current_seed);
-
-        // Generate plate boundaries using electrostatic simulation
-        self.generate_plates_electrostatic()?;
+    /// Main generation function
+    pub fn generate(&mut self, method: GenerationMethod) -> Result<&Vec<u16>, PlateError> {
+        match method {
+            GenerationMethod::Electrostatic => {
+                println!("Generating {} tectonic plates using electrostatic physics... (seed: {})",
+                         self.num_plates, self.current_seed);
+                self.generate_plates_electrostatic()?;
+            }
+        }
 
         println!("Tectonic plate generation complete!");
         Ok(&self.plate_map.data)
@@ -334,8 +343,8 @@ mod tests {
         let mut gen1 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
         let mut gen2 = TectonicPlateGenerator::with_seed(1800, 900, 5, 123).unwrap();
 
-        let result1 = gen1.generate("electrostatic");
-        let result2 = gen2.generate("electrostatic");
+        let result1 = gen1.generate(GenerationMethod::Electrostatic);
+        let result2 = gen2.generate(GenerationMethod::Electrostatic);
 
         assert!(result1.is_ok() && result2.is_ok());
         // With same seed, results should be identical
@@ -347,8 +356,8 @@ mod tests {
         let mut gen1 = TectonicPlateGenerator::with_seed(180, 90, 5, 123).unwrap();
         let mut gen2 = TectonicPlateGenerator::with_seed(180, 90, 5, 456).unwrap();
 
-        let result1 = gen1.generate("electrostatic");
-        let result2 = gen2.generate("electrostatic");
+        let result1 = gen1.generate(GenerationMethod::Electrostatic);
+        let result2 = gen2.generate(GenerationMethod::Electrostatic);
 
         assert!(result1.is_ok() && result2.is_ok());
         // With different seeds, results should be different
@@ -358,7 +367,7 @@ mod tests {
     #[test]
     fn test_validation() {
         let mut generator = TectonicPlateGenerator::new(1800, 900, 5).unwrap();
-        let result = generator.generate("electrostatic");
+        let result = generator.generate(GenerationMethod::Electrostatic);
         assert!(result.is_ok());
         assert!(generator.validate().is_ok());
     }

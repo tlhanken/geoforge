@@ -174,7 +174,7 @@ fn generate_power_law_charge(
 
 /// Simulate electrostatic equilibrium using iterative force calculation
 pub fn simulate_equilibrium(
-    charges: &mut Vec<PointCharge>,
+    charges: &mut [PointCharge],
     config: &ElectrostaticConfig,
 ) -> Result<(), PlateError> {
     println!("Starting electrostatic simulation...");
