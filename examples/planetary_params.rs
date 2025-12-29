@@ -1,5 +1,5 @@
 /// Example demonstrating different planetary parameters
-use geoforge::{WorldMap, PlanetaryParams};
+use geoforge::{WorldMap, PlanetaryParams, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🪐 Planetary Parameters Example");

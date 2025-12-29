@@ -8,7 +8,7 @@
 //!
 //! Run with: cargo run --example island_removal --features export-png
 
-use geoforge::{WorldMap, BoundaryRefinementConfig};
+use geoforge::{WorldMap, BoundaryRefinementConfig, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Island Removal Example");

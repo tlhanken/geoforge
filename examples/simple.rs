@@ -1,5 +1,5 @@
 /// Enhanced example showcasing the geoforge library capabilities
-use geoforge::{WorldMap, TectonicPlateGenerator};
+use geoforge::{WorldMap, TectonicPlateGenerator, MapExporter, GenerationMethod};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge Library Example");
@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("• Using electrostatic physics simulation");
     println!("• Seed: {}", generator.get_seed());
     
-    generator.generate("electrostatic")?;
+    generator.generate(GenerationMethod::Electrostatic)?;
     generator.validate()?;
     
     // Show plate statistics
