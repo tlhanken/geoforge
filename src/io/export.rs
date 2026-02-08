@@ -411,30 +411,5 @@ fn motion_to_rgb(direction_deg: f64, speed_cm_year: f64) -> [u8; 3] {
 
 #[cfg(feature = "export-png")]
 fn get_province_color(province_type: GeologicProvince) -> [u8; 3] {
-    match province_type {
-        GeologicProvince::CollisionOrogen => [50, 150, 80],
-        GeologicProvince::AccretionaryWedge => [255, 200, 100],
-        
-        GeologicProvince::ContinentalFloodBasalt => [150, 50, 150],
-        GeologicProvince::OceanicPlateau => [180, 100, 180],
-        GeologicProvince::HotspotTrack => [200, 120, 200],
-        
-        GeologicProvince::VolcanicArc => [255, 50, 50],
-        GeologicProvince::ForearcBasin => [160, 160, 160],
-        GeologicProvince::BackarcBasin => [180, 180, 180],
-        
-        GeologicProvince::Craton => [255, 140, 60],
-        GeologicProvince::Platform => [255, 150, 200],
-        GeologicProvince::IntracratonicBasin => [160, 120, 180],
-        
-        GeologicProvince::ContinentalRift => [255, 220, 60],
-        GeologicProvince::ExtendedCrust => [255, 240, 120],
-        
-        GeologicProvince::MidOceanRidge => [100, 200, 200],
-        GeologicProvince::AbyssalPlain => [70, 130, 180],
-        GeologicProvince::OceanTrench => [0, 50, 100],
-        GeologicProvince::OceanicFractureZone => [120, 180, 170],
-        GeologicProvince::OceanicHotspotTrack => [100, 80, 180],
-        GeologicProvince::ContinentalHotspotTrack => [120, 60, 200],
-    }
+    province_type.color()
 }

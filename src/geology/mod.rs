@@ -43,6 +43,7 @@
 //! println!("Generated {} geological provinces", provinces.len());
 //! ```
 
+pub mod constants;
 pub mod provinces;
 pub mod orogenic;
 pub mod generator;

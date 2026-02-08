@@ -20,6 +20,17 @@ pub enum GeologicProvince {
     /// - Significant crustal shortening
     CollisionOrogen,
 
+    /// Paleo-orogen - Ancient, inactive mountain belt
+    ///
+    /// The "ghost" of a past continental collision. Eroded remnants of ancient mountains.
+    /// Example: Ural Mountains, Appalachian Mountains
+    ///
+    /// Characteristics:
+    /// - Moderate elevation (eroded)
+    /// - Linear features crossing cratons
+    /// - Evidence of past suturing
+    PaleoOrogen,
+
     // NOTE: SubductionOrogen removed - volcanic arc component now handled by VolcanicArc
     // Subduction zones are represented by their component parts: OceanTrench,
     // AccretionaryWedge, ForearcBasin, VolcanicArc, and BackarcBasin
@@ -160,6 +171,7 @@ impl GeologicProvince {
         match self {
             // Stage 2.1: Orogenic Belts
             GeologicProvince::CollisionOrogen => "Collision Orogen",
+            GeologicProvince::PaleoOrogen => "Paleo-orogen (Ancient)",
             GeologicProvince::AccretionaryWedge => "Accretionary Wedge",
 
             // Stage 2.2: Large Igneous Provinces
@@ -197,6 +209,8 @@ impl GeologicProvince {
             // Stage 2.1: Orogenic Belts
             GeologicProvince::CollisionOrogen =>
                 "Continental-continental collision zone (e.g., Himalayas)",
+            GeologicProvince::PaleoOrogen =>
+                "Ancient, eroded mountain belt (e.g., Appalachians, Urals)",
             GeologicProvince::AccretionaryWedge =>
                 "Scraped sediments at subduction zone (e.g., offshore Japan)",
 
@@ -243,6 +257,49 @@ impl GeologicProvince {
                 "Volcanic seamount chain from hotspot (e.g., Hawaiian-Emperor)",
             GeologicProvince::ContinentalHotspotTrack =>
                 "Continental volcanic track from hotspot (e.g., Yellowstone)",
+        }
+    }
+
+    /// Get the display color for this province type (RGB)
+    ///
+    /// Uses a family-based color scheme:
+    /// - **Cratonic (Warm)**: Shield (Orange/Red), Platform (Pink/Beige)
+    /// - **Orogenic (High/Active)**: Collision (Brown/Dark Red), Paleo (Fade Brown/Purple)
+    /// - **Oceanic (Cool)**: Abyssal (Blue), Ridge (Cyan/Light Blue), Trench (Dark Blue)
+    /// - **Volcanic/Igneous (Vibrant)**: Arcs (Red), Flood Basalts (Purple/Magenta), Hotspots (Bright Purple)
+    pub fn color(&self) -> [u8; 3] {
+        match self {
+            // Orogenic Family (Browns/Purples - Elevation/Structure)
+            GeologicProvince::CollisionOrogen => [139, 69, 19],   // Saddle Brown (Active Mountains)
+            GeologicProvince::PaleoOrogen => [188, 143, 143],     // Rosy Brown (Eroded/Ghost Mountains)
+            GeologicProvince::AccretionaryWedge => [222, 184, 135], // Burlywood (Sediment pile)
+
+            // Volcanic/Igneous Family (Vibrant Red/Purple/Magenta)
+            GeologicProvince::ContinentalFloodBasalt => [128, 0, 128], // Purple (Flood Basalt)
+            GeologicProvince::OceanicPlateau => [148, 0, 211],    // Dark Violet
+            GeologicProvince::HotspotTrack => [255, 0, 255],      // Magenta
+            GeologicProvince::VolcanicArc => [255, 69, 0],        // Orange Red (Active Volcanism)
+            
+            // Basin Family (Greys/Light Blues)
+            GeologicProvince::ForearcBasin => [176, 196, 222],    // Light Steel Blue
+            GeologicProvince::BackarcBasin => [119, 136, 153],    // Light Slate Gray
+
+            // Cratonic Family (Warm Pinks/Oranges/Beiges)
+            GeologicProvince::Craton => [255, 140, 0],            // Dark Orange (The Core/Shield)
+            GeologicProvince::Platform => [255, 228, 196],        // Bisque (Sedimentary Cover)
+            GeologicProvince::IntracratonicBasin => [210, 180, 140], // Tan
+            
+            // Extensional Family (Yellows/Golds)
+            GeologicProvince::ContinentalRift => [255, 215, 0],   // Gold (Active Rifting)
+            GeologicProvince::ExtendedCrust => [240, 230, 140],   // Khaki
+
+            // Oceanic Family (Blues/Cyans)
+            GeologicProvince::MidOceanRidge => [0, 255, 255],     // Cyan (New Crust)
+            GeologicProvince::AbyssalPlain => [65, 105, 225],     // Royal Blue (Deep Ocean)
+            GeologicProvince::OceanTrench => [0, 0, 139],         // Dark Blue (Deepest)
+            GeologicProvince::OceanicFractureZone => [72, 209, 204], // Medium Turquoise
+            GeologicProvince::OceanicHotspotTrack => [138, 43, 226], // Blue Violet
+            GeologicProvince::ContinentalHotspotTrack => [153, 50, 204], // Dark Orchid
         }
     }
 }
@@ -548,6 +605,21 @@ impl ProvinceCharacteristics {
             roughness: 0.8,            // Rough volcanic terrain
             width_km: length_km,
             intensity: 0.8,            // Very strong volcanic signature
+            convergence_rate: 0.0,
+        }
+    }
+
+    /// Create characteristics for a paleo-orogen (ancient mountain belt)
+    ///
+    /// # Arguments
+    /// * `width_km` - Width of the belt in kilometers
+    pub fn paleo_orogen(width_km: f64) -> Self {
+        Self {
+            province_type: GeologicProvince::PaleoOrogen,
+            elevation_intensity: 0.6, // Moderate elevation (eroded from 1.0)
+            roughness: 0.6,           // Moderately rough (eroded)
+            width_km,
+            intensity: 0.3,           // Inactive
             convergence_rate: 0.0,
         }
     }
