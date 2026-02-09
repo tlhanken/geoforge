@@ -8,9 +8,10 @@ use crate::map::terrain::TerrainMap;
 use crate::map::spherical::SphericalPoint;
 use crate::tectonics::plates::{PlateSeed, PlateInteraction};
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 /// Configuration for boundary analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundaryAnalysisConfig {
     /// Minimum boundary length in pixels to keep (filters noise)
     pub min_boundary_length: usize,
@@ -41,7 +42,7 @@ impl BoundaryAnalysisConfig {
 }
 
 /// Represents a segment of boundary between two plates
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundarySegment {
     /// First plate ID
     pub plate_a: u16,
@@ -152,7 +153,7 @@ impl BoundaryAnalyzer {
                         };
 
                         boundary_pixels.entry(plate_pair)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push((x, y));
                     }
                 }
@@ -294,7 +295,7 @@ impl Default for BoundaryAnalyzer {
 }
 
 /// Statistics about plate boundaries
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundaryStatistics {
     pub total_boundaries: usize,
     pub convergent_count: usize,

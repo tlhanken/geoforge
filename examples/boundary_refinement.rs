@@ -7,7 +7,7 @@
 //!
 //! Run with: cargo run --example boundary_refinement --features export-png
 
-use geoforge::{WorldMap, BoundaryRefinementConfig};
+use geoforge::{WorldMap, BoundaryRefinementConfig, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Boundary Refinement Example");

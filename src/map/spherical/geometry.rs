@@ -1,9 +1,10 @@
 //! Spherical geometry utilities for tectonic plate generation
 
 use std::f64::consts::PI;
+use serde::{Serialize, Deserialize};
 
 /// 3D point on unit sphere
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct SphericalPoint {
     pub x: f64,
     pub y: f64,
@@ -104,7 +105,7 @@ impl SphericalPoint {
             let dlat = angular_distance * angle.sin();
             let dlon = angular_distance * angle.cos() / lat_rad.cos().max(0.001);
             
-            let new_lat = (lat_rad + dlat).max(-PI/2.0).min(PI/2.0);
+            let new_lat = (lat_rad + dlat).clamp(-PI / 2.0, PI / 2.0);
             let new_lon = lon_rad + dlon;
             
             let neighbor = SphericalPoint {

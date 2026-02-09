@@ -1,9 +1,10 @@
 //! Tectonic plate data structures and utilities
 
 use crate::map::spherical::SphericalPoint;
+use serde::{Serialize, Deserialize};
 
 /// Represents a tectonic plate seed point with motion information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateSeed {
     pub id: u16,
     pub x: usize,
@@ -56,7 +57,7 @@ impl PlateSeed {
 }
 
 /// Statistics about a generated tectonic plate
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateStats {
     pub pixels: usize,
     pub percentage: f64,
@@ -75,7 +76,7 @@ impl PlateStats {
             percentage: (area_km2 / PLANET_SURFACE_AREA_KM2) * 100.0,
             area_km2: area_km2 as u64,
             seed,
-            plate_type: PlateType::Mixed, // Default, will be assigned later
+            plate_type: PlateType::Oceanic, // Default, will be assigned later based on size
         }
     }
 
@@ -103,41 +104,42 @@ impl PlateStats {
 }
 
 /// Character/composition of a tectonic plate
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Note: Plates are classified as primarily oceanic or continental based on
+/// their dominant crust type. In reality, many plates contain both types
+/// (e.g., North American plate has continental interior + Atlantic ocean floor),
+/// but we classify based on the dominant character for geological modeling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlateType {
     /// Oceanic plate (denser, subducts beneath continental)
     Oceanic,
     /// Continental plate (lighter, does not subduct)
     Continental,
-    /// Mixed/composite plate with both oceanic and continental crust
-    Mixed,
 }
 
 impl PlateType {
     /// Assign plate type based on size heuristics
     ///
-    /// Larger plates tend to be continental, smaller plates tend to be oceanic.
-    /// This is a simplified model - in reality, plate type depends on crust composition.
+    /// Larger plates tend to be oceanic (like Earth's Pacific plate), smaller plates
+    /// tend to be continental. Uses a 70/30 split to roughly match Earth's ocean/land
+    /// surface ratio (~71% ocean).
     ///
     /// # Arguments
-    /// * `area_km2` - Area of the plate in square kilometers
-    /// * `all_areas` - All plate areas for percentile calculation
+    /// * `percentile` - Size percentile of the plate (0.0 = smallest, 1.0 = largest)
     ///
     /// # Returns
     /// PlateType classification based on size percentile
     pub fn from_size_percentile(percentile: f64) -> Self {
-        if percentile > 0.7 {
-            PlateType::Continental
-        } else if percentile < 0.3 {
-            PlateType::Oceanic
+        if percentile > 0.3 {
+            PlateType::Oceanic      // Top 70% by size = oceanic
         } else {
-            PlateType::Mixed
+            PlateType::Continental  // Bottom 30% by size = continental
         }
     }
 }
 
 /// Type of plate interaction at boundaries
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlateInteraction {
     /// Plates moving apart (divergent boundary)
     Divergent,
@@ -148,7 +150,7 @@ pub enum PlateInteraction {
 }
 
 /// Information about plate boundary characteristics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlateBoundary {
     pub plate_a: u16,
     pub plate_b: u16,

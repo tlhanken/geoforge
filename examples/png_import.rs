@@ -1,5 +1,5 @@
 /// Example demonstrating PNG import functionality for tectonic plates
-use geoforge::WorldMap;
+use geoforge::{WorldMap, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🖼️ PNG Import Example");

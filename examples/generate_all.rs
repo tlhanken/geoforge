@@ -1,5 +1,5 @@
 /// Example demonstrating the generate_all function
-use geoforge::WorldMap;
+use geoforge::{WorldMap, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Generate All Layers Example");

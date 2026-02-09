@@ -1,5 +1,5 @@
 /// Example demonstrating the export_all_png function
-use geoforge::WorldMap;
+use geoforge::{WorldMap, MapExporter};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📤 Export All PNG Example");
