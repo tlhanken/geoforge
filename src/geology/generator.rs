@@ -25,8 +25,10 @@
 //!
 //! # Province Types (18 total - IntracratonicBasin not implemented, ContinentalRift deferred)
 //!
-//! **Collision Orogens (1)**: CollisionOrogen
+//! **Collision Orogens (1)**: CollisionOrogen (continental-continental convergence)
 //! **Subduction Systems (5)**: OceanTrench, AccretionaryWedge, ForearcBasin, VolcanicArc, BackarcBasin
+//!   - Applies to BOTH oceanic-oceanic (island arcs) AND oceanic-continental (Andes-style) convergence
+//!   - Same province types, different elevations (determined in Stage 3 based on crust type)
 //! **LIPs (3)**: ContinentalFloodBasalt, OceanicPlateau, ContinentalHotspotTrack*
 //! **Stable (3)**: Craton, Platform, ExtendedCrust
 //! **Oceanic (4)**: AbyssalPlain, MidOceanRidge, OceanicFractureZone, OceanicHotspotTrack*
@@ -183,7 +185,7 @@ impl GeologyGenerator {
 
         // Stage 2.2: Large Igneous Provinces - Rare volcanic events
         // (Flood basalts, hotspots overlay everything)
-        let lips = self.generate_large_igneous_provinces(plate_stats, plate_map, &regions, &mut rng);
+        let lips = self.generate_large_igneous_provinces(plate_stats, &plate_index, &regions, &mut rng);
         regions.extend(lips);
 
         // FINAL OVERLAY: Hotspot tracks - Linear volcanic chains on top of all other features
@@ -215,15 +217,26 @@ impl GeologyGenerator {
                 continue;
             }
 
-            // Check if both plates are oceanic
+            // Check for ANY subduction (oceanic-oceanic OR oceanic-continental)
             if let (Some(stats_a), Some(stats_b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
-                if stats_a.plate_type == PlateType::Oceanic && stats_b.plate_type == PlateType::Oceanic {
-                    // Determine which plate subducts (older/denser - lower ID)
-                    let (subducting_plate, overriding_plate) = if boundary.plate_a < boundary.plate_b {
-                        (boundary.plate_a, boundary.plate_b)
-                    } else {
-                        (boundary.plate_b, boundary.plate_a)
-                    };
+                // Determine if this is a subduction zone and identify plates
+                let (is_subduction, subducting_plate, overriding_plate) = match (stats_a.plate_type, stats_b.plate_type) {
+                    // Oceanic-Oceanic: Older plate (lower ID) subducts
+                    (PlateType::Oceanic, PlateType::Oceanic) => {
+                        if boundary.plate_a < boundary.plate_b {
+                            (true, boundary.plate_a, boundary.plate_b)
+                        } else {
+                            (true, boundary.plate_b, boundary.plate_a)
+                        }
+                    },
+                    // Oceanic-Continental: Oceanic plate always subducts (denser)
+                    (PlateType::Oceanic, PlateType::Continental) => (true, boundary.plate_a, boundary.plate_b),
+                    (PlateType::Continental, PlateType::Oceanic) => (true, boundary.plate_b, boundary.plate_a),
+                    // Continental-Continental: Handled by OrogenicBeltGenerator
+                    _ => (false, 0, 0),
+                };
+
+                if is_subduction {
 
                     // Generate complete subduction zone transect sequentially:
                     // Oceanic plate → Trench → Accretionary Wedge → Forearc → Volcanic Arc → Backarc → Continental plate
@@ -683,71 +696,99 @@ impl GeologyGenerator {
             regions.push(ProvinceRegion::new(plate_pixels.clone(), platform_chars, None));
 
             // 2. CONTINENTAL CORE / SHIELD (ORANGE) - Single massive core
-            // Real continents grow around a central cratonic nucleus (e.g., Canadian Shield)
-            // Instead of scattered fragments, we generate one large cohesive core (20-30% of plate)
-            
-            // Find rough centroid
-            let min_x = plate_pixels.iter().map(|(x, _)| x).min().unwrap_or(&0);
-            let max_x = plate_pixels.iter().map(|(x, _)| x).max().unwrap_or(&0);
-            let min_y = plate_pixels.iter().map(|(_, y)| y).min().unwrap_or(&0);
-            let max_y = plate_pixels.iter().map(|(_, y)| y).max().unwrap_or(&0);
-            let plate_center_x = (min_x + max_x) / 2;
-            let plate_center_y = (min_y + max_y) / 2;
-
-            // Target size: fraction of plate area for the exposed shield
-            let target_shield_area = (plate_pixels.len() as f64 * geo_const::SHIELD_AREA_FRACTION) as usize;
-            let target_radius = (target_shield_area as f64 / std::f64::consts::PI).sqrt();
-            
-            // Generate the core using a noise-distorted distance field
-            // We want a cohesive blob, not a perfect circle
-            let shield_pixels: Vec<(usize, usize)> = plate_pixels.iter()
-                .filter(|&&(x, y)| {
-                    let dx = (x as i32 - plate_center_x as i32) as f64;
-                    let dy = (y as i32 - plate_center_y as i32) as f64;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    
-                    // Simple noise variation to make edge irregular
-                    // (Using pseudo-randomness based on coords to be deterministic but varied)
-                    let angle = dy.atan2(dx);
-                    let noise = (angle * 3.0).sin() * 0.2 + (angle * 7.0).cos() * 0.1;
-                    let varying_radius = target_radius * (1.0 + noise);
-                    
-                    dist < varying_radius
-                })
-                .copied()
-                .collect();
-
-            if !shield_pixels.is_empty() {
-                let chars = ProvinceCharacteristics::craton(shield_pixels.len() as f64 * 2500.0); // Large area
-                regions.push(ProvinceRegion::new(shield_pixels, chars, None));
-            }
+            self.generate_continental_shield(plate_pixels, &mut regions);
 
             // 3. INTRACRATONIC BASINS - Occasional subsided areas
-            if stats.area_km2 > geo_const::INTRACRATONIC_BASIN_MIN_AREA_KM2
-                && rng.gen::<f64>() < geo_const::INTRACRATONIC_BASIN_PROBABILITY {
-                let basin_x = plate_pixels[rng.gen_range(0..plate_pixels.len())].0;
-                let basin_y = plate_pixels[rng.gen_range(0..plate_pixels.len())].1;
-
-                let basin_pixels: Vec<(usize, usize)> = plate_pixels.iter()
-                    .filter(|&&(x, y)| {
-                        let dx = (x as i32 - basin_x as i32).abs() as f64;
-                        let dy = (y as i32 - basin_y as i32).abs() as f64;
-                        let dist = (dx * dx + dy * dy).sqrt();
-                        dist < geo_const::INTRACRATONIC_BASIN_MIN_RADIUS_PX
-                    })
-                    .copied()
-                    .collect();
-
-                if basin_pixels.len() > geo_const::INTRACRATONIC_BASIN_MIN_PIXELS {
-                    let chars = ProvinceCharacteristics::intracratonic_basin(
-                        basin_pixels.len() as f64 * geo_const::INTRACRATONIC_BASIN_AREA_PER_PIXEL_KM2
-                    );
-                    regions.push(ProvinceRegion::new(basin_pixels, chars, None));
-                }
-            }
+            self.generate_intracratonic_basin(stats, plate_pixels, rng, &mut regions);
         }
 
         regions
+    }
+
+    /// Generate continental shield (exposed cratonic core)
+    ///
+    /// Real continents grow around a central cratonic nucleus (e.g., Canadian Shield).
+    /// Generates one large cohesive core representing 20-30% of plate area.
+    fn generate_continental_shield(
+        &self,
+        plate_pixels: &[(usize, usize)],
+        regions: &mut Vec<ProvinceRegion>,
+    ) {
+        // Find rough centroid
+        let min_x = plate_pixels.iter().map(|(x, _)| x).min().unwrap_or(&0);
+        let max_x = plate_pixels.iter().map(|(x, _)| x).max().unwrap_or(&0);
+        let min_y = plate_pixels.iter().map(|(_, y)| y).min().unwrap_or(&0);
+        let max_y = plate_pixels.iter().map(|(_, y)| y).max().unwrap_or(&0);
+        let plate_center_x = (min_x + max_x) / 2;
+        let plate_center_y = (min_y + max_y) / 2;
+
+        // Target size: fraction of plate area for the exposed shield
+        let target_shield_area = (plate_pixels.len() as f64 * geo_const::SHIELD_AREA_FRACTION) as usize;
+        let target_radius = (target_shield_area as f64 / std::f64::consts::PI).sqrt();
+
+        // Generate the core using a noise-distorted distance field
+        // We want a cohesive blob, not a perfect circle
+        let shield_pixels: Vec<(usize, usize)> = plate_pixels.iter()
+            .filter(|&&(x, y)| {
+                let dx = (x as i32 - plate_center_x as i32) as f64;
+                let dy = (y as i32 - plate_center_y as i32) as f64;
+                let dist = (dx * dx + dy * dy).sqrt();
+
+                // Simple noise variation to make edge irregular
+                // (Using pseudo-randomness based on coords to be deterministic but varied)
+                let angle = dy.atan2(dx);
+                let noise = (angle * 3.0).sin() * 0.2 + (angle * 7.0).cos() * 0.1;
+                let varying_radius = target_radius * (1.0 + noise);
+
+                dist < varying_radius
+            })
+            .copied()
+            .collect();
+
+        if !shield_pixels.is_empty() {
+            let chars = ProvinceCharacteristics::craton(shield_pixels.len() as f64 * 2500.0);
+            regions.push(ProvinceRegion::new(shield_pixels, chars, None));
+        }
+    }
+
+    /// Generate intracratonic basin (subsided area within stable craton)
+    ///
+    /// Occasional circular subsided areas found in large, stable cratons.
+    /// Example: Michigan Basin, Illinois Basin
+    fn generate_intracratonic_basin(
+        &self,
+        stats: &PlateStats,
+        plate_pixels: &[(usize, usize)],
+        rng: &mut StdRng,
+        regions: &mut Vec<ProvinceRegion>,
+    ) {
+        // Only on large plates with low probability
+        if stats.area_km2 <= geo_const::INTRACRATONIC_BASIN_MIN_AREA_KM2
+            || rng.gen::<f64>() >= geo_const::INTRACRATONIC_BASIN_PROBABILITY {
+            return;
+        }
+
+        // Pick random basin center
+        let basin_x = plate_pixels[rng.gen_range(0..plate_pixels.len())].0;
+        let basin_y = plate_pixels[rng.gen_range(0..plate_pixels.len())].1;
+
+        // Generate circular basin
+        let basin_pixels: Vec<(usize, usize)> = plate_pixels.iter()
+            .filter(|&&(x, y)| {
+                let dx = (x as i32 - basin_x as i32).abs() as f64;
+                let dy = (y as i32 - basin_y as i32).abs() as f64;
+                let dist = (dx * dx + dy * dy).sqrt();
+                dist < geo_const::INTRACRATONIC_BASIN_MIN_RADIUS_PX
+            })
+            .copied()
+            .collect();
+
+        if basin_pixels.len() > geo_const::INTRACRATONIC_BASIN_MIN_PIXELS {
+            let chars = ProvinceCharacteristics::intracratonic_basin(
+                basin_pixels.len() as f64 * geo_const::INTRACRATONIC_BASIN_AREA_PER_PIXEL_KM2
+            );
+            regions.push(ProvinceRegion::new(basin_pixels, chars, None));
+        }
     }
 
     /// Generate passive continental margins (extended crust)
@@ -822,7 +863,7 @@ impl GeologyGenerator {
     fn generate_large_igneous_provinces(
         &self,
         plate_stats: &HashMap<u16, PlateStats>,
-        plate_map: &TerrainMap<u16>,
+        plate_index: &PlatePixelIndex,
         existing_regions: &[ProvinceRegion],
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
@@ -857,7 +898,7 @@ impl GeologyGenerator {
                     _ => continue,
                 };
 
-                let pixels_sample = self.sample_plate_interior(*plate_id, plate_map, geo_const::LIP_INTERIOR_SAMPLE_FRACTION, rng);
+                let pixels_sample = self.sample_plate_interior(*plate_id, plate_index, geo_const::LIP_INTERIOR_SAMPLE_FRACTION, rng);
                 let unassigned: Vec<(usize, usize)> = pixels_sample.into_iter()
                     .filter(|p| !assigned_pixels.contains(p))
                     .collect();
@@ -1050,71 +1091,72 @@ impl GeologyGenerator {
     }
 
     /// Helper: sample interior pixels from a plate
+    ///
+    /// Uses pre-built PlatePixelIndex for O(1) lookup instead of O(width × height) scanning.
     fn sample_plate_interior(
         &self,
         plate_id: u16,
-        plate_map: &TerrainMap<u16>,
+        plate_index: &PlatePixelIndex,
         fraction: f64,
         rng: &mut StdRng,
     ) -> Vec<(usize, usize)> {
-        let mut pixels = Vec::new();
+        // Get all pixels for this plate from the index (O(1) lookup)
+        let plate_pixels = match plate_index.get(&plate_id) {
+            Some(pixels) => pixels,
+            None => return Vec::new(),
+        };
 
-        for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
-            for (x, &pid) in row.iter().enumerate() {
-                if pid == plate_id && rng.gen::<f64>() < fraction {
-                    pixels.push((x, y));
-                }
-            }
-        }
-
-        pixels
+        // Randomly sample the requested fraction
+        plate_pixels.iter()
+            .filter(|_| rng.gen::<f64>() < fraction)
+            .copied()
+            .collect()
     }
 
     /// Helper: find pixels in deep plate interior (far from boundaries)
     ///
     /// Filters for pixels that are at least `min_distance` pixels away from any plate boundary.
     /// This ensures features like hotspots spawn in plate centers, not near edges.
+    ///
+    /// Uses pre-built PlatePixelIndex for O(1) lookup instead of O(width × height) scanning.
     fn find_deep_interior_pixels(
         &self,
         plate_id: u16,
+        plate_index: &PlatePixelIndex,
         plate_map: &TerrainMap<u16>,
         min_distance: usize,
     ) -> Vec<(usize, usize)> {
-        let mut interior = Vec::new();
+        // Get all pixels for this plate from the index (O(1) lookup)
+        let plate_pixels = match plate_index.get(&plate_id) {
+            Some(pixels) => pixels,
+            None => return Vec::new(),
+        };
 
-        for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
-            for (x, &pid) in row.iter().enumerate() {
-                if pid != plate_id {
-                    continue;
-                }
-
+        // Filter for deep interior pixels (far from any boundary)
+        plate_pixels.iter()
+            .filter(|&&(x, y)| {
                 // Check if all neighbors within min_distance are same plate
-                let mut is_interior = true;
-                'check: for dy in -(min_distance as i32)..=(min_distance as i32) {
+                for dy in -(min_distance as i32)..=(min_distance as i32) {
                     for dx in -(min_distance as i32)..=(min_distance as i32) {
                         let nx = x as i32 + dx;
                         let ny = y as i32 + dy;
 
+                        // Out of bounds = not interior
                         if nx < 0 || ny < 0 || nx >= plate_map.width as i32 || ny >= plate_map.height as i32 {
-                            is_interior = false;
-                            break 'check;
+                            return false;
                         }
 
+                        // Different plate = boundary nearby, not interior
                         let idx = (ny as usize) * plate_map.width + (nx as usize);
                         if idx < plate_map.data.len() && plate_map.data[idx] != plate_id {
-                            is_interior = false;
-                            break 'check;
+                            return false;
                         }
                     }
                 }
-
-                if is_interior {
-                    interior.push((x, y));
-                }
-            }
-        }
-
-        interior
+                true // All neighbors same plate = deep interior
+            })
+            .copied()
+            .collect()
     }
 
     /// Helper: Calculate kilometers per pixel for the given map
@@ -1182,14 +1224,12 @@ impl GeologyGenerator {
         &self,
         plate_stats: &HashMap<u16, PlateStats>,
         plate_map: &TerrainMap<u16>,
-        _plate_index: &PlatePixelIndex,
+        plate_index: &PlatePixelIndex,
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
 
         // CRITICAL: Sort plates by ID to ensure deterministic iteration order
-        // HashMap iteration order is non-deterministic, which would cause RNG
-        // to be called in different sequences on different runs
         let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
         sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
 
@@ -1199,9 +1239,9 @@ impl GeologyGenerator {
                 continue;
             }
 
-            // ~10-15% chance per large plate = 2-5 hotspots globally for typical world
+            // ~10-15% chance per large plate = 2-5 hotspots globally
             let probability = if stats.area_km2 > geo_const::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 {
-                geo_const::HOTSPOT_PROBABILITY_LARGE_PLATE // Pacific-sized plates more likely
+                geo_const::HOTSPOT_PROBABILITY_LARGE_PLATE
             } else {
                 geo_const::HOTSPOT_PROBABILITY_MEDIUM_PLATE
             };
@@ -1210,61 +1250,26 @@ impl GeologyGenerator {
                 continue;
             }
 
-            // Pick random hotspot location in DEEP PLATE INTERIOR (far from boundaries)
-            // Hotspots form in plate centers, not at edges
-            let min_distance = if stats.area_km2 > geo_const::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 {
-                geo_const::HOTSPOT_MIN_INTERIOR_DISTANCE_LARGE_PX // Large plates: far from edge
-            } else {
-                geo_const::HOTSPOT_MIN_INTERIOR_DISTANCE_MEDIUM_PX // Medium plates: moderate distance
+            // Select hotspot location in deep plate interior
+            let hotspot_location = match self.select_hotspot_location(
+                *plate_id, stats.area_km2, plate_index, plate_map, rng
+            ) {
+                Some(loc) => loc,
+                None => continue,
             };
-
-            let interior_pixels = self.find_deep_interior_pixels(*plate_id, plate_map, min_distance);
-
-            if interior_pixels.is_empty() {
-                continue; // No suitable deep interior location found
-            }
-
-            let hotspot_idx = rng.gen_range(0..interior_pixels.len());
-            let hotspot_location = interior_pixels[hotspot_idx];
 
             // Calculate chain direction (OPPOSITE to plate motion)
-            let plate_azimuth = stats.seed.motion_direction;
-            let chain_azimuth = (plate_azimuth + 180.0) % 360.0;
+            let chain_azimuth = (stats.seed.motion_direction + 180.0) % 360.0;
 
-            // Calculate chain length based on VISIBLE, geologically active portions only
-            //
-            // We don't include heavily eroded/subsided portions that are about to be subducted.
-            // This focuses on terrain-significant features.
-            //
-            // Oceanic example: Hawaiian chain
-            //   - Total length: 6,200 km (0-70 Ma)
-            //   - Visible portion: ~2,400 km (Hawaiian Islands + Northwestern Hawaiian atolls, 0-28 Ma)
-            //   - Old seamounts (28-70 Ma): heavily subsided, eroded flat, not terrain-significant
-            //
-            // Continental example: Yellowstone hotspot track
-            //   - Total length: ~800 km (0-16 Ma)
-            //   - Visible portion: ~400 km (recent calderas 0-5 Ma)
-            //   - Older calderas (5-16 Ma): buried under basalt flows, not visible
-            //
-            // Formula: length = velocity (cm/yr) × time (Ma) × conversion factor
-            // Units: cm/yr × Ma × 1,000,000 yr/Ma ÷ 100,000 cm/km = km
-            let (time_ma, max_length_km) = if stats.plate_type == PlateType::Oceanic {
-                // Oceanic: young islands/atolls
-                (geo_const::HOTSPOT_OCEANIC_MIN_AGE_MA + rng.gen::<f64>() * geo_const::HOTSPOT_OCEANIC_AGE_RANGE_MA,
-                 geo_const::HOTSPOT_OCEANIC_MAX_LENGTH_KM)
-            } else {
-                // Continental: recent calderas
-                (geo_const::HOTSPOT_CONTINENTAL_MIN_AGE_MA + rng.gen::<f64>() * geo_const::HOTSPOT_CONTINENTAL_AGE_RANGE_MA,
-                 geo_const::HOTSPOT_CONTINENTAL_MAX_LENGTH_KM)
-            };
-
-            let chain_length_km = (stats.seed.motion_speed * time_ma * geo_const::HOTSPOT_LENGTH_CONVERSION_FACTOR).min(max_length_km);
+            // Calculate chain parameters (length, width, characteristics)
+            let (chain_length_km, width_km, chars) =
+                self.calculate_hotspot_chain_params(stats, rng);
 
             if chain_length_km < geo_const::HOTSPOT_MIN_VISIBLE_LENGTH_KM {
-                continue; // Too short to be visible
+                continue;
             }
 
-            // Create linear chain from hotspot location
+            // Create and widen the chain
             let chain_pixels = self.create_linear_chain(
                 hotspot_location,
                 chain_azimuth,
@@ -1277,27 +1282,82 @@ impl GeologyGenerator {
                 continue;
             }
 
-            // Widen slightly for visibility
-            let width_km = if stats.plate_type == PlateType::Oceanic {
-                geo_const::HOTSPOT_OCEANIC_WIDTH_KM // Oceanic: narrow seamount chain
-            } else {
-                geo_const::HOTSPOT_CONTINENTAL_WIDTH_KM // Continental: wider volcanic field
-            };
-
-            // Use spherical-aware expansion
             let widened = self.expand_boundary_spherical(&chain_pixels, width_km, plate_map);
-
-            // Determine province type based on plate character
-            let chars = if stats.plate_type == PlateType::Oceanic {
-                ProvinceCharacteristics::oceanic_hotspot_track(chain_length_km)
-            } else {
-                ProvinceCharacteristics::continental_hotspot_track(chain_length_km)
-            };
-
             regions.push(ProvinceRegion::new(widened, chars, None));
         }
 
         regions
+    }
+
+    /// Select hotspot location in deep plate interior (far from boundaries)
+    ///
+    /// Hotspots form in plate centers, not at edges.
+    /// Returns None if no suitable interior location found.
+    fn select_hotspot_location(
+        &self,
+        plate_id: u16,
+        plate_area_km2: u64,
+        plate_index: &PlatePixelIndex,
+        plate_map: &TerrainMap<u16>,
+        rng: &mut StdRng,
+    ) -> Option<(usize, usize)> {
+        let min_distance = if plate_area_km2 > geo_const::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 {
+            geo_const::HOTSPOT_MIN_INTERIOR_DISTANCE_LARGE_PX
+        } else {
+            geo_const::HOTSPOT_MIN_INTERIOR_DISTANCE_MEDIUM_PX
+        };
+
+        let interior_pixels = self.find_deep_interior_pixels(
+            plate_id, plate_index, plate_map, min_distance
+        );
+
+        if interior_pixels.is_empty() {
+            return None;
+        }
+
+        let hotspot_idx = rng.gen_range(0..interior_pixels.len());
+        Some(interior_pixels[hotspot_idx])
+    }
+
+    /// Calculate hotspot chain parameters (length, width, characteristics)
+    ///
+    /// Returns: (chain_length_km, width_km, characteristics)
+    ///
+    /// Calculates chain length based on VISIBLE, geologically active portions only:
+    /// - Oceanic: Hawaiian Islands + atolls (0-28 Ma), ~2,400 km max
+    /// - Continental: Yellowstone calderas (0-5 Ma), ~400 km max
+    fn calculate_hotspot_chain_params(
+        &self,
+        stats: &PlateStats,
+        rng: &mut StdRng,
+    ) -> (f64, f64, ProvinceCharacteristics) {
+        let (time_ma, max_length_km, width_km, chars_fn): (f64, f64, f64, fn(f64) -> ProvinceCharacteristics) =
+            if stats.plate_type == PlateType::Oceanic {
+                // Oceanic: young islands/atolls
+                let time = geo_const::HOTSPOT_OCEANIC_MIN_AGE_MA
+                    + rng.gen::<f64>() * geo_const::HOTSPOT_OCEANIC_AGE_RANGE_MA;
+                (time,
+                 geo_const::HOTSPOT_OCEANIC_MAX_LENGTH_KM,
+                 geo_const::HOTSPOT_OCEANIC_WIDTH_KM,
+                 ProvinceCharacteristics::oceanic_hotspot_track)
+            } else {
+                // Continental: recent calderas
+                let time = geo_const::HOTSPOT_CONTINENTAL_MIN_AGE_MA
+                    + rng.gen::<f64>() * geo_const::HOTSPOT_CONTINENTAL_AGE_RANGE_MA;
+                (time,
+                 geo_const::HOTSPOT_CONTINENTAL_MAX_LENGTH_KM,
+                 geo_const::HOTSPOT_CONTINENTAL_WIDTH_KM,
+                 ProvinceCharacteristics::continental_hotspot_track)
+            };
+
+        // Formula: length = velocity (cm/yr) × time (Ma) × conversion factor
+        // Units: cm/yr × Ma × 1,000,000 yr/Ma ÷ 100,000 cm/km = km
+        let chain_length_km = (stats.seed.motion_speed * time_ma
+            * geo_const::HOTSPOT_LENGTH_CONVERSION_FACTOR).min(max_length_km);
+
+        let chars = chars_fn(chain_length_km);
+
+        (chain_length_km, width_km, chars)
     }
 
     /// Create a linear chain of pixels from a starting point along an azimuth

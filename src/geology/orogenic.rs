@@ -180,8 +180,10 @@ impl OrogenicBeltGenerator {
             }
 
             // Oceanic-Continental convergence
-            // NOTE: Now handled in Arc Systems (Stage 2.3) - generates VolcanicArc + AccretionaryWedge
-            // This orogenic belt generator only handles collision orogens now
+            // Handled by Arc Systems (Stage 2.3) which generates complete subduction transect:
+            // Trench → AccretionaryWedge → ForearcBasin → VolcanicArc → BackarcBasin
+            // Key difference from oceanic-oceanic: Arc forms ON CONTINENTAL CRUST (Andes-style)
+            // vs oceanic crust (island arc-style). Elevation differences applied in Stage 3.
             (PlateType::Oceanic, PlateType::Continental)
             | (PlateType::Continental, PlateType::Oceanic) => None,
 
