@@ -1,6 +1,5 @@
 # Rust
 /target/
-Cargo.lock
 
 # Output files
 /outputs/**
@@ -10,6 +9,9 @@ Cargo.lock
 .idea/
 *.swp
 *.swo
+
+# Direnv
+.direnv/
 
 # OS
 .DS_Store
