@@ -2,12 +2,12 @@
 //!
 //! This module provides a clean API for all tectonic plate operations.
 
+use crate::io::export::MapExporter;
 use crate::map::world::WorldMap;
 use crate::tectonics::{
-    BoundaryAnalysisConfig, BoundaryStatistics, IslandRemovalConfig, IslandRemovalStats,
-    BoundaryRefinementConfig,
+    BoundaryAnalysisConfig, BoundaryRefinementConfig, BoundaryStatistics, IslandRemovalConfig,
+    IslandRemovalStats,
 };
-use crate::io::export::MapExporter;
 use std::error::Error;
 
 /// Tectonic operations interface for WorldMap
@@ -31,7 +31,7 @@ use std::error::Error;
 /// world.tectonics().analyze(None)?;
 ///
 /// // Export all visualizations:
-/// world.tectonics().export("outputs")?;
+/// world.tectonics().export("outputs", true)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct TectonicsModule<'a> {
@@ -212,20 +212,25 @@ impl<'a> TectonicsModule<'a> {
     /// # use geoforge::WorldMap;
     /// # let mut world = WorldMap::new(360, 180, 42)?;
     /// # world.tectonics().generate(10)?;
-    /// world.tectonics().export("outputs")?;
+    /// world.tectonics().export("outputs", true)?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     #[cfg(feature = "export-png")]
-    pub fn export(&self, output_dir: &str) -> Result<(), Box<dyn Error>> {
+    pub fn export(&self, output_dir: &str, export_pngs: bool) -> Result<(), Box<dyn Error>> {
         use std::fs;
 
         // Create output directory
         fs::create_dir_all(output_dir)?;
 
-        // Export PNGs
-        self.world.export_tectonics_png(output_dir, "tectonics.png")?;
-        self.world.export_boundaries_png(output_dir, "tectonics_boundaries.png")?;
-        self.world.export_plate_motion_png(output_dir, "tectonics_motion.png")?;
+        if export_pngs {
+            // Export PNGs
+            self.world
+                .export_tectonics_png(output_dir, "tectonics.png")?;
+            self.world
+                .export_boundaries_png(output_dir, "tectonics_boundaries.png")?;
+            self.world
+                .export_plate_motion_png(output_dir, "tectonics_motion.png")?;
+        }
 
         // Export binary
         let map_path = format!("{}/world.map", output_dir);
@@ -236,7 +241,7 @@ impl<'a> TectonicsModule<'a> {
 
     /// Export all tectonic visualizations and data (no PNG support)
     #[cfg(not(feature = "export-png"))]
-    pub fn export(&self, output_dir: &str) -> Result<(), Box<dyn Error>> {
+    pub fn export(&self, output_dir: &str, _export_pngs: bool) -> Result<(), Box<dyn Error>> {
         use std::fs;
 
         // Create output directory

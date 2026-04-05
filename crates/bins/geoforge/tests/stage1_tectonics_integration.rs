@@ -5,7 +5,7 @@
 //! Stage 1.2: Boundary Refinement
 //! Stage 1.3: Island Removal
 
-use geoforge::{WorldMap, BoundaryRefinementConfig};
+use geoforge::{BoundaryRefinementConfig, WorldMap};
 
 #[test]
 fn test_full_pipeline_integration() {
@@ -15,32 +15,53 @@ fn test_full_pipeline_integration() {
     // Stage 1.1: Generate plates
     world.tectonics().generate_plates(8).unwrap();
     let initial_stats = world.get_tectonic_stats().unwrap();
-    assert_eq!(initial_stats.len(), 8, "Should have 8 plates after generation");
+    assert_eq!(
+        initial_stats.len(),
+        8,
+        "Should have 8 plates after generation"
+    );
 
     // Stage 1.2: Refine boundaries
     let refinement_config = BoundaryRefinementConfig::with_seed(42)
         .with_noise(0.020, 50.0, 4)
         .with_smoothing(1);
-    world.tectonics().roughen_boundaries(Some(refinement_config)).unwrap();
+    world
+        .tectonics()
+        .roughen_boundaries(Some(refinement_config))
+        .unwrap();
 
     let refined_stats = world.get_tectonic_stats().unwrap();
-    assert_eq!(refined_stats.len(), 8, "Should still have 8 plates after refinement");
+    assert_eq!(
+        refined_stats.len(),
+        8,
+        "Should still have 8 plates after refinement"
+    );
 
     // Stage 1.3: Remove islands
     let island_stats = world.tectonics().deisland(None).unwrap();
 
     let final_stats = world.get_tectonic_stats().unwrap();
-    assert_eq!(final_stats.len(), 8, "Should still have 8 plates after island removal");
+    assert_eq!(
+        final_stats.len(),
+        8,
+        "Should still have 8 plates after island removal"
+    );
 
     // Verify stats were recalculated
     for (plate_id, stats) in final_stats {
         assert!(*plate_id > 0 && *plate_id <= 8);
-        assert!(stats.area_km2 > 0, "Plate {} should have positive area", plate_id);
+        assert!(
+            stats.area_km2 > 0,
+            "Plate {} should have positive area",
+            plate_id
+        );
         assert!(stats.pixels > 0, "Plate {} should have pixels", plate_id);
     }
 
-    println!("Island removal stats: {} islands removed from {} plates",
-        island_stats.islands_removed, island_stats.plates_with_islands);
+    println!(
+        "Island removal stats: {} islands removed from {} plates",
+        island_stats.islands_removed, island_stats.plates_with_islands
+    );
 }
 
 #[test]
@@ -74,7 +95,10 @@ fn test_pipeline_with_extreme_refinement() {
         .with_noise(0.030, 120.0, 6)
         .with_smoothing(3);
 
-    world.tectonics().roughen_boundaries(Some(extreme_config)).unwrap();
+    world
+        .tectonics()
+        .roughen_boundaries(Some(extreme_config))
+        .unwrap();
     let _island_stats = world.remove_islands(None).unwrap();
 
     // With extreme refinement, we should find islands
@@ -96,22 +120,31 @@ fn test_pipeline_determinism_generation_and_refinement() {
 
     let config1 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
-        .with_smoothing(0);  // Disable smoothing for exact determinism
-    world1.tectonics().roughen_boundaries(Some(config1)).unwrap();
+        .with_smoothing(0); // Disable smoothing for exact determinism
+    world1
+        .tectonics()
+        .roughen_boundaries(Some(config1))
+        .unwrap();
 
     let mut world2 = WorldMap::new(180, 90, seed).unwrap();
     world2.tectonics().generate_plates(6).unwrap();
 
     let config2 = BoundaryRefinementConfig::with_seed(seed)
         .with_noise(0.020, 50.0, 4)
-        .with_smoothing(0);  // Disable smoothing for exact determinism
-    world2.tectonics().roughen_boundaries(Some(config2)).unwrap();
+        .with_smoothing(0); // Disable smoothing for exact determinism
+    world2
+        .tectonics()
+        .roughen_boundaries(Some(config2))
+        .unwrap();
 
     // Compare plate data before island removal
     let data1 = &world1.tectonics.as_ref().unwrap().data;
     let data2 = &world2.tectonics.as_ref().unwrap().data;
 
-    assert_eq!(data1, data2, "Same seed should produce identical results before island removal");
+    assert_eq!(
+        data1, data2,
+        "Same seed should produce identical results before island removal"
+    );
 
     // Island removal should successfully complete on both
     // Note: Exact stats may vary slightly due to HashMap iteration order
@@ -119,19 +152,36 @@ fn test_pipeline_determinism_generation_and_refinement() {
     let stats2 = world2.tectonics().deisland(None).unwrap();
 
     // Verify both runs found and removed islands
-    assert!(stats1.islands_removed > 0, "Should find islands with this config");
-    assert!(stats2.islands_removed > 0, "Should find islands with this config");
+    assert!(
+        stats1.islands_removed > 0,
+        "Should find islands with this config"
+    );
+    assert!(
+        stats2.islands_removed > 0,
+        "Should find islands with this config"
+    );
 
     // Stats may vary due to HashMap iteration order affecting island reassignment
     // Both runs should complete successfully and reassign a reasonable number of pixels
-    assert!(stats1.pixels_reassigned > 0, "Should reassign pixels in first run");
-    assert!(stats2.pixels_reassigned > 0, "Should reassign pixels in second run");
+    assert!(
+        stats1.pixels_reassigned > 0,
+        "Should reassign pixels in first run"
+    );
+    assert!(
+        stats2.pixels_reassigned > 0,
+        "Should reassign pixels in second run"
+    );
 
     // Verify stats are in the same ballpark (within 50% of each other)
     let avg_pixels = (stats1.pixels_reassigned + stats2.pixels_reassigned) / 2;
-    let pixel_diff = (stats1.pixels_reassigned as i64 - stats2.pixels_reassigned as i64).abs() as usize;
-    assert!(pixel_diff < avg_pixels,
-        "Pixel reassignment variance should be reasonable (diff: {}, avg: {})", pixel_diff, avg_pixels);
+    let pixel_diff =
+        (stats1.pixels_reassigned as i64 - stats2.pixels_reassigned as i64).unsigned_abs() as usize;
+    assert!(
+        pixel_diff < avg_pixels,
+        "Pixel reassignment variance should be reasonable (diff: {}, avg: {})",
+        pixel_diff,
+        avg_pixels
+    );
 }
 
 #[test]
@@ -141,7 +191,10 @@ fn test_error_handling_refine_before_generate() {
 
     let result = world.refine_boundaries(None);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Tectonics must be generated before refining boundaries");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Tectonics must be generated before refining boundaries"
+    );
 }
 
 #[test]
@@ -151,7 +204,10 @@ fn test_error_handling_island_removal_before_generate() {
 
     let result = world.remove_islands(None);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Tectonics must be generated before removing islands");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Tectonics must be generated before removing islands"
+    );
 }
 
 #[test]
@@ -166,11 +222,17 @@ fn test_pipeline_with_minimal_refinement() {
         .with_noise(0.005, 2.0, 2)
         .with_smoothing(0);
 
-    world.tectonics().roughen_boundaries(Some(minimal_config)).unwrap();
+    world
+        .tectonics()
+        .roughen_boundaries(Some(minimal_config))
+        .unwrap();
     let island_stats = world.remove_islands(None).unwrap();
 
     // Minimal refinement should produce very few islands
-    assert!(island_stats.islands_removed < 10, "Minimal refinement should produce few islands");
+    assert!(
+        island_stats.islands_removed < 10,
+        "Minimal refinement should produce few islands"
+    );
 }
 
 #[test]
@@ -179,19 +241,25 @@ fn test_stats_recalculation_after_stages() {
     let mut world = WorldMap::new(360, 180, 777).unwrap();
 
     world.tectonics().generate_plates(8).unwrap();
-    let initial_total_area: u64 = world.get_tectonic_stats().unwrap()
+    let initial_total_area: u64 = world
+        .get_tectonic_stats()
+        .unwrap()
         .values()
         .map(|s| s.area_km2)
         .sum();
 
     world.tectonics().roughen_boundaries(None).unwrap();
-    let refined_total_area: u64 = world.get_tectonic_stats().unwrap()
+    let refined_total_area: u64 = world
+        .get_tectonic_stats()
+        .unwrap()
         .values()
         .map(|s| s.area_km2)
         .sum();
 
     world.tectonics().deisland(None).unwrap();
-    let final_total_area: u64 = world.get_tectonic_stats().unwrap()
+    let final_total_area: u64 = world
+        .get_tectonic_stats()
+        .unwrap()
         .values()
         .map(|s| s.area_km2)
         .sum();
@@ -200,8 +268,14 @@ fn test_stats_recalculation_after_stages() {
     let area_diff_1 = (initial_total_area as i64 - refined_total_area as i64).abs();
     let area_diff_2 = (refined_total_area as i64 - final_total_area as i64).abs();
 
-    assert!(area_diff_1 < 100, "Area should be conserved during refinement");
-    assert!(area_diff_2 < 100, "Area should be conserved during island removal");
+    assert!(
+        area_diff_1 < 100,
+        "Area should be conserved during refinement"
+    );
+    assert!(
+        area_diff_2 < 100,
+        "Area should be conserved during island removal"
+    );
 }
 
 #[test]
@@ -217,7 +291,10 @@ fn test_pipeline_with_many_plates() {
     assert_eq!(final_stats.len(), 30, "Should still have 30 plates");
 
     // With many plates, island creation is more likely
-    println!("With 30 plates: {} islands removed", island_stats.islands_removed);
+    println!(
+        "With 30 plates: {} islands removed",
+        island_stats.islands_removed
+    );
 }
 
 #[test]
@@ -244,10 +321,12 @@ fn test_contiguity_guarantee() {
 
     let mut world = WorldMap::new(180, 90, 55555).unwrap();
     world.tectonics().generate_plates(10).unwrap();
-    world.tectonics().roughen_boundaries(Some(
-        BoundaryRefinementConfig::with_seed(55555)
-            .with_noise(0.025, 100.0, 5)
-    )).unwrap();
+    world
+        .tectonics()
+        .roughen_boundaries(Some(
+            BoundaryRefinementConfig::with_seed(55555).with_noise(0.025, 100.0, 5),
+        ))
+        .unwrap();
     world.tectonics().deisland(None).unwrap();
 
     let plate_map = world.tectonics.as_ref().unwrap();
@@ -287,9 +366,14 @@ fn test_contiguity_guarantee() {
             let total_pixels = plate_map.data.iter().filter(|&&p| p == plate_id).count();
 
             // All pixels should be reachable from flood fill (contiguous)
-            assert_eq!(visited.len(), total_pixels,
+            assert_eq!(
+                visited.len(),
+                total_pixels,
                 "Plate {} should be contiguous (found {} connected, {} total)",
-                plate_id, visited.len(), total_pixels);
+                plate_id,
+                visited.len(),
+                total_pixels
+            );
 
             checked_plates.insert(plate_id);
         }
@@ -309,22 +393,32 @@ fn test_boundary_analysis_integration() {
     let boundary_stats = world.analyze_boundaries(None).unwrap();
 
     // Verify boundary statistics
-    assert!(boundary_stats.total_boundaries > 0, "Should find plate boundaries");
-    
+    assert!(
+        boundary_stats.total_boundaries > 0,
+        "Should find plate boundaries"
+    );
+
     // With 6 plates, maximum possible boundaries is (6 * 5) / 2 = 15
-    assert!(boundary_stats.total_boundaries <= 15, 
-        "Cannot have more than 15 boundaries with 6 plates");
+    assert!(
+        boundary_stats.total_boundaries <= 15,
+        "Cannot have more than 15 boundaries with 6 plates"
+    );
 
     // Total should equal sum of parts
     assert_eq!(
         boundary_stats.total_boundaries,
-        boundary_stats.convergent_count + boundary_stats.divergent_count + boundary_stats.transform_count,
+        boundary_stats.convergent_count
+            + boundary_stats.divergent_count
+            + boundary_stats.transform_count,
         "Boundary counts should sum to total"
     );
 
     // Verify metadata was updated
     let metadata = world.get_tectonic_metadata().unwrap();
-    assert_eq!(metadata.plate_boundaries.len(), boundary_stats.total_boundaries);
+    assert_eq!(
+        metadata.plate_boundaries.len(),
+        boundary_stats.total_boundaries
+    );
     assert!(metadata.boundary_stats.is_some());
 
     // Verify each boundary segment
@@ -342,7 +436,10 @@ fn test_boundary_analysis_integration() {
     println!("  Divergent: {}", boundary_stats.divergent_count);
     println!("  Transform: {}", boundary_stats.transform_count);
     println!("  Total length: {:.0} km", boundary_stats.total_length_km);
-    println!("  Avg velocity: {:.2} cm/year", boundary_stats.average_relative_velocity);
+    println!(
+        "  Avg velocity: {:.2} cm/year",
+        boundary_stats.average_relative_velocity
+    );
 }
 
 #[test]
@@ -377,8 +474,11 @@ fn test_plate_type_assignment() {
     assert!(oceanic_count > 0, "Should have some oceanic plates");
     assert!(continental_count > 0, "Should have some continental plates");
 
-    assert_eq!(oceanic_count + continental_count, 10,
-        "All plates should have assigned types");
+    assert_eq!(
+        oceanic_count + continental_count,
+        10,
+        "All plates should have assigned types"
+    );
 
     println!("Plate type distribution:");
     println!("  Oceanic: {}", oceanic_count);
@@ -398,7 +498,11 @@ fn test_complete_stage_1_pipeline() {
 
     // Verify motion was automatically assigned
     for seed in &metadata.plate_seeds {
-        assert!(seed.motion_speed > 0.0, "Plate {} should have motion assigned", seed.id);
+        assert!(
+            seed.motion_speed > 0.0,
+            "Plate {} should have motion assigned",
+            seed.id
+        );
         assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0);
     }
 
@@ -412,8 +516,10 @@ fn test_complete_stage_1_pipeline() {
     let boundary_stats = world.analyze_boundaries(None).unwrap();
 
     assert!(boundary_stats.total_boundaries > 0);
-    assert!(boundary_stats.average_relative_velocity > 0.0,
-        "Boundaries should have non-zero relative velocity");
+    assert!(
+        boundary_stats.average_relative_velocity > 0.0,
+        "Boundaries should have non-zero relative velocity"
+    );
 
     // Verify boundary types are distributed
     let has_convergent = boundary_stats.convergent_count > 0;
@@ -425,8 +531,10 @@ fn test_complete_stage_1_pipeline() {
         .filter(|&&x| x)
         .count();
 
-    assert!(boundary_type_count >= 2,
-        "Should have at least 2 different boundary types with 8 plates");
+    assert!(
+        boundary_type_count >= 2,
+        "Should have at least 2 different boundary types with 8 plates"
+    );
 
     println!("Complete Stage 1 pipeline success!");
     println!("  Plates: 8");
@@ -434,7 +542,10 @@ fn test_complete_stage_1_pipeline() {
     println!("  Convergent: {}", boundary_stats.convergent_count);
     println!("  Divergent: {}", boundary_stats.divergent_count);
     println!("  Transform: {}", boundary_stats.transform_count);
-    println!("  Avg velocity: {:.2} cm/year", boundary_stats.average_relative_velocity);
+    println!(
+        "  Avg velocity: {:.2} cm/year",
+        boundary_stats.average_relative_velocity
+    );
 }
 
 #[test]
@@ -452,10 +563,14 @@ fn test_motion_assignment_determinism() {
     // Motion should be identical
     for (seed1, seed2) in metadata1.plate_seeds.iter().zip(&metadata2.plate_seeds) {
         assert_eq!(seed1.id, seed2.id);
-        assert_eq!(seed1.motion_direction, seed2.motion_direction,
-            "Motion direction should be deterministic");
-        assert_eq!(seed1.motion_speed, seed2.motion_speed,
-            "Motion speed should be deterministic");
+        assert_eq!(
+            seed1.motion_direction, seed2.motion_direction,
+            "Motion direction should be deterministic"
+        );
+        assert_eq!(
+            seed1.motion_speed, seed2.motion_speed,
+            "Motion speed should be deterministic"
+        );
     }
 }
 
@@ -469,14 +584,20 @@ fn test_motion_realistic_values() {
 
     for seed in &metadata.plate_seeds {
         // Speed should be in Earth-like range (1-10 cm/year by default)
-        assert!(seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
+        assert!(
+            seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
             "Plate {} speed {:.2} outside realistic range",
-            seed.id, seed.motion_speed);
+            seed.id,
+            seed.motion_speed
+        );
 
         // Direction should be valid (0-360 degrees)
-        assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
+        assert!(
+            seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
             "Plate {} direction {:.2} invalid",
-            seed.id, seed.motion_direction);
+            seed.id,
+            seed.motion_direction
+        );
     }
 }
 
@@ -532,25 +653,33 @@ fn test_boundary_classification_accuracy() {
     // Every boundary should have a valid classification
     for boundary in &metadata.plate_boundaries {
         // Should have positive relative velocity (plates are moving)
-        assert!(boundary.relative_velocity >= 0.0,
+        assert!(
+            boundary.relative_velocity >= 0.0,
             "Boundary between {} and {} has negative velocity",
-            boundary.plate_a, boundary.plate_b);
+            boundary.plate_a,
+            boundary.plate_b
+        );
 
         // Should have positive length
-        assert!(boundary.length_km > 0.0,
-            "Boundary should have positive length");
+        assert!(
+            boundary.length_km > 0.0,
+            "Boundary should have positive length"
+        );
 
         // Should involve different plates
-        assert_ne!(boundary.plate_a, boundary.plate_b,
-            "Boundary should connect different plates");
+        assert_ne!(
+            boundary.plate_a, boundary.plate_b,
+            "Boundary should connect different plates"
+        );
 
         // Should have pixels
-        assert!(!boundary.pixels.is_empty(),
-            "Boundary should have pixels");
+        assert!(!boundary.pixels.is_empty(), "Boundary should have pixels");
     }
 
-    println!("Boundary classification validation passed for {} boundaries",
-        metadata.plate_boundaries.len());
+    println!(
+        "Boundary classification validation passed for {} boundaries",
+        metadata.plate_boundaries.len()
+    );
 }
 
 #[test]
@@ -572,7 +701,9 @@ fn test_motion_png_export_import_roundtrip() {
 
     // Export to plate_motion.png
     let motion_png_path = format!("{}/test_motion.png", test_dir);
-    world1.export_plate_motion_png(test_dir, "test_motion.png").unwrap();
+    world1
+        .export_plate_motion_png(test_dir, "test_motion.png")
+        .unwrap();
 
     // Create new world and import from plate_motion.png
     let mut world2 = WorldMap::new(360, 180, 0).unwrap();
@@ -583,8 +714,11 @@ fn test_motion_png_export_import_roundtrip() {
     let imported_seeds = &imported_metadata.plate_seeds;
 
     // Verify same number of plates
-    assert_eq!(original_seeds.len(), imported_seeds.len(),
-        "Should have same number of plates after roundtrip");
+    assert_eq!(
+        original_seeds.len(),
+        imported_seeds.len(),
+        "Should have same number of plates after roundtrip"
+    );
 
     // Build a map from (direction, speed) to original seed to match imported plates
     // We'll match by the motion vector itself since that's what's encoded in the PNG
@@ -615,19 +749,28 @@ fn test_motion_png_export_import_roundtrip() {
                     break;
                 }
             }
-            if found_match { break; }
+            if found_match {
+                break;
+            }
         }
 
-        assert!(found_match,
+        assert!(
+            found_match,
             "Imported plate with motion {}° at {:.1} cm/year should match an original plate",
-            imported_seed.motion_direction, imported_seed.motion_speed);
+            imported_seed.motion_direction, imported_seed.motion_speed
+        );
     }
 
-    assert_eq!(matched_count, original_seeds.len(),
-        "All plates should have matching motion vectors after roundtrip");
+    assert_eq!(
+        matched_count,
+        original_seeds.len(),
+        "All plates should have matching motion vectors after roundtrip"
+    );
 
-    println!("✅ Motion PNG roundtrip test passed: {} plates with preserved motion vectors",
-        original_seeds.len());
+    println!(
+        "✅ Motion PNG roundtrip test passed: {} plates with preserved motion vectors",
+        original_seeds.len()
+    );
 }
 
 #[test]
@@ -658,14 +801,22 @@ fn test_complete_export_import_workflow() {
     world2.tectonics().import_png(&motion_path).unwrap();
 
     let metadata2 = world2.get_tectonic_metadata().unwrap();
-    assert_eq!(metadata2.plate_seeds.len(), 6, "Motion PNG should have 6 plates");
+    assert_eq!(
+        metadata2.plate_seeds.len(),
+        6,
+        "Motion PNG should have 6 plates"
+    );
 
     // Verify all plates have valid motion vectors
     for seed in &metadata2.plate_seeds {
-        assert!(seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
-            "Plate should have realistic speed");
-        assert!(seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
-            "Plate should have valid direction");
+        assert!(
+            seed.motion_speed >= 1.0 && seed.motion_speed <= 10.0,
+            "Plate should have realistic speed"
+        );
+        assert!(
+            seed.motion_direction >= 0.0 && seed.motion_direction < 360.0,
+            "Plate should have valid direction"
+        );
     }
 
     println!("✅ Complete export/import workflow test passed");

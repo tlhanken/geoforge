@@ -2,8 +2,7 @@
 ///
 /// This example generates test worlds to visually validate all 18 province types.
 /// Exports PNGs for manual inspection of colors, widths, and geological accuracy.
-
-use geoforge::{WorldMap, MapExporter};
+use geoforge::{MapExporter, WorldMap};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌋 Geologic Provinces Visual QA");
@@ -20,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         20,
         "01_general_world",
-        "General world with mix of continental and oceanic features"
+        "General world with mix of continental and oceanic features",
     )?;
 
     // Test Case 2: Collision-Heavy World
@@ -32,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         15,
         "02_collision_heavy",
-        "World optimized for collision orogens (continent-continent boundaries)"
+        "World optimized for collision orogens (continent-continent boundaries)",
     )?;
 
     // Test Case 3: Arc Systems World
@@ -44,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         18,
         "03_arc_systems",
-        "World showcasing subduction zone features (trenches, arcs, basins)"
+        "World showcasing subduction zone features (trenches, arcs, basins)",
     )?;
 
     // Test Case 4: Large Continental Plates
@@ -56,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         8,
         "04_large_continents",
-        "Fewer, larger plates to showcase stable continental features"
+        "Fewer, larger plates to showcase stable continental features",
     )?;
 
     // Test Case 5: Oceanic World
@@ -68,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         25,
         "05_oceanic_world",
-        "Many small plates to maximize oceanic features"
+        "Many small plates to maximize oceanic features",
     )?;
 
     // Test Case 6: High Latitude World
@@ -80,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         900,
         15,
         "06_polar_regions",
-        "Test spherical-aware width scaling near poles"
+        "Test spherical-aware width scaling near poles",
     )?;
 
     println!("\n✅ All test worlds generated successfully!");
@@ -145,11 +144,16 @@ fn generate_test_world(
     println!("   Generated {} plates", metadata.plate_stats.len());
 
     // Count plate types
-    let continental_count = metadata.plate_stats.values()
+    let continental_count = metadata
+        .plate_stats
+        .values()
         .filter(|s| s.plate_type == geoforge::PlateType::Continental)
         .count();
     let oceanic_count = metadata.plate_stats.len() - continental_count;
-    println!("   Continental: {}, Oceanic: {}", continental_count, oceanic_count);
+    println!(
+        "   Continental: {}, Oceanic: {}",
+        continental_count, oceanic_count
+    );
 
     // Generate geology
     let provinces = world.generate_geology(None)?;
@@ -169,7 +173,9 @@ fn generate_test_world(
 
     print!("   Province types: ");
     for (i, (type_name, count)) in sorted_types.iter().enumerate() {
-        if i > 0 { print!(", "); }
+        if i > 0 {
+            print!(", ");
+        }
         print!("{}: {}", type_name, count);
     }
     println!();
@@ -179,13 +185,13 @@ fn generate_test_world(
         // Export tectonics visualization
         world.export_tectonics_png(
             "outputs/geology_qa",
-            &format!("{}_tectonics.png", filename_prefix)
+            &format!("{}_tectonics.png", filename_prefix),
         )?;
 
         // Export geology visualization
         world.export_geology_png(
             "outputs/geology_qa",
-            &format!("{}_geology.png", filename_prefix)
+            &format!("{}_geology.png", filename_prefix),
         )?;
 
         println!("   Exported: outputs/geology_qa/{}_*.png", filename_prefix);

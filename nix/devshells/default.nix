@@ -13,6 +13,11 @@ in
       # perSystem.agenix.default
       # pkgs.omnix
 
+      # System Dependencies
+      pkgs.pkg-config
+      pkgs.gdal
+      pkgs.rustPlatform.bindgenHook
+
       # Cargo tools
       pkgs.cargo-nextest
       pkgs.cargo-tarpaulin

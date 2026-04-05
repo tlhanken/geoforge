@@ -4,8 +4,8 @@
 //! This module implements Stage 2.1: Mountain-building zones created at convergent boundaries.
 
 use crate::geology::provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
-use crate::map::terrain::TerrainMap;
 use crate::map::spherical::PlanetaryParams;
+use crate::map::terrain::TerrainMap;
 use crate::tectonics::boundary_analysis::BoundarySegment;
 use crate::tectonics::plates::{PlateInteraction, PlateStats, PlateType};
 use std::collections::{HashMap, HashSet};
@@ -55,10 +55,7 @@ impl Default for OrogenicConfig {
 
 impl OrogenicConfig {
     /// Create a new configuration with custom settings
-    pub fn new(
-        collision_base_width_km: f64,
-        min_convergence_rate: f64,
-    ) -> Self {
+    pub fn new(collision_base_width_km: f64, min_convergence_rate: f64) -> Self {
         Self {
             collision_base_width_km,
             min_convergence_rate,
@@ -88,7 +85,10 @@ pub struct OrogenicBeltGenerator {
 impl OrogenicBeltGenerator {
     /// Create a new orogenic belt generator with configuration and planetary parameters
     pub fn new(config: OrogenicConfig, planetary_params: PlanetaryParams) -> Self {
-        Self { config, planetary_params }
+        Self {
+            config,
+            planetary_params,
+        }
     }
 
     /// Generate orogenic belts from convergent plate boundaries
@@ -240,12 +240,15 @@ impl OrogenicBeltGenerator {
         boundary_idx: usize,
     ) -> ProvinceRegion {
         // Calculate km per pixel using the map's projection and planetary radius
-        let km_per_pixel = plate_map.projection.km_per_pixel(self.planetary_params.radius_km);
+        let km_per_pixel = plate_map
+            .projection
+            .km_per_pixel(self.planetary_params.radius_km);
 
         let width_pixels = (width_km / km_per_pixel).ceil() as usize;
 
         // Expand boundary pixels into a belt (CONTINENTAL PLATES ONLY)
-        let belt_pixels = self.expand_boundary_pixels(&boundary.pixels, width_pixels, plate_map, plate_stats);
+        let belt_pixels =
+            self.expand_boundary_pixels(&boundary.pixels, width_pixels, plate_map, plate_stats);
 
         // Create characteristics based on orogen type
         let characteristics = match orogen_type {
@@ -358,10 +361,8 @@ mod tests {
 
     #[test]
     fn test_orogen_classification_collision() {
-        let generator = OrogenicBeltGenerator::new(
-            OrogenicConfig::default(),
-            PlanetaryParams::earth()
-        );
+        let generator =
+            OrogenicBeltGenerator::new(OrogenicConfig::default(), PlanetaryParams::earth());
         let mut plate_stats = HashMap::new();
 
         // Create two continental plates
@@ -369,9 +370,7 @@ mod tests {
             pixels: 10000,
             percentage: 10.0,
             area_km2: 1000000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                1, 100, 100, 0.0, 0.0, 0.0, 5.0
-            ),
+            seed: crate::tectonics::plates::PlateSeed::new(1, 100, 100, 0.0, 0.0, 0.0, 5.0),
             plate_type: PlateType::Continental,
         };
 
@@ -379,9 +378,7 @@ mod tests {
             pixels: 9000,
             percentage: 9.0,
             area_km2: 900000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                2, 200, 200, 10.0, 10.0, 180.0, 5.0
-            ),
+            seed: crate::tectonics::plates::PlateSeed::new(2, 200, 200, 10.0, 10.0, 180.0, 5.0),
             plate_type: PlateType::Continental,
         };
 
@@ -409,10 +406,8 @@ mod tests {
 
     #[test]
     fn test_orogen_classification_oceanic_continental() {
-        let generator = OrogenicBeltGenerator::new(
-            OrogenicConfig::default(),
-            PlanetaryParams::earth()
-        );
+        let generator =
+            OrogenicBeltGenerator::new(OrogenicConfig::default(), PlanetaryParams::earth());
         let mut plate_stats = HashMap::new();
 
         // Oceanic plate
@@ -420,9 +415,7 @@ mod tests {
             pixels: 5000,
             percentage: 5.0,
             area_km2: 500000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                1, 100, 100, 0.0, 0.0, 0.0, 8.0
-            ),
+            seed: crate::tectonics::plates::PlateSeed::new(1, 100, 100, 0.0, 0.0, 0.0, 8.0),
             plate_type: PlateType::Oceanic,
         };
 
@@ -431,9 +424,7 @@ mod tests {
             pixels: 12000,
             percentage: 12.0,
             area_km2: 1200000,
-            seed: crate::tectonics::plates::PlateSeed::new(
-                2, 200, 200, 10.0, 10.0, 180.0, 3.0
-            ),
+            seed: crate::tectonics::plates::PlateSeed::new(2, 200, 200, 10.0, 10.0, 180.0, 3.0),
             plate_type: PlateType::Continental,
         };
 
@@ -453,8 +444,7 @@ mod tests {
         // Oceanic-continental convergence now handled by Arc Systems (Stage 2.3)
         // Orogenic belt generator returns None for these
         assert_eq!(
-            orogen_type,
-            None,
+            orogen_type, None,
             "Oceanic-continental should return None (handled by Arc Systems), got {:?}",
             orogen_type
         );
@@ -462,17 +452,17 @@ mod tests {
 
     #[test]
     fn test_width_calculation_collision() {
-        let generator = OrogenicBeltGenerator::new(
-            OrogenicConfig::default(),
-            PlanetaryParams::earth()
-        );
+        let generator =
+            OrogenicBeltGenerator::new(OrogenicConfig::default(), PlanetaryParams::earth());
 
-        let collision_width = generator.calculate_orogen_width(
-            GeologicProvince::CollisionOrogen,
-            5.0,
-        );
+        let collision_width =
+            generator.calculate_orogen_width(GeologicProvince::CollisionOrogen, 5.0);
 
         // Collision orogens should be wide and dynamically scaled
-        assert!(collision_width > 1000.0, "Collision width should be > 1000 km, got {}", collision_width);
+        assert!(
+            collision_width > 1000.0,
+            "Collision width should be > 1000 km, got {}",
+            collision_width
+        );
     }
 }

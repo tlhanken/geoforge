@@ -8,7 +8,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GeologicProvince {
     // ========== Stage 2.1: Orogenic Belts ==========
-
     /// Collision orogen - Continental-continental convergence
     ///
     /// Forms when two continental plates collide, creating massive mountain ranges.
@@ -34,7 +33,6 @@ pub enum GeologicProvince {
     // NOTE: SubductionOrogen removed - volcanic arc component now handled by VolcanicArc
     // Subduction zones are represented by their component parts: OceanTrench,
     // AccretionaryWedge, ForearcBasin, VolcanicArc, and BackarcBasin
-
     /// Accretionary wedge - Sediment scraped off subducting plate
     ///
     /// Forms at ocean trenches where sediments and oceanic crust are scraped off
@@ -51,7 +49,6 @@ pub enum GeologicProvince {
     // Basin and Range style features will be handled by ContinentalRift when implemented
 
     // ========== Stage 2.2: Large Igneous Provinces ==========
-
     /// Continental flood basalt - Massive volcanic province on continental crust
     ///
     /// Formed by mantle plume eruptions creating vast lava plains.
@@ -71,7 +68,6 @@ pub enum GeologicProvince {
     HotspotTrack,
 
     // ========== Stage 2.3: Arc and Basin Systems ==========
-
     /// Volcanic arc - Active subduction zone volcanism
     ///
     /// Chain of volcanoes above a subduction zone.
@@ -91,7 +87,6 @@ pub enum GeologicProvince {
     BackarcBasin,
 
     // ========== Stage 2.4: Stable Continental Regions ==========
-
     /// Craton/Shield - Ancient stable continental core
     ///
     /// Very old (>1.5 Ga), tectonically stable continental crust with low relief.
@@ -111,7 +106,6 @@ pub enum GeologicProvince {
     IntracratonicBasin,
 
     // ========== Stage 2.5: Extensional Zones ==========
-
     /// Continental rift - Active extensional zone
     ///
     /// Zone where continental crust is actively being pulled apart.
@@ -125,7 +119,6 @@ pub enum GeologicProvince {
     ExtendedCrust,
 
     // ========== Stage 2.6: Oceanic Domains ==========
-
     /// Mid-ocean ridge - Active seafloor spreading center
     ///
     /// Divergent boundary where new oceanic crust is created.
@@ -207,56 +200,62 @@ impl GeologicProvince {
     pub fn description(&self) -> &'static str {
         match self {
             // Stage 2.1: Orogenic Belts
-            GeologicProvince::CollisionOrogen =>
-                "Continental-continental collision zone (e.g., Himalayas)",
-            GeologicProvince::PaleoOrogen =>
-                "Ancient, eroded mountain belt (e.g., Appalachians, Urals)",
-            GeologicProvince::AccretionaryWedge =>
-                "Scraped sediments at subduction zone (e.g., offshore Japan)",
+            GeologicProvince::CollisionOrogen => {
+                "Continental-continental collision zone (e.g., Himalayas)"
+            }
+            GeologicProvince::PaleoOrogen => {
+                "Ancient, eroded mountain belt (e.g., Appalachians, Urals)"
+            }
+            GeologicProvince::AccretionaryWedge => {
+                "Scraped sediments at subduction zone (e.g., offshore Japan)"
+            }
 
             // Stage 2.2: Large Igneous Provinces
-            GeologicProvince::ContinentalFloodBasalt =>
-                "Massive volcanic province (e.g., Deccan Traps)",
-            GeologicProvince::OceanicPlateau =>
-                "Underwater volcanic plateau (e.g., Ontong Java)",
-            GeologicProvince::HotspotTrack =>
-                "Volcanic island chain (e.g., Hawaiian Islands)",
+            GeologicProvince::ContinentalFloodBasalt => {
+                "Massive volcanic province (e.g., Deccan Traps)"
+            }
+            GeologicProvince::OceanicPlateau => "Underwater volcanic plateau (e.g., Ontong Java)",
+            GeologicProvince::HotspotTrack => "Volcanic island chain (e.g., Hawaiian Islands)",
 
             // Stage 2.3: Arc and Basin Systems
-            GeologicProvince::VolcanicArc =>
-                "Active volcanic arc above subduction (e.g., Aleutians)",
-            GeologicProvince::ForearcBasin =>
-                "Sedimentary basin between trench and arc (e.g., Great Valley)",
-            GeologicProvince::BackarcBasin =>
-                "Extensional basin behind arc (e.g., Sea of Japan)",
+            GeologicProvince::VolcanicArc => {
+                "Active volcanic arc above subduction (e.g., Aleutians)"
+            }
+            GeologicProvince::ForearcBasin => {
+                "Sedimentary basin between trench and arc (e.g., Great Valley)"
+            }
+            GeologicProvince::BackarcBasin => "Extensional basin behind arc (e.g., Sea of Japan)",
 
             // Stage 2.4: Stable Continental Regions
-            GeologicProvince::Craton =>
-                "Ancient stable core (e.g., Canadian Shield)",
-            GeologicProvince::Platform =>
-                "Stable region with sedimentary cover (e.g., Russian Platform)",
-            GeologicProvince::IntracratonicBasin =>
-                "Basin within stable craton (e.g., Michigan Basin)",
+            GeologicProvince::Craton => "Ancient stable core (e.g., Canadian Shield)",
+            GeologicProvince::Platform => {
+                "Stable region with sedimentary cover (e.g., Russian Platform)"
+            }
+            GeologicProvince::IntracratonicBasin => {
+                "Basin within stable craton (e.g., Michigan Basin)"
+            }
 
             // Stage 2.5: Extensional Zones
-            GeologicProvince::ContinentalRift =>
-                "Active extensional zone (e.g., East African Rift)",
-            GeologicProvince::ExtendedCrust =>
-                "Thinned continental crust (e.g., Basin and Range)",
+            GeologicProvince::ContinentalRift => {
+                "Active extensional zone (e.g., East African Rift)"
+            }
+            GeologicProvince::ExtendedCrust => "Thinned continental crust (e.g., Basin and Range)",
 
             // Stage 2.6: Oceanic Domains
-            GeologicProvince::MidOceanRidge =>
-                "Seafloor spreading center (e.g., Mid-Atlantic Ridge)",
-            GeologicProvince::AbyssalPlain =>
-                "Deep ocean floor (e.g., Pacific abyssal plains)",
-            GeologicProvince::OceanTrench =>
-                "Deep subduction zone (e.g., Mariana Trench)",
-            GeologicProvince::OceanicFractureZone =>
-                "Transform fault system (e.g., Romanche Fracture Zone)",
-            GeologicProvince::OceanicHotspotTrack =>
-                "Volcanic seamount chain from hotspot (e.g., Hawaiian-Emperor)",
-            GeologicProvince::ContinentalHotspotTrack =>
-                "Continental volcanic track from hotspot (e.g., Yellowstone)",
+            GeologicProvince::MidOceanRidge => {
+                "Seafloor spreading center (e.g., Mid-Atlantic Ridge)"
+            }
+            GeologicProvince::AbyssalPlain => "Deep ocean floor (e.g., Pacific abyssal plains)",
+            GeologicProvince::OceanTrench => "Deep subduction zone (e.g., Mariana Trench)",
+            GeologicProvince::OceanicFractureZone => {
+                "Transform fault system (e.g., Romanche Fracture Zone)"
+            }
+            GeologicProvince::OceanicHotspotTrack => {
+                "Volcanic seamount chain from hotspot (e.g., Hawaiian-Emperor)"
+            }
+            GeologicProvince::ContinentalHotspotTrack => {
+                "Continental volcanic track from hotspot (e.g., Yellowstone)"
+            }
         }
     }
 
@@ -270,33 +269,33 @@ impl GeologicProvince {
     pub fn color(&self) -> [u8; 3] {
         match self {
             // Orogenic Family (Browns/Purples - Elevation/Structure)
-            GeologicProvince::CollisionOrogen => [139, 69, 19],   // Saddle Brown (Active Mountains)
-            GeologicProvince::PaleoOrogen => [188, 143, 143],     // Rosy Brown (Eroded/Ghost Mountains)
+            GeologicProvince::CollisionOrogen => [139, 69, 19], // Saddle Brown (Active Mountains)
+            GeologicProvince::PaleoOrogen => [188, 143, 143], // Rosy Brown (Eroded/Ghost Mountains)
             GeologicProvince::AccretionaryWedge => [222, 184, 135], // Burlywood (Sediment pile)
 
             // Volcanic/Igneous Family (Vibrant Red/Purple/Magenta)
             GeologicProvince::ContinentalFloodBasalt => [128, 0, 128], // Purple (Flood Basalt)
-            GeologicProvince::OceanicPlateau => [148, 0, 211],    // Dark Violet
-            GeologicProvince::HotspotTrack => [255, 0, 255],      // Magenta
-            GeologicProvince::VolcanicArc => [255, 69, 0],        // Orange Red (Active Volcanism)
-            
+            GeologicProvince::OceanicPlateau => [148, 0, 211],         // Dark Violet
+            GeologicProvince::HotspotTrack => [255, 0, 255],           // Magenta
+            GeologicProvince::VolcanicArc => [255, 69, 0], // Orange Red (Active Volcanism)
+
             // Basin Family (Greys/Light Blues)
-            GeologicProvince::ForearcBasin => [176, 196, 222],    // Light Steel Blue
-            GeologicProvince::BackarcBasin => [119, 136, 153],    // Light Slate Gray
+            GeologicProvince::ForearcBasin => [176, 196, 222], // Light Steel Blue
+            GeologicProvince::BackarcBasin => [119, 136, 153], // Light Slate Gray
 
             // Cratonic Family (Warm Pinks/Oranges/Beiges)
-            GeologicProvince::Craton => [255, 140, 0],            // Dark Orange (The Core/Shield)
-            GeologicProvince::Platform => [255, 228, 196],        // Bisque (Sedimentary Cover)
+            GeologicProvince::Craton => [255, 140, 0], // Dark Orange (The Core/Shield)
+            GeologicProvince::Platform => [255, 228, 196], // Bisque (Sedimentary Cover)
             GeologicProvince::IntracratonicBasin => [210, 180, 140], // Tan
-            
+
             // Extensional Family (Yellows/Golds)
-            GeologicProvince::ContinentalRift => [255, 215, 0],   // Gold (Active Rifting)
-            GeologicProvince::ExtendedCrust => [240, 230, 140],   // Khaki
+            GeologicProvince::ContinentalRift => [255, 215, 0], // Gold (Active Rifting)
+            GeologicProvince::ExtendedCrust => [240, 230, 140], // Khaki
 
             // Oceanic Family (Blues/Cyans)
-            GeologicProvince::MidOceanRidge => [0, 255, 255],     // Cyan (New Crust)
-            GeologicProvince::AbyssalPlain => [65, 105, 225],     // Royal Blue (Deep Ocean)
-            GeologicProvince::OceanTrench => [0, 0, 139],         // Dark Blue (Deepest)
+            GeologicProvince::MidOceanRidge => [0, 255, 255], // Cyan (New Crust)
+            GeologicProvince::AbyssalPlain => [65, 105, 225], // Royal Blue (Deep Ocean)
+            GeologicProvince::OceanTrench => [0, 0, 139],     // Dark Blue (Deepest)
             GeologicProvince::OceanicFractureZone => [72, 209, 204], // Medium Turquoise
             GeologicProvince::OceanicHotspotTrack => [138, 43, 226], // Blue Violet
             GeologicProvince::ContinentalHotspotTrack => [153, 50, 204], // Dark Orchid
@@ -397,11 +396,11 @@ impl ProvinceCharacteristics {
     pub fn continental_flood_basalt(area_km2: f64) -> Self {
         Self {
             province_type: GeologicProvince::ContinentalFloodBasalt,
-            elevation_intensity: 0.3, // Relatively flat lava plains
-            roughness: 0.2,           // Quite smooth (flood basalts)
+            elevation_intensity: 0.3,    // Relatively flat lava plains
+            roughness: 0.2,              // Quite smooth (flood basalts)
             width_km: (area_km2.sqrt()), // Approximate linear dimension
-            intensity: 0.8,           // High volcanic activity
-            convergence_rate: 0.0,    // Not applicable
+            intensity: 0.8,              // High volcanic activity
+            convergence_rate: 0.0,       // Not applicable
         }
     }
 
@@ -590,7 +589,7 @@ impl ProvinceCharacteristics {
             elevation_intensity: -0.3, // Rises significantly from ocean floor but submerged
             roughness: 0.9,            // Very rough volcanic seamounts
             width_km: length_km,
-            intensity: 0.7,            // Strong volcanic signature
+            intensity: 0.7, // Strong volcanic signature
             convergence_rate: 0.0,
         }
     }
@@ -601,10 +600,10 @@ impl ProvinceCharacteristics {
     pub fn continental_hotspot_track(length_km: f64) -> Self {
         Self {
             province_type: GeologicProvince::ContinentalHotspotTrack,
-            elevation_intensity: 0.4,  // Moderate elevation (volcanic plateaus/calderas)
-            roughness: 0.8,            // Rough volcanic terrain
+            elevation_intensity: 0.4, // Moderate elevation (volcanic plateaus/calderas)
+            roughness: 0.8,           // Rough volcanic terrain
             width_km: length_km,
-            intensity: 0.8,            // Very strong volcanic signature
+            intensity: 0.8, // Very strong volcanic signature
             convergence_rate: 0.0,
         }
     }
@@ -619,7 +618,7 @@ impl ProvinceCharacteristics {
             elevation_intensity: 0.6, // Moderate elevation (eroded from 1.0)
             roughness: 0.6,           // Moderately rough (eroded)
             width_km,
-            intensity: 0.3,           // Inactive
+            intensity: 0.3, // Inactive
             convergence_rate: 0.0,
         }
     }
@@ -679,7 +678,10 @@ mod tests {
     #[test]
     fn test_province_names() {
         assert_eq!(GeologicProvince::CollisionOrogen.name(), "Collision Orogen");
-        assert_eq!(GeologicProvince::AccretionaryWedge.name(), "Accretionary Wedge");
+        assert_eq!(
+            GeologicProvince::AccretionaryWedge.name(),
+            "Accretionary Wedge"
+        );
         assert_eq!(GeologicProvince::VolcanicArc.name(), "Volcanic Arc");
     }
 

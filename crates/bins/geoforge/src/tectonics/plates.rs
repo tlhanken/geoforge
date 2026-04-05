@@ -1,7 +1,7 @@
 //! Tectonic plate data structures and utilities
 
 use crate::map::spherical::SphericalPoint;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Represents a tectonic plate seed point with motion information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,13 +19,13 @@ pub struct PlateSeed {
 impl PlateSeed {
     /// Create a new plate seed
     pub fn new(
-        id: u16, 
-        x: usize, 
-        y: usize, 
-        lat: f64, 
-        lon: f64, 
-        motion_direction: f64, 
-        motion_speed: f64
+        id: u16,
+        x: usize,
+        y: usize,
+        lat: f64,
+        lon: f64,
+        motion_direction: f64,
+        motion_speed: f64,
     ) -> Self {
         Self {
             id,
@@ -38,17 +38,17 @@ impl PlateSeed {
             point_3d: SphericalPoint::from_lat_lon(lat, lon),
         }
     }
-    
+
     /// Get the 3D spherical point for this seed
     pub fn spherical_point(&self) -> &SphericalPoint {
         &self.point_3d
     }
-    
+
     /// Calculate geodesic distance to another seed (in radians)
     pub fn distance_to(&self, other: &PlateSeed) -> f64 {
         self.point_3d.distance_to(&other.point_3d)
     }
-    
+
     /// Calculate geodesic distance to another seed (in kilometers)
     pub fn distance_to_km(&self, other: &PlateSeed) -> f64 {
         const EARTH_RADIUS_KM: f64 = 6371.0;
@@ -83,13 +83,17 @@ impl PlateStats {
     /// Calculate size percentile of this plate among all plates
     ///
     /// Returns a value from 0.0 to 1.0 indicating what fraction of plates are smaller
-    pub fn calculate_size_percentile(&self, all_stats: &std::collections::HashMap<u16, PlateStats>) -> f64 {
+    pub fn calculate_size_percentile(
+        &self,
+        all_stats: &std::collections::HashMap<u16, PlateStats>,
+    ) -> f64 {
         let total_plates = all_stats.len();
         if total_plates == 0 {
             return 0.5;
         }
 
-        let smaller_plates = all_stats.values()
+        let smaller_plates = all_stats
+            .values()
             .filter(|s| s.area_km2 < self.area_km2)
             .count();
 
@@ -131,9 +135,9 @@ impl PlateType {
     /// PlateType classification based on size percentile
     pub fn from_size_percentile(percentile: f64) -> Self {
         if percentile > 0.3 {
-            PlateType::Oceanic      // Top 70% by size = oceanic
+            PlateType::Oceanic // Top 70% by size = oceanic
         } else {
-            PlateType::Continental  // Bottom 30% by size = continental
+            PlateType::Continental // Bottom 30% by size = continental
         }
     }
 }
@@ -171,16 +175,16 @@ mod tests {
         assert_eq!(seed.motion_direction, 90.0);
         assert_eq!(seed.motion_speed, 5.0);
     }
-    
+
     #[test]
     fn test_distance_calculation() {
         let seed1 = PlateSeed::new(1, 0, 0, 0.0, 0.0, 0.0, 0.0);
         let seed2 = PlateSeed::new(2, 0, 0, 0.0, 90.0, 0.0, 0.0);
-        
+
         // 90 degrees longitude difference at equator should be PI/2 radians
         let distance = seed1.distance_to(&seed2);
         assert!((distance - std::f64::consts::PI / 2.0).abs() < 0.0001);
-        
+
         // Same point should have zero distance
         let distance_same = seed1.distance_to(&seed1);
         assert!(distance_same < 0.0001);

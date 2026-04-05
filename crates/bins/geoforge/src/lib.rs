@@ -1,11 +1,11 @@
 //! Geoforge - Realistic geological and climate modeling for procedural world generation
-//! 
+//!
 //! This library provides tools for generating realistic geological features, climate patterns,
 //! and biomes for procedural world generation. It starts with tectonic plate simulation
 //! and builds up through geological domains, elevation, climate, and biomes.
-//! 
+//!
 //! # Quick Start
-//! 
+//!
 //! ```rust
 //! use geoforge::TectonicPlateGenerator;
 //!
@@ -22,25 +22,29 @@
 //! ```
 
 // Core modules
+pub mod error;
+pub mod geology;
+pub mod io;
 pub mod map;
 pub mod tectonics;
-pub mod geology;
 pub mod utils;
-pub mod io;
-pub mod error;
 
 // Re-export main types for convenience
-pub use map::{TerrainMap, PlateMap, ElevationMap, TemperatureMap, PrecipitationMap, BiomeMap};
-pub use map::{SphericalPoint, PlanetaryParams, EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2};
-pub use map::{WorldMap, TectonicMetadata, TectonicsModule};
-pub use tectonics::{TectonicPlateGenerator, GenerationMethod, PlateSeed, PlateStats, PlateType, PlateError};
-pub use tectonics::{PlateInteraction, PlateBoundary};
-pub use tectonics::{BoundaryRefiner, BoundaryRefinementConfig};
-pub use tectonics::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
-pub use tectonics::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
-pub use tectonics::{PlateMotionAssigner, PlateMotionConfig};
 pub use geology::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
+pub use geology::{GeologyConfig, GeologyGenerator};
 pub use geology::{OrogenicBeltGenerator, OrogenicConfig};
-pub use geology::{GeologyGenerator, GeologyConfig};
+pub use map::{BiomeMap, ElevationMap, PlateMap, PrecipitationMap, TemperatureMap, TerrainMap};
+pub use map::{EARTH_RADIUS_KM, EARTH_SURFACE_AREA_KM2, PlanetaryParams, SphericalPoint};
+pub use map::{TectonicMetadata, TectonicsModule, WorldMap};
+pub use tectonics::{
+    BoundaryAnalysisConfig, BoundaryAnalyzer, BoundarySegment, BoundaryStatistics,
+};
+pub use tectonics::{BoundaryRefinementConfig, BoundaryRefiner};
+pub use tectonics::{
+    GenerationMethod, PlateError, PlateSeed, PlateStats, PlateType, TectonicPlateGenerator,
+};
+pub use tectonics::{IslandRemovalConfig, IslandRemovalStats, IslandRemover};
+pub use tectonics::{PlateBoundary, PlateInteraction};
+pub use tectonics::{PlateMotionAssigner, PlateMotionConfig};
 
 pub use io::export::MapExporter;

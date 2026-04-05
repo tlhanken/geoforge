@@ -269,10 +269,10 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 ## Development Commands
 ```bash
 # Run tests
-cargo test
+nix flake check --keep-going
 
 # Run with all export features
-cargo run --features export-full
+nix run -- --features export-full
 
 # Run with specific features
 cargo run --features export-png

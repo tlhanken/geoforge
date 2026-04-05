@@ -1,5 +1,5 @@
 //! Core map data structures for terrain generation
-//! 
+//!
 //! This module provides the fundamental data types and utilities for representing
 //! geographic data across different terrain generation stages.
 
@@ -23,7 +23,7 @@ pub struct TerrainMap<T> {
 pub struct MapProjection {
     /// Western longitude bound (degrees)
     pub west_bound: f64,
-    /// Eastern longitude bound (degrees) 
+    /// Eastern longitude bound (degrees)
     pub east_bound: f64,
     /// Northern latitude bound (degrees)
     pub north_bound: f64,
@@ -47,36 +47,38 @@ impl MapProjection {
             lat_resolution: 180.0 / height as f64,
         }
     }
-    
+
     /// Convert pixel coordinates to geographic coordinates
     pub fn pixel_to_coords(&self, x: usize, y: usize) -> (f64, f64) {
         let lon = self.west_bound + (x as f64 + 0.5) * self.lon_resolution;
         let lat = self.north_bound - (y as f64 + 0.5) * self.lat_resolution;
         (lat, lon)
     }
-    
+
     /// Convert geographic coordinates to pixel coordinates
     pub fn coords_to_pixel(&self, lat: f64, lon: f64) -> (usize, usize) {
         let x = ((lon - self.west_bound) / self.lon_resolution).floor() as usize;
         let y = ((self.north_bound - lat) / self.lat_resolution).floor() as usize;
         (x, y)
     }
-    
+
     /// Get the area of a pixel at given latitude (km²)
     pub fn pixel_area_km2(&self, lat: f64) -> f64 {
         self.pixel_area_km2_with_radius(lat, 6371.0)
     }
-    
+
     pub fn pixel_area_km2_with_radius(&self, lat: f64, radius_km: f64) -> f64 {
         let lat_rad = lat.to_radians();
         let delta_lat_rad = self.lat_resolution.to_radians();
         let delta_lon_rad = self.lon_resolution.to_radians();
 
         // Area of spherical rectangle
-        
 
-        radius_km * radius_km * delta_lon_rad *
-                   (lat_rad + delta_lat_rad / 2.0).sin().abs() * delta_lat_rad.abs()
+        radius_km
+            * radius_km
+            * delta_lon_rad
+            * (lat_rad + delta_lat_rad / 2.0).sin().abs()
+            * delta_lat_rad.abs()
     }
 
     /// Get approximate linear distance per pixel (km) for the map
@@ -102,9 +104,9 @@ impl MapProjection {
 
 impl<T> TerrainMap<T> {
     /// Create a new terrain map with given dimensions and default value
-    pub fn new(width: usize, height: usize, default_value: T) -> Self 
-    where 
-        T: Clone 
+    pub fn new(width: usize, height: usize, default_value: T) -> Self
+    where
+        T: Clone,
     {
         Self {
             width,
@@ -113,11 +115,16 @@ impl<T> TerrainMap<T> {
             projection: MapProjection::global_equirectangular(width, height),
         }
     }
-    
+
     /// Create with custom projection
-    pub fn with_projection(width: usize, height: usize, default_value: T, projection: MapProjection) -> Self
-    where 
-        T: Clone
+    pub fn with_projection(
+        width: usize,
+        height: usize,
+        default_value: T,
+        projection: MapProjection,
+    ) -> Self
+    where
+        T: Clone,
     {
         Self {
             width,
@@ -126,7 +133,7 @@ impl<T> TerrainMap<T> {
             projection,
         }
     }
-    
+
     /// Create from existing data
     pub fn from_data(width: usize, height: usize, data: Vec<T>) -> Self {
         Self {
@@ -136,12 +143,12 @@ impl<T> TerrainMap<T> {
             projection: MapProjection::global_equirectangular(width, height),
         }
     }
-    
+
     /// Get pixel index from coordinates
     pub fn get_index(&self, x: usize, y: usize) -> usize {
         y * self.width + x
     }
-    
+
     /// Get value at pixel coordinates
     pub fn get(&self, x: usize, y: usize) -> Option<&T> {
         if x < self.width && y < self.height {
@@ -150,7 +157,7 @@ impl<T> TerrainMap<T> {
             None
         }
     }
-    
+
     /// Set value at pixel coordinates
     pub fn set(&mut self, x: usize, y: usize, value: T) -> bool {
         if x < self.width && y < self.height {
@@ -161,37 +168,37 @@ impl<T> TerrainMap<T> {
             false
         }
     }
-    
+
     /// Get value at geographic coordinates
     pub fn get_at_coords(&self, lat: f64, lon: f64) -> Option<&T> {
         let (x, y) = self.projection.coords_to_pixel(lat, lon);
         self.get(x, y)
     }
-    
+
     /// Set value at geographic coordinates
     pub fn set_at_coords(&mut self, lat: f64, lon: f64, value: T) -> bool {
         let (x, y) = self.projection.coords_to_pixel(lat, lon);
         self.set(x, y, value)
     }
-    
+
     /// Get neighboring pixel coordinates (8-connected, with longitude wraparound)
     /// Returns SmallVec to avoid heap allocation for small number of elements
     pub fn get_neighbors(&self, x: usize, y: usize) -> smallvec::SmallVec<[(usize, usize); 8]> {
         let mut neighbors = smallvec::SmallVec::new();
-        
+
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
-                
+
                 let ny = y as i32 + dy;
-                
+
                 // Skip out of bounds latitude
                 if ny < 0 || ny >= self.height as i32 {
                     continue;
                 }
-                
+
                 // Handle longitude wraparound
                 let mut nx = x as i32 + dx;
                 if nx < 0 {
@@ -199,23 +206,23 @@ impl<T> TerrainMap<T> {
                 } else if nx >= self.width as i32 {
                     nx = 0;
                 }
-                
+
                 neighbors.push((nx as usize, ny as usize));
             }
         }
-        
+
         neighbors
     }
-    
+
     /// Convert each pixel to its corresponding 3D point on the unit sphere
     pub fn get_spherical_point(&self, x: usize, y: usize) -> SphericalPoint {
         self.projection.get_spherical_point(x, y)
     }
-    
+
     /// Fill map with a function of coordinates
-    pub fn fill_with<F>(&mut self, mut func: F) 
-    where 
-        F: FnMut(usize, usize, f64, f64) -> T
+    pub fn fill_with<F>(&mut self, mut func: F)
+    where
+        F: FnMut(usize, usize, f64, f64) -> T,
     {
         for y in 0..self.height {
             for x in 0..self.width {
@@ -226,11 +233,11 @@ impl<T> TerrainMap<T> {
             }
         }
     }
-    
+
     /// Apply a function to transform the map data
     pub fn map<U, F>(self, func: F) -> TerrainMap<U>
-    where 
-        F: FnMut(T) -> U
+    where
+        F: FnMut(T) -> U,
     {
         TerrainMap {
             width: self.width,
@@ -239,18 +246,18 @@ impl<T> TerrainMap<T> {
             projection: self.projection,
         }
     }
-    
+
     /// Get statistics about the data
     pub fn get_stats(&self) -> MapStats<T>
-    where 
-        T: Clone + PartialOrd
+    where
+        T: Clone + PartialOrd,
     {
         let mut stats = MapStats::new();
-        
+
         if !self.data.is_empty() {
             stats.min_value = Some(self.data[0].clone());
             stats.max_value = Some(self.data[0].clone());
-            
+
             for value in &self.data {
                 if let Some(ref min) = stats.min_value {
                     if value < min {
@@ -264,7 +271,7 @@ impl<T> TerrainMap<T> {
                 }
             }
         }
-        
+
         stats.total_pixels = self.data.len();
         stats
     }
@@ -304,7 +311,7 @@ pub type BiomeMap = TerrainMap<u8>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_map_creation() {
         let map: TerrainMap<u16> = TerrainMap::new(100, 50, 0);
@@ -312,40 +319,40 @@ mod tests {
         assert_eq!(map.height, 50);
         assert_eq!(map.data.len(), 5000);
     }
-    
+
     #[test]
     fn test_coordinate_conversion() {
         let projection = MapProjection::global_equirectangular(360, 180);
-        
+
         // Test equator, prime meridian (center pixel should be 180, 90)
         let (lat, lon) = projection.pixel_to_coords(180, 90);
         assert!((lat - 0.0).abs() < 1.0); // Relax tolerance for equirectangular projection
         assert!((lon - 0.5).abs() < 1.0); // Should be close to prime meridian
-        
+
         // Test north pole
         let (lat, _lon) = projection.pixel_to_coords(180, 0);
         assert!((lat - 89.5).abs() < 1.0); // Near north pole
-        
+
         // Test roundtrip
         let (x, y) = projection.coords_to_pixel(45.0, -120.0);
         let (lat2, lon2) = projection.pixel_to_coords(x, y);
         assert!((lat2 - 45.0).abs() < 1.0);
         assert!((lon2 - (-120.0)).abs() < 1.0);
     }
-    
+
     #[test]
     fn test_neighbors() {
         let map: TerrainMap<u16> = TerrainMap::new(10, 10, 0);
-        
+
         // Test center pixel
         let neighbors = map.get_neighbors(5, 5);
         assert_eq!(neighbors.len(), 8);
-        
+
         // Test edge with wraparound
         let neighbors = map.get_neighbors(0, 5);
         assert_eq!(neighbors.len(), 8);
         assert!(neighbors.contains(&(9, 5))); // Should wrap around
-        
+
         // Test corner
         let neighbors = map.get_neighbors(0, 0);
         assert_eq!(neighbors.len(), 5); // Only valid neighbors

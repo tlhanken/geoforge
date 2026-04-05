@@ -102,13 +102,16 @@ impl IslandRemover {
                         stats.pixels_reassigned += component.len();
 
                         if self.config.verbose {
-                            println!("    Removing island of {} pixels ({:.1}% of main body)",
+                            println!(
+                                "    Removing island of {} pixels ({:.1}% of main body)",
                                 component.len(),
-                                (component.len() as f64 / main_body_size as f64) * 100.0);
+                                (component.len() as f64 / main_body_size as f64) * 100.0
+                            );
                         }
 
                         // Find the most common neighboring plate and reassign to it
-                        let new_plate_id = self.find_surrounding_plate(plate_map, component, plate_id);
+                        let new_plate_id =
+                            self.find_surrounding_plate(plate_map, component, plate_id);
 
                         for &(x, y) in component {
                             let idx = plate_map.get_index(x, y);
@@ -271,12 +274,19 @@ mod tests {
 
         // Verify the island was removed
         assert_eq!(stats.islands_removed, 1, "Expected 1 island to be removed");
-        assert_eq!(stats.pixels_reassigned, 2, "Expected 2 pixels to be reassigned");
+        assert_eq!(
+            stats.pixels_reassigned, 2,
+            "Expected 2 pixels to be reassigned"
+        );
 
         // Verify the island was reassigned to plate 2 (the surrounding plate)
         for y in 4..6 {
             let idx = plate_map.get_index(5, y);
-            assert_eq!(plate_map.data[idx], 2, "Island pixel at (5, {}) should be reassigned to plate 2", y);
+            assert_eq!(
+                plate_map.data[idx], 2,
+                "Island pixel at (5, {}) should be reassigned to plate 2",
+                y
+            );
         }
     }
 

@@ -28,13 +28,18 @@
     strictDeps = true;
     doCheck = false;
     version = "0.0.1";
+    cargoExtraArgs = "--features export-full";
     buildInputs =
       [
-        pkgs.pkg-config
+        pkgs.gdal
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
         pkgs.libiconv
       ];
+    nativeBuildInputs = [
+      pkgs.pkg-config
+      pkgs.rustPlatform.bindgenHook
+    ];
   };
 in {
   inherit craneLib commonArgs;

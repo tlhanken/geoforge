@@ -2,9 +2,7 @@
 //!
 //! Tests the full pipeline from tectonic plates to orogenic belts
 
-use geoforge::{
-    GeologicProvince, OrogenicBeltGenerator, OrogenicConfig, WorldMap,
-};
+use geoforge::{GeologicProvince, OrogenicBeltGenerator, OrogenicConfig, WorldMap};
 
 #[test]
 fn test_orogenic_belt_generation_full_pipeline() {
@@ -30,11 +28,8 @@ fn test_orogenic_belt_generation_full_pipeline() {
     let config = OrogenicConfig::default();
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
 
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     // Verify we got some orogenic belts
     assert!(
@@ -85,11 +80,8 @@ fn test_all_orogen_types_generated() {
     // Generate orogenic belts
     let config = OrogenicConfig::default();
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     // Check for variety of orogen types
     let has_collision = orogens
@@ -125,11 +117,8 @@ fn test_dynamic_width_scaling() {
 
     let config = OrogenicConfig::default();
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     // Check that widths vary based on convergence rate
     if orogens.len() >= 2 {
@@ -165,11 +154,8 @@ fn test_orogenic_belt_pixel_expansion() {
 
     let config = OrogenicConfig::default();
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     // Verify that orogen pixels are larger than boundary pixels (expansion happened)
     for (i, orogen) in orogens.iter().enumerate() {
@@ -218,11 +204,8 @@ fn test_convergence_rate_filtering() {
     let config = OrogenicConfig::default();
     let min_rate = config.min_convergence_rate;
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     println!(
         "Convergent boundaries: {}, Orogens generated: {}",
@@ -301,7 +284,10 @@ fn test_deterministic_generation() {
         "Collision orogen counts should match"
     );
 
-    println!("✓ Deterministic generation verified with {} orogens", orogens1.len());
+    println!(
+        "✓ Deterministic generation verified with {} orogens",
+        orogens1.len()
+    );
 }
 
 #[test]
@@ -316,11 +302,8 @@ fn test_orogenic_characteristics_scaling() {
 
     let config = OrogenicConfig::default();
     let generator = OrogenicBeltGenerator::new(config, world.planetary_params.clone());
-    let orogens = generator.generate_orogens(
-        &metadata.plate_boundaries,
-        &metadata.plate_stats,
-        plate_map,
-    );
+    let orogens =
+        generator.generate_orogens(&metadata.plate_boundaries, &metadata.plate_stats, plate_map);
 
     // Verify characteristics make sense
     for orogen in &orogens {
@@ -469,8 +452,14 @@ fn test_full_geology_pipeline_deterministic() {
     let continental_hotspots2 = count_type(&provinces2, GeologicProvince::ContinentalHotspotTrack);
 
     println!("\n=== Hotspot Track Verification ===");
-    println!("  Oceanic hotspot tracks: {} (both runs)", oceanic_hotspots1);
-    println!("  Continental hotspot tracks: {} (both runs)", continental_hotspots1);
+    println!(
+        "  Oceanic hotspot tracks: {} (both runs)",
+        oceanic_hotspots1
+    );
+    println!(
+        "  Continental hotspot tracks: {} (both runs)",
+        continental_hotspots1
+    );
 
     assert_eq!(
         oceanic_hotspots1, oceanic_hotspots2,
@@ -505,7 +494,11 @@ fn test_full_geology_pipeline_deterministic() {
     );
 
     // Verify each hotspot track has same pixel count
-    for (i, (h1, h2)) in hotspot_provinces1.iter().zip(hotspot_provinces2.iter()).enumerate() {
+    for (i, (h1, h2)) in hotspot_provinces1
+        .iter()
+        .zip(hotspot_provinces2.iter())
+        .enumerate()
+    {
         assert_eq!(
             h1.pixels.len(),
             h2.pixels.len(),
@@ -514,8 +507,7 @@ fn test_full_geology_pipeline_deterministic() {
         );
 
         assert_eq!(
-            h1.characteristics.province_type,
-            h2.characteristics.province_type,
+            h1.characteristics.province_type, h2.characteristics.province_type,
             "Hotspot track {} should have same type in both runs",
             i
         );
@@ -523,7 +515,10 @@ fn test_full_geology_pipeline_deterministic() {
 
     println!("\n✓ Full geology pipeline determinism verified:");
     println!("  {} total provinces", provinces1.len());
-    println!("  {} hotspot tracks (pixel-perfect match)", hotspot_provinces1.len());
+    println!(
+        "  {} hotspot tracks (pixel-perfect match)",
+        hotspot_provinces1.len()
+    );
 }
 
 #[test]
@@ -531,7 +526,7 @@ fn test_geology_generator_full_pipeline() {
     // Test GeologyGenerator.generate_all_provinces() directly
     // This is the missing test identified in the code review
 
-    use geoforge::{GeologyGenerator, GeologyConfig};
+    use geoforge::{GeologyConfig, GeologyGenerator};
 
     // Create world with enough plates to generate diverse provinces
     let mut world = WorldMap::new(1800, 900, 777).expect("Failed to create world");
@@ -574,9 +569,15 @@ fn test_geology_generator_full_pipeline() {
     let all_types = vec![
         (GeologicProvince::CollisionOrogen, "CollisionOrogen"),
         (GeologicProvince::AccretionaryWedge, "AccretionaryWedge"),
-        (GeologicProvince::ContinentalFloodBasalt, "ContinentalFloodBasalt"),
+        (
+            GeologicProvince::ContinentalFloodBasalt,
+            "ContinentalFloodBasalt",
+        ),
         (GeologicProvince::OceanicPlateau, "OceanicPlateau"),
-        (GeologicProvince::ContinentalHotspotTrack, "ContinentalHotspotTrack"),
+        (
+            GeologicProvince::ContinentalHotspotTrack,
+            "ContinentalHotspotTrack",
+        ),
         (GeologicProvince::VolcanicArc, "VolcanicArc"),
         (GeologicProvince::ForearcBasin, "ForearcBasin"),
         (GeologicProvince::BackarcBasin, "BackarcBasin"),
@@ -611,7 +612,8 @@ fn test_geology_generator_full_pipeline() {
 
     // Verify foundation layers exist (should always generate)
     let has_oceanic_base = count_type(GeologicProvince::AbyssalPlain) > 0;
-    let has_stable_regions = count_type(GeologicProvince::Platform) > 0 || count_type(GeologicProvince::Craton) > 0;
+    let has_stable_regions =
+        count_type(GeologicProvince::Platform) > 0 || count_type(GeologicProvince::Craton) > 0;
 
     assert!(
         has_oceanic_base,
@@ -657,7 +659,7 @@ fn test_geology_generator_full_pipeline() {
 #[test]
 fn test_edge_case_empty_boundaries() {
     // Test that the generator handles empty boundary lists gracefully
-    use geoforge::{GeologyGenerator, GeologyConfig};
+    use geoforge::{GeologyConfig, GeologyGenerator};
 
     let mut world = WorldMap::new(900, 450, 999).expect("Failed to create world");
     world.tectonics().generate_plates(5).unwrap();
@@ -684,22 +686,29 @@ fn test_edge_case_empty_boundaries() {
     );
 
     // Count foundation types
-    let has_oceanic = provinces.iter()
+    let has_oceanic = provinces
+        .iter()
         .any(|p| p.characteristics.province_type == geoforge::GeologicProvince::AbyssalPlain);
-    let has_stable = provinces.iter()
-        .any(|p| p.characteristics.province_type == geoforge::GeologicProvince::Platform
-            || p.characteristics.province_type == geoforge::GeologicProvince::Craton);
+    let has_stable = provinces.iter().any(|p| {
+        p.characteristics.province_type == geoforge::GeologicProvince::Platform
+            || p.characteristics.province_type == geoforge::GeologicProvince::Craton
+    });
 
     assert!(has_oceanic, "Should generate oceanic base layer");
     assert!(has_stable, "Should generate stable continental regions");
 
     // Should NOT generate boundary-dependent features
-    let has_orogens = provinces.iter()
+    let has_orogens = provinces
+        .iter()
         .any(|p| p.characteristics.province_type == geoforge::GeologicProvince::CollisionOrogen);
-    let has_ridges = provinces.iter()
+    let has_ridges = provinces
+        .iter()
         .any(|p| p.characteristics.province_type == geoforge::GeologicProvince::MidOceanRidge);
 
-    assert!(!has_orogens, "Should not generate orogens without boundaries");
+    assert!(
+        !has_orogens,
+        "Should not generate orogens without boundaries"
+    );
     assert!(!has_ridges, "Should not generate ridges without boundaries");
 
     println!("\n✓ Empty boundaries test passed:");
@@ -709,7 +718,7 @@ fn test_edge_case_empty_boundaries() {
 #[test]
 fn test_edge_case_tiny_plates() {
     // Test that the generator handles very small plates gracefully
-    use geoforge::{GeologyGenerator, GeologyConfig};
+    use geoforge::{GeologyConfig, GeologyGenerator};
 
     // Create small world to encourage tiny plates
     let mut world = WorldMap::new(300, 150, 888).expect("Failed to create world");
@@ -731,26 +740,39 @@ fn test_edge_case_tiny_plates() {
     );
 
     // Verify we got some provinces
-    assert!(!provinces.is_empty(), "Should generate provinces even with tiny plates");
+    assert!(
+        !provinces.is_empty(),
+        "Should generate provinces even with tiny plates"
+    );
 
     // Count provinces with pixels (some may be empty with very tiny plates)
     let non_empty_count = provinces.iter().filter(|p| !p.pixels.is_empty()).count();
-    assert!(non_empty_count > 0, "At least some provinces should have pixels");
+    assert!(
+        non_empty_count > 0,
+        "At least some provinces should have pixels"
+    );
 
     // Verify all provinces have valid characteristics
     for province in &provinces {
-        assert!(province.characteristics.width_km >= 0.0, "Width should be non-negative");
+        assert!(
+            province.characteristics.width_km >= 0.0,
+            "Width should be non-negative"
+        );
     }
 
     println!("\n✓ Tiny plates test passed:");
-    println!("  {} plates, {} provinces ({} non-empty)",
-        metadata.plate_stats.len(), provinces.len(), non_empty_count);
+    println!(
+        "  {} plates, {} provinces ({} non-empty)",
+        metadata.plate_stats.len(),
+        provinces.len(),
+        non_empty_count
+    );
 }
 
 #[test]
 fn test_edge_case_polar_regions() {
     // Test that provinces near poles handle spherical projection correctly
-    use geoforge::{GeologyGenerator, GeologyConfig};
+    use geoforge::{GeologyConfig, GeologyGenerator};
 
     // Create world and generate provinces
     let mut world = WorldMap::new(1800, 900, 555).expect("Failed to create world");
@@ -784,14 +806,17 @@ fn test_edge_case_polar_regions() {
 
     // With 15 plates, we should have some polar coverage
     println!("\n✓ Polar regions test passed:");
-    println!("  {} provinces with polar pixels (>80° latitude)", polar_provinces);
+    println!(
+        "  {} provinces with polar pixels (>80° latitude)",
+        polar_provinces
+    );
     println!("  No crashes or infinite loops in polar expansion");
 }
 
 #[test]
 fn test_edge_case_longitude_wraparound() {
     // Test that longitude wraparound (crossing 180° meridian) works correctly
-    use geoforge::{GeologyGenerator, GeologyConfig};
+    use geoforge::{GeologyConfig, GeologyGenerator};
 
     let mut world = WorldMap::new(1800, 900, 444).expect("Failed to create world");
     world.tectonics().generate_plates(12).unwrap();
@@ -801,13 +826,20 @@ fn test_edge_case_longitude_wraparound() {
     let metadata = world.get_tectonic_metadata().unwrap();
 
     // Find boundaries that cross the map edge (x near 0 or width-1)
-    let edge_boundaries: Vec<_> = metadata.plate_boundaries.iter()
+    let edge_boundaries: Vec<_> = metadata
+        .plate_boundaries
+        .iter()
         .filter(|b| {
-            b.pixels.iter().any(|&(x, _)| x < 10 || x > plate_map.width - 10)
+            b.pixels
+                .iter()
+                .any(|&(x, _)| x < 10 || x > plate_map.width - 10)
         })
         .collect();
 
-    println!("\nFound {} boundaries near map edges", edge_boundaries.len());
+    println!(
+        "\nFound {} boundaries near map edges",
+        edge_boundaries.len()
+    );
 
     let config = GeologyConfig::default();
     let generator = GeologyGenerator::new(config, world.seed, world.planetary_params.clone());
@@ -823,7 +855,9 @@ fn test_edge_case_longitude_wraparound() {
     // Verify provinces near map edges are valid
     let mut edge_provinces = 0;
     for province in &provinces {
-        let has_edge_pixels = province.pixels.iter()
+        let has_edge_pixels = province
+            .pixels
+            .iter()
             .any(|&(x, _)| x < 10 || x > plate_map.width - 10);
         if has_edge_pixels {
             edge_provinces += 1;
@@ -843,7 +877,7 @@ fn test_edge_case_longitude_wraparound() {
 #[test]
 fn test_edge_case_all_oceanic_plates() {
     // Test edge case where all plates are oceanic (no continental provinces)
-    use geoforge::{GeologyGenerator, GeologyConfig, PlateStats, PlateType};
+    use geoforge::{GeologyConfig, GeologyGenerator, PlateStats, PlateType};
     use std::collections::HashMap;
 
     let mut world = WorldMap::new(900, 450, 333).expect("Failed to create world");
@@ -884,7 +918,10 @@ fn test_edge_case_all_oceanic_plates() {
         )
     });
 
-    assert!(!has_continental, "Should not generate continental provinces");
+    assert!(
+        !has_continental,
+        "Should not generate continental provinces"
+    );
 
     // Should have oceanic provinces
     let has_oceanic = provinces.iter().any(|p| {
@@ -905,7 +942,7 @@ fn test_oceanic_continental_convergence() {
     // Test that oceanic-continental convergence generates arc systems
     // Real-world examples: Andes, Cascades, Japanese Alps
 
-    use geoforge::{PlateType, PlateInteraction, GeologicProvince};
+    use geoforge::{GeologicProvince, PlateInteraction, PlateType};
 
     let mut world = WorldMap::new(1800, 900, 12345).expect("Failed to create world");
     world.tectonics().generate_plates(15).unwrap();
@@ -914,7 +951,9 @@ fn test_oceanic_continental_convergence() {
     // Find oceanic-continental convergent boundaries (before geology generation)
     let oceanic_continental_count = {
         let metadata = world.get_tectonic_metadata().unwrap();
-        metadata.plate_boundaries.iter()
+        metadata
+            .plate_boundaries
+            .iter()
             .filter(|b| {
                 if b.interaction_type != PlateInteraction::Convergent {
                     return false;
@@ -926,8 +965,8 @@ fn test_oceanic_continental_convergence() {
                 if let (Some(a), Some(b)) = (stats_a, stats_b) {
                     matches!(
                         (a.plate_type, b.plate_type),
-                        (PlateType::Oceanic, PlateType::Continental) |
-                        (PlateType::Continental, PlateType::Oceanic)
+                        (PlateType::Oceanic, PlateType::Continental)
+                            | (PlateType::Continental, PlateType::Oceanic)
                     )
                 } else {
                     false
@@ -936,28 +975,37 @@ fn test_oceanic_continental_convergence() {
             .count()
     };
 
-    println!("\nFound {} oceanic-continental convergent boundaries", oceanic_continental_count);
+    println!(
+        "\nFound {} oceanic-continental convergent boundaries",
+        oceanic_continental_count
+    );
 
     // Generate geology
     let provinces = world.generate_geology(None).unwrap();
 
     // If we have oceanic-continental boundaries, we should generate arc system provinces
     if oceanic_continental_count > 0 {
-        let volcanic_arcs: Vec<_> = provinces.iter()
+        let volcanic_arcs: Vec<_> = provinces
+            .iter()
             .filter(|p| p.characteristics.province_type == GeologicProvince::VolcanicArc)
             .collect();
 
-        let trenches: Vec<_> = provinces.iter()
+        let trenches: Vec<_> = provinces
+            .iter()
             .filter(|p| p.characteristics.province_type == GeologicProvince::OceanTrench)
             .collect();
 
-        let accretionary_wedges: Vec<_> = provinces.iter()
+        let accretionary_wedges: Vec<_> = provinces
+            .iter()
             .filter(|p| p.characteristics.province_type == GeologicProvince::AccretionaryWedge)
             .collect();
 
         println!("Generated {} volcanic arcs", volcanic_arcs.len());
         println!("Generated {} ocean trenches", trenches.len());
-        println!("Generated {} accretionary wedges", accretionary_wedges.len());
+        println!(
+            "Generated {} accretionary wedges",
+            accretionary_wedges.len()
+        );
 
         assert!(
             !volcanic_arcs.is_empty() || !trenches.is_empty(),

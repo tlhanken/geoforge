@@ -1,5 +1,5 @@
 /// Example demonstrating PNG import functionality for tectonic plates
-use geoforge::{WorldMap, MapExporter};
+use geoforge::{MapExporter, WorldMap};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🖼️ PNG Import Example");
@@ -12,13 +12,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut world_export = WorldMap::new(180, 90, 42)?;
     world_export.tectonics().generate_plates(8)?;
-    
+
     std::fs::create_dir_all("outputs/examples/png_import")?;
-    
+
     #[cfg(feature = "export-png")]
     {
-        world_export.export_plate_motion_png("outputs/examples/png_import", "original_motion.png")?;
-        println!("✅ Exported plates with motion to: outputs/examples/png_import/original_motion.png");
+        world_export
+            .export_plate_motion_png("outputs/examples/png_import", "original_motion.png")?;
+        println!(
+            "✅ Exported plates with motion to: outputs/examples/png_import/original_motion.png"
+        );
 
         // Show original statistics
         if let Some(metadata) = world_export.get_tectonic_metadata() {
@@ -27,14 +30,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sorted_stats.sort_by(|a, b| b.1.area_km2.cmp(&a.1.area_km2));
 
             for (_i, (plate_id, stat)) in sorted_stats.iter().enumerate().take(3) {
-                let seed = metadata.plate_seeds.iter().find(|s| s.id == **plate_id).unwrap();
-                println!("  Plate {}: {:.1}% ({} km²), moving {:.0}° at {:.1} cm/year",
-                         plate_id, stat.percentage, stat.area_km2,
-                         seed.motion_direction, seed.motion_speed);
+                let seed = metadata
+                    .plate_seeds
+                    .iter()
+                    .find(|s| s.id == **plate_id)
+                    .unwrap();
+                println!(
+                    "  Plate {}: {:.1}% ({} km²), moving {:.0}° at {:.1} cm/year",
+                    plate_id,
+                    stat.percentage,
+                    stat.area_km2,
+                    seed.motion_direction,
+                    seed.motion_speed
+                );
             }
         }
     }
-    
+
     #[cfg(not(feature = "export-png"))]
     {
         println!("⚠️ PNG features not enabled. Run with --features export-png");
@@ -47,7 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("-------------------------------------");
 
         let mut world_import = WorldMap::new(180, 90, 999)?; // Different seed
-        world_import.tectonics().import_png("outputs/examples/png_import/original_motion.png")?;
+        world_import
+            .tectonics()
+            .import_png("outputs/examples/png_import/original_motion.png")?;
 
         // Show imported statistics
         if let Some(metadata) = world_import.get_tectonic_metadata() {
@@ -56,15 +70,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sorted_stats.sort_by(|a, b| b.1.area_km2.cmp(&a.1.area_km2));
 
             for (_i, (plate_id, stat)) in sorted_stats.iter().enumerate().take(3) {
-                let seed = metadata.plate_seeds.iter().find(|s| s.id == **plate_id).unwrap();
-                println!("  Plate {}: {:.1}% ({} km²), moving {:.0}° at {:.1} cm/year",
-                         plate_id, stat.percentage, stat.area_km2,
-                         seed.motion_direction, seed.motion_speed);
+                let seed = metadata
+                    .plate_seeds
+                    .iter()
+                    .find(|s| s.id == **plate_id)
+                    .unwrap();
+                println!(
+                    "  Plate {}: {:.1}% ({} km²), moving {:.0}° at {:.1} cm/year",
+                    plate_id,
+                    stat.percentage,
+                    stat.area_km2,
+                    seed.motion_direction,
+                    seed.motion_speed
+                );
             }
         }
 
         // Export the imported data to verify it's the same
-        world_import.export_plate_motion_png("outputs/examples/png_import", "reimported_motion.png")?;
+        world_import
+            .export_plate_motion_png("outputs/examples/png_import", "reimported_motion.png")?;
         println!("✅ Re-exported as: outputs/examples/png_import/reimported_motion.png");
 
         // Step 3: Demonstrate data preservation
@@ -76,23 +100,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let imported_data = &world_import.tectonics.as_ref().unwrap().data;
 
         let identical = original_data == imported_data;
-        println!("🎯 Plate boundaries preserved: {}",
-                 if identical { "✅ YES" } else { "⚠️ Plate IDs reassigned" });
+        println!(
+            "🎯 Plate boundaries preserved: {}",
+            if identical {
+                "✅ YES"
+            } else {
+                "⚠️ Plate IDs reassigned"
+            }
+        );
 
         if !identical {
-            let differences = original_data.iter()
+            let differences = original_data
+                .iter()
                 .zip(imported_data.iter())
                 .filter(|(a, b)| a != b)
                 .count();
-            println!("   Note: {} pixels have different plate IDs due to color-to-ID remapping", differences);
+            println!(
+                "   Note: {} pixels have different plate IDs due to color-to-ID remapping",
+                differences
+            );
             println!("   This is normal - plate boundaries are preserved, but IDs may change");
         }
 
         // Step 4: Show file information
         println!("\n📁 Generated Files");
         println!("------------------");
-        println!("• outputs/examples/png_import/original_motion.png - Generated plates with motion vectors");
-        println!("• outputs/examples/png_import/reimported_motion.png - Same data after PNG import");
+        println!(
+            "• outputs/examples/png_import/original_motion.png - Generated plates with motion vectors"
+        );
+        println!(
+            "• outputs/examples/png_import/reimported_motion.png - Same data after PNG import"
+        );
 
         // Step 5: Practical usage tips
         println!("\n💡 Usage Tips");
@@ -107,6 +145,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("\n🎉 PNG import example completed successfully!");
     }
-    
+
     Ok(())
 }

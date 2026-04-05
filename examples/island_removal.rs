@@ -8,7 +8,7 @@
 //!
 //! Run with: cargo run --example island_removal --features export-png
 
-use geoforge::{WorldMap, BoundaryRefinementConfig, MapExporter};
+use geoforge::{BoundaryRefinementConfig, MapExporter, WorldMap};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Island Removal Example");
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Same refinement levels as boundary_refinement example,");
     println!("but with island removal applied for contiguous plates.\n");
 
-    let seed = 12345;  // Same seed as boundary_refinement example
+    let seed = 12345; // Same seed as boundary_refinement example
     let width = 1800;
     let height = 900;
     let num_plates = 15;
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_mild.export_tectonics_png(
             "outputs/examples/island_removal",
-            "01_mild_refinement_contiguous.png"
+            "01_mild_refinement_contiguous.png",
         )?;
         println!("✅ Exported: outputs/examples/island_removal/01_mild_refinement_contiguous.png");
     }
@@ -71,9 +71,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_moderate.export_tectonics_png(
             "outputs/examples/island_removal",
-            "02_moderate_refinement_contiguous.png"
+            "02_moderate_refinement_contiguous.png",
         )?;
-        println!("✅ Exported: outputs/examples/island_removal/02_moderate_refinement_contiguous.png");
+        println!(
+            "✅ Exported: outputs/examples/island_removal/02_moderate_refinement_contiguous.png"
+        );
     }
 
     // ========================================
@@ -97,9 +99,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_strong.export_tectonics_png(
             "outputs/examples/island_removal",
-            "03_strong_refinement_contiguous.png"
+            "03_strong_refinement_contiguous.png",
         )?;
-        println!("✅ Exported: outputs/examples/island_removal/03_strong_refinement_contiguous.png");
+        println!(
+            "✅ Exported: outputs/examples/island_removal/03_strong_refinement_contiguous.png"
+        );
     }
 
     // ========================================
@@ -123,9 +127,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_extreme.export_tectonics_png(
             "outputs/examples/island_removal",
-            "04_extreme_refinement_contiguous.png"
+            "04_extreme_refinement_contiguous.png",
         )?;
-        println!("✅ Exported: outputs/examples/island_removal/04_extreme_refinement_contiguous.png");
+        println!(
+            "✅ Exported: outputs/examples/island_removal/04_extreme_refinement_contiguous.png"
+        );
     }
 
     // ========================================
@@ -133,14 +139,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("\n🎉 ISLAND REMOVAL EXAMPLE COMPLETE!");
     println!("\n📊 Island removal statistics by refinement level:");
-    println!("  Mild:     {} islands removed, {} pixels reassigned",
-        mild_stats.islands_removed, mild_stats.pixels_reassigned);
-    println!("  Moderate: {} islands removed, {} pixels reassigned",
-        moderate_stats.islands_removed, moderate_stats.pixels_reassigned);
-    println!("  Strong:   {} islands removed, {} pixels reassigned",
-        strong_stats.islands_removed, strong_stats.pixels_reassigned);
-    println!("  Extreme:  {} islands removed, {} pixels reassigned",
-        extreme_stats.islands_removed, extreme_stats.pixels_reassigned);
+    println!(
+        "  Mild:     {} islands removed, {} pixels reassigned",
+        mild_stats.islands_removed, mild_stats.pixels_reassigned
+    );
+    println!(
+        "  Moderate: {} islands removed, {} pixels reassigned",
+        moderate_stats.islands_removed, moderate_stats.pixels_reassigned
+    );
+    println!(
+        "  Strong:   {} islands removed, {} pixels reassigned",
+        strong_stats.islands_removed, strong_stats.pixels_reassigned
+    );
+    println!(
+        "  Extreme:  {} islands removed, {} pixels reassigned",
+        extreme_stats.islands_removed, extreme_stats.pixels_reassigned
+    );
 
     #[cfg(feature = "export-png")]
     println!("\n💡 Compare with outputs/examples/boundary_refinement/ to see the difference!");

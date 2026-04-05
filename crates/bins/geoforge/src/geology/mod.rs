@@ -44,10 +44,10 @@
 //! ```
 
 pub mod constants;
-pub mod provinces;
-pub mod orogenic;
 pub mod generator;
+pub mod orogenic;
+pub mod provinces;
 
-pub use provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
+pub use generator::{GeologyConfig, GeologyGenerator};
 pub use orogenic::{OrogenicBeltGenerator, OrogenicConfig};
-pub use generator::{GeologyGenerator, GeologyConfig};
+pub use provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};

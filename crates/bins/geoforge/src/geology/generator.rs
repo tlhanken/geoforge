@@ -29,23 +29,23 @@
 //! **Subduction Systems (5)**: OceanTrench, AccretionaryWedge, ForearcBasin, VolcanicArc, BackarcBasin
 //!   - Applies to BOTH oceanic-oceanic (island arcs) AND oceanic-continental (Andes-style) convergence
 //!   - Same province types, different elevations (determined in Stage 3 based on crust type)
-//! **LIPs (3)**: ContinentalFloodBasalt, OceanicPlateau, ContinentalHotspotTrack*
-//! **Stable (3)**: Craton, Platform, ExtendedCrust
-//! **Oceanic (4)**: AbyssalPlain, MidOceanRidge, OceanicFractureZone, OceanicHotspotTrack*
-//! **Deferred**: ContinentalRift (will be implemented later)
+//!     **LIPs (3)**: ContinentalFloodBasalt, OceanicPlateau, ContinentalHotspotTrack*
+//!     **Stable (3)**: Craton, Platform, ExtendedCrust
+//!     **Oceanic (4)**: AbyssalPlain, MidOceanRidge, OceanicFractureZone, OceanicHotspotTrack*
+//!     **Deferred**: ContinentalRift (will be implemented later)
 //!
 //! *Hotspot tracks are generated separately as final overlays
 
 use crate::geology::constants as geo_const;
-use crate::geology::provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 use crate::geology::orogenic::{OrogenicBeltGenerator, OrogenicConfig};
-use crate::map::terrain::TerrainMap;
+use crate::geology::provinces::{GeologicProvince, ProvinceCharacteristics, ProvinceRegion};
 use crate::map::spherical::PlanetaryParams;
+use crate::map::terrain::TerrainMap;
 use crate::tectonics::boundary_analysis::BoundarySegment;
-use crate::tectonics::plates::{PlateInteraction, PlateStats, PlateType, PlateSeed};
-use std::collections::{HashMap, HashSet};
-use rand::{Rng, SeedableRng};
+use crate::tectonics::plates::{PlateInteraction, PlateSeed, PlateStats, PlateType};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use std::collections::{HashMap, HashSet};
 
 /// Index mapping plate IDs to their pixel coordinates
 ///
@@ -98,7 +98,11 @@ pub struct GeologyGenerator {
 
 impl GeologyGenerator {
     pub fn new(config: GeologyConfig, seed: u64, planetary_params: PlanetaryParams) -> Self {
-        Self { config, seed, planetary_params }
+        Self {
+            config,
+            seed,
+            planetary_params,
+        }
     }
 
     /// Generate all geological provinces from tectonic data
@@ -111,7 +115,7 @@ impl GeologyGenerator {
         &self,
         boundaries: &[BoundarySegment],
         plate_stats: &HashMap<u16, PlateStats>,
-        _plate_seeds: &[PlateSeed],  // Currently unused, plate motion stored in PlateStats
+        _plate_seeds: &[PlateSeed], // Currently unused, plate motion stored in PlateStats
         plate_map: &TerrainMap<u16>,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
@@ -147,7 +151,8 @@ impl GeologyGenerator {
         // Stage 2.4b: Paleo-orogens (Ancient mountain belts)
         // Linear features that cross-cut the stable continental cores
         if self.config.generate_stable_regions {
-            let paleo_orogens = self.generate_paleo_orogens(plate_stats, &plate_index, plate_map, &mut rng);
+            let paleo_orogens =
+                self.generate_paleo_orogens(plate_stats, &plate_index, plate_map, &mut rng);
             regions.extend(paleo_orogens);
         }
 
@@ -157,7 +162,7 @@ impl GeologyGenerator {
         // (Compress/fold edges of cratons and platforms)
         let orogenic_gen = OrogenicBeltGenerator::new(
             self.config.orogenic_config.clone(),
-            self.planetary_params.clone()
+            self.planetary_params.clone(),
         );
         let orogens = orogenic_gen.generate_orogens(boundaries, plate_stats, plate_map);
         regions.extend(orogens);
@@ -172,27 +177,35 @@ impl GeologyGenerator {
         // Stage 2.6b: Oceanic Overlays - Ridges and fractures
         // (Active spreading and transform features on oceanic base)
         if self.config.generate_oceanic {
-            let oceanic_overlays = self.generate_oceanic_overlays(boundaries, plate_map, plate_stats);
+            let oceanic_overlays =
+                self.generate_oceanic_overlays(boundaries, plate_map, plate_stats);
             regions.extend(oceanic_overlays);
         }
 
         // Stage 2.5b: Active Continental Rifts - Volcanic rift zones (East African Rift style)
         // (Active rifting with flood basalts and volcanism - igneous features)
         if self.config.generate_extensional {
-            let active_rifts = self.generate_active_continental_rifts(boundaries, plate_stats, plate_map, &mut rng);
+            let active_rifts = self.generate_active_continental_rifts(
+                boundaries,
+                plate_stats,
+                plate_map,
+                &mut rng,
+            );
             regions.extend(active_rifts);
         }
 
         // Stage 2.2: Large Igneous Provinces - Rare volcanic events
         // (Flood basalts, hotspots overlay everything)
-        let lips = self.generate_large_igneous_provinces(plate_stats, &plate_index, &regions, &mut rng);
+        let lips =
+            self.generate_large_igneous_provinces(plate_stats, &plate_index, &regions, &mut rng);
         regions.extend(lips);
 
         // FINAL OVERLAY: Hotspot tracks - Linear volcanic chains on top of all other features
         // (These should sit on top of oceanic base, abyssal plains, and any other provinces)
         // Generated LAST so they're visible on top of everything else
         if self.config.generate_oceanic {
-            let hotspot_tracks = self.generate_hotspot_tracks(plate_stats, plate_map, &plate_index, &mut rng);
+            let hotspot_tracks =
+                self.generate_hotspot_tracks(plate_stats, plate_map, &plate_index, &mut rng);
             regions.extend(hotspot_tracks);
         }
 
@@ -218,42 +231,83 @@ impl GeologyGenerator {
             }
 
             // Check for ANY subduction (oceanic-oceanic OR oceanic-continental)
-            if let (Some(stats_a), Some(stats_b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
+            if let (Some(stats_a), Some(stats_b)) = (
+                plate_stats.get(&boundary.plate_a),
+                plate_stats.get(&boundary.plate_b),
+            ) {
                 // Determine if this is a subduction zone and identify plates
-                let (is_subduction, subducting_plate, overriding_plate) = match (stats_a.plate_type, stats_b.plate_type) {
-                    // Oceanic-Oceanic: Older plate (lower ID) subducts
-                    (PlateType::Oceanic, PlateType::Oceanic) => {
-                        if boundary.plate_a < boundary.plate_b {
+                let (is_subduction, subducting_plate, overriding_plate) =
+                    match (stats_a.plate_type, stats_b.plate_type) {
+                        // Oceanic-Oceanic: Older plate (lower ID) subducts
+                        (PlateType::Oceanic, PlateType::Oceanic) => {
+                            if boundary.plate_a < boundary.plate_b {
+                                (true, boundary.plate_a, boundary.plate_b)
+                            } else {
+                                (true, boundary.plate_b, boundary.plate_a)
+                            }
+                        }
+                        // Oceanic-Continental: Oceanic plate always subducts (denser)
+                        (PlateType::Oceanic, PlateType::Continental) => {
                             (true, boundary.plate_a, boundary.plate_b)
-                        } else {
+                        }
+                        (PlateType::Continental, PlateType::Oceanic) => {
                             (true, boundary.plate_b, boundary.plate_a)
                         }
-                    },
-                    // Oceanic-Continental: Oceanic plate always subducts (denser)
-                    (PlateType::Oceanic, PlateType::Continental) => (true, boundary.plate_a, boundary.plate_b),
-                    (PlateType::Continental, PlateType::Oceanic) => (true, boundary.plate_b, boundary.plate_a),
-                    // Continental-Continental: Handled by OrogenicBeltGenerator
-                    _ => (false, 0, 0),
-                };
+                        // Continental-Continental: Handled by OrogenicBeltGenerator
+                        _ => (false, 0, 0),
+                    };
 
                 if is_subduction {
-
                     // Generate complete subduction zone transect sequentially:
                     // Oceanic plate → Trench → Accretionary Wedge → Forearc → Volcanic Arc → Backarc → Continental plate
-                    self.create_ocean_trench(boundary, subducting_plate, idx, plate_map, &mut regions);
+                    self.create_ocean_trench(
+                        boundary,
+                        subducting_plate,
+                        idx,
+                        plate_map,
+                        &mut regions,
+                    );
 
-                    let wedge_width_km = self.create_accretionary_wedge(boundary, overriding_plate, idx, plate_map, rng, &mut regions);
+                    let wedge_width_km = self.create_accretionary_wedge(
+                        boundary,
+                        overriding_plate,
+                        idx,
+                        plate_map,
+                        rng,
+                        &mut regions,
+                    );
                     let (forearc_offset_km, forearc_width_km) = self.create_forearc_basin(
-                        boundary, overriding_plate, wedge_width_km, idx, plate_map, rng, &mut regions
+                        boundary,
+                        overriding_plate,
+                        wedge_width_km,
+                        idx,
+                        plate_map,
+                        rng,
+                        &mut regions,
                     );
 
                     let (arc_offset_km, arc_width_km) = self.create_volcanic_arc(
-                        boundary, overriding_plate, forearc_offset_km, forearc_width_km, idx, plate_map, rng, &mut regions
+                        boundary,
+                        overriding_plate,
+                        forearc_offset_km,
+                        forearc_width_km,
+                        idx,
+                        plate_map,
+                        rng,
+                        &mut regions,
                     );
 
                     self.create_backarc_basin(
-                        boundary, overriding_plate, idx, arc_offset_km, arc_width_km,
-                        stats_a, stats_b, plate_map, rng, &mut regions
+                        boundary,
+                        overriding_plate,
+                        idx,
+                        arc_offset_km,
+                        arc_width_km,
+                        stats_a,
+                        stats_b,
+                        plate_map,
+                        rng,
+                        &mut regions,
                     );
                 }
             }
@@ -274,19 +328,19 @@ impl GeologyGenerator {
         plate_map: &TerrainMap<u16>,
         regions: &mut Vec<ProvinceRegion>,
     ) {
-        let chars = ProvinceCharacteristics::ocean_trench(
-            boundary.relative_velocity,
-            boundary.length_km,
-        );
+        let chars =
+            ProvinceCharacteristics::ocean_trench(boundary.relative_velocity, boundary.length_km);
 
         // Trenches: narrow feature right at the boundary, extending slightly onto subducting plate
         // Expand minimally to make visible on map
         let trench_width_km = geo_const::OCEAN_TRENCH_WIDTH_KM;
 
-        let expanded = self.expand_boundary_spherical(&boundary.pixels, trench_width_km / 2.0, plate_map);
+        let expanded =
+            self.expand_boundary_spherical(&boundary.pixels, trench_width_km / 2.0, plate_map);
 
         // Filter to only subducting plate pixels
-        let pixels: Vec<(usize, usize)> = expanded.iter()
+        let pixels: Vec<(usize, usize)> = expanded
+            .iter()
             .filter(|&&(x, y)| {
                 let plate_id = plate_map.data[y * plate_map.width + x];
                 plate_id == subducting_plate
@@ -294,11 +348,7 @@ impl GeologyGenerator {
             .copied()
             .collect();
 
-        regions.push(ProvinceRegion::new(
-            pixels,
-            chars,
-            Some(boundary_idx)
-        ));
+        regions.push(ProvinceRegion::new(pixels, chars, Some(boundary_idx)));
     }
 
     /// Create accretionary wedge (on overriding plate side, adjacent to trench)
@@ -319,7 +369,8 @@ impl GeologyGenerator {
     ) -> f64 {
         // Dynamic width based on convergence rate (faster subduction = more sediment scraped off)
         let base_width_km = geo_const::ACCRETIONARY_WEDGE_BASE_WIDTH_KM;
-        let rate_above_min = (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
+        let rate_above_min =
+            (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
         let multiplier = 1.0 + (geo_const::ACCRETIONARY_WEDGE_WIDTH_FACTOR * rate_above_min);
         let clamped_multiplier = multiplier.min(geo_const::ACCRETIONARY_WEDGE_MAX_MULTIPLIER);
         let width_km = base_width_km * clamped_multiplier;
@@ -329,13 +380,11 @@ impl GeologyGenerator {
             &boundary.pixels,
             overriding_plate,
             width_km,
-            plate_map
+            plate_map,
         );
 
-        let chars = ProvinceCharacteristics::accretionary_wedge(
-            boundary.relative_velocity,
-            width_km
-        );
+        let chars =
+            ProvinceCharacteristics::accretionary_wedge(boundary.relative_velocity, width_km);
         regions.push(ProvinceRegion::new(pixels, chars, Some(boundary_idx)));
 
         width_km
@@ -360,7 +409,8 @@ impl GeologyGenerator {
 
         // Dynamic width based on convergence rate (faster subduction = more deformation/subsidence)
         let base_width_km = geo_const::FOREARC_BASIN_BASE_WIDTH_KM;
-        let rate_above_min = (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
+        let rate_above_min =
+            (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
         let multiplier = 1.0 + (geo_const::FOREARC_BASIN_WIDTH_FACTOR * rate_above_min);
         let clamped_multiplier = multiplier.min(geo_const::FOREARC_BASIN_MAX_MULTIPLIER);
         let width_km = base_width_km * clamped_multiplier;
@@ -371,19 +421,20 @@ impl GeologyGenerator {
             &boundary.pixels,
             overriding_plate,
             offset_km + width_km,
-            plate_map
+            plate_map,
         );
 
         let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
-            plate_map
+            plate_map,
         );
 
         // Forearc basin = outer edge minus inner edge
         let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
-        let pixels: Vec<(usize, usize)> = outer_edge.iter()
+        let pixels: Vec<(usize, usize)> = outer_edge
+            .iter()
             .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
@@ -412,7 +463,8 @@ impl GeologyGenerator {
 
         // Dynamic width based on convergence rate (faster subduction = more vigorous magmatism)
         let base_width_km = geo_const::VOLCANIC_ARC_BASE_WIDTH_KM;
-        let rate_above_min = (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
+        let rate_above_min =
+            (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
         let multiplier = 1.0 + (geo_const::VOLCANIC_ARC_WIDTH_FACTOR * rate_above_min);
         let clamped_multiplier = multiplier.min(geo_const::VOLCANIC_ARC_MAX_MULTIPLIER);
         let width_km = base_width_km * clamped_multiplier;
@@ -423,27 +475,26 @@ impl GeologyGenerator {
             &boundary.pixels,
             overriding_plate,
             offset_km + width_km,
-            plate_map
+            plate_map,
         );
 
         let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
-            plate_map
+            plate_map,
         );
 
         // Volcanic arc = outer edge minus inner edge
         let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
-        let arc_pixels: Vec<(usize, usize)> = outer_edge.iter()
+        let arc_pixels: Vec<(usize, usize)> = outer_edge
+            .iter()
             .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
 
-        let chars = ProvinceCharacteristics::volcanic_arc(
-            boundary.relative_velocity,
-            boundary.length_km,
-        );
+        let chars =
+            ProvinceCharacteristics::volcanic_arc(boundary.relative_velocity, boundary.length_km);
         regions.push(ProvinceRegion::new(arc_pixels, chars, Some(boundary_idx)));
 
         (offset_km, width_km)
@@ -466,7 +517,8 @@ impl GeologyGenerator {
     ) {
         // Only create backarc basin for large plates
         if stats_a.area_km2 <= geo_const::BACKARC_BASIN_MIN_PLATE_AREA_KM2
-            && stats_b.area_km2 <= geo_const::BACKARC_BASIN_MIN_PLATE_AREA_KM2 {
+            && stats_b.area_km2 <= geo_const::BACKARC_BASIN_MIN_PLATE_AREA_KM2
+        {
             return;
         }
 
@@ -474,7 +526,8 @@ impl GeologyGenerator {
 
         // Dynamic width based on convergence rate (faster subduction = more backarc extension)
         let base_width_km = geo_const::BACKARC_BASIN_BASE_WIDTH_KM;
-        let rate_above_min = (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
+        let rate_above_min =
+            (boundary.relative_velocity - geo_const::MIN_CONVERGENCE_RATE_CM_PER_YEAR).max(0.0);
         let multiplier = 1.0 + (geo_const::BACKARC_BASIN_WIDTH_FACTOR * rate_above_min);
         let clamped_multiplier = multiplier.min(geo_const::BACKARC_BASIN_MAX_MULTIPLIER);
         let width_km = base_width_km * clamped_multiplier;
@@ -485,25 +538,30 @@ impl GeologyGenerator {
             &boundary.pixels,
             overriding_plate,
             offset_km + width_km,
-            plate_map
+            plate_map,
         );
 
         let inner_edge = self.expand_boundary_toward_plate_spherical(
             &boundary.pixels,
             overriding_plate,
             offset_km,
-            plate_map
+            plate_map,
         );
 
         // Backarc basin = outer edge minus inner edge
         let inner_set: std::collections::HashSet<_> = inner_edge.iter().copied().collect();
-        let backarc_pixels: Vec<(usize, usize)> = outer_edge.iter()
+        let backarc_pixels: Vec<(usize, usize)> = outer_edge
+            .iter()
             .filter(|p| !inner_set.contains(p))
             .copied()
             .collect();
 
         let chars = ProvinceCharacteristics::backarc_basin(boundary.length_km);
-        regions.push(ProvinceRegion::new(backarc_pixels, chars, Some(boundary_idx)));
+        regions.push(ProvinceRegion::new(
+            backarc_pixels,
+            chars,
+            Some(boundary_idx),
+        ));
     }
 
     /// Generate active continental rifts (volcanic rift zones like East African Rift)
@@ -533,17 +591,20 @@ impl GeologyGenerator {
             if let (Some(a), Some(b)) = (stats_a, stats_b) {
                 // ONLY continental-continental divergent boundaries
                 // (Oceanic-oceanic divergence = mid-ocean ridge, handled separately)
-                if a.plate_type == PlateType::Continental && b.plate_type == PlateType::Continental {
+                if a.plate_type == PlateType::Continental && b.plate_type == PlateType::Continental
+                {
                     // Active continental rift (narrow linear zone of extension)
                     let characteristics = ProvinceCharacteristics::continental_rift(
                         boundary.relative_velocity,
                         boundary.length_km,
                     );
 
-                    let width_km = geo_const::RIFT_MIN_WIDTH_KM + rng.gen::<f64>() * geo_const::RIFT_WIDTH_RANGE_KM;
+                    let width_km = geo_const::RIFT_MIN_WIDTH_KM
+                        + rng.r#gen::<f64>() * geo_const::RIFT_WIDTH_RANGE_KM;
 
                     // Use spherical-aware expansion
-                    let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
+                    let pixels =
+                        self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                     regions.push(ProvinceRegion::new(pixels, characteristics, Some(idx)));
                 }
@@ -603,7 +664,10 @@ impl GeologyGenerator {
         // First: Overlay mid-ocean ridges at divergent oceanic boundaries
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type == PlateInteraction::Divergent {
-                if let (Some(a), Some(b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
+                if let (Some(a), Some(b)) = (
+                    plate_stats.get(&boundary.plate_a),
+                    plate_stats.get(&boundary.plate_b),
+                ) {
                     if a.plate_type == PlateType::Oceanic && b.plate_type == PlateType::Oceanic {
                         let chars = ProvinceCharacteristics::mid_ocean_ridge(
                             boundary.relative_velocity,
@@ -613,9 +677,9 @@ impl GeologyGenerator {
                         // Mid-ocean ridges: Width depends on spreading rate
                         let spreading_rate = boundary.relative_velocity; // cm/year
                         let width_km = if spreading_rate > geo_const::SPREADING_RATE_FAST {
-                            geo_const::RIDGE_WIDTH_FAST_KM  // Fast-spreading: narrow, smooth
+                            geo_const::RIDGE_WIDTH_FAST_KM // Fast-spreading: narrow, smooth
                         } else if spreading_rate > geo_const::SPREADING_RATE_MEDIUM {
-                            geo_const::RIDGE_WIDTH_MEDIUM_KM  // Medium-spreading
+                            geo_const::RIDGE_WIDTH_MEDIUM_KM // Medium-spreading
                         } else if spreading_rate > geo_const::SPREADING_RATE_SLOW {
                             geo_const::RIDGE_WIDTH_SLOW_KM // Slow-spreading: wider with rift valley
                         } else {
@@ -623,7 +687,8 @@ impl GeologyGenerator {
                         };
 
                         // Use spherical-aware expansion to account for latitude
-                        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
+                        let pixels =
+                            self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                         regions.push(ProvinceRegion::new(pixels, chars, Some(idx)));
                     }
@@ -634,14 +699,19 @@ impl GeologyGenerator {
         // Second: Overlay fracture zones at transform boundaries (only for oceanic plates)
         for (idx, boundary) in boundaries.iter().enumerate() {
             if boundary.interaction_type == PlateInteraction::Transform {
-                if let (Some(a), Some(b)) = (plate_stats.get(&boundary.plate_a), plate_stats.get(&boundary.plate_b)) {
+                if let (Some(a), Some(b)) = (
+                    plate_stats.get(&boundary.plate_a),
+                    plate_stats.get(&boundary.plate_b),
+                ) {
                     if a.plate_type == PlateType::Oceanic || b.plate_type == PlateType::Oceanic {
-                        let chars = ProvinceCharacteristics::oceanic_fracture_zone(boundary.length_km);
+                        let chars =
+                            ProvinceCharacteristics::oceanic_fracture_zone(boundary.length_km);
 
                         let width_km = geo_const::FRACTURE_ZONE_WIDTH_KM;
 
                         // Use spherical-aware expansion
-                        let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
+                        let pixels =
+                            self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                         regions.push(ProvinceRegion::new(pixels, chars, Some(idx)));
                     }
@@ -693,7 +763,11 @@ impl GeologyGenerator {
             // 1. PLATFORM (PINK) - Fill ALL continental pixels as base layer
             // This is the sedimentary-covered cratonic basement
             let platform_chars = ProvinceCharacteristics::platform(stats.area_km2 as f64);
-            regions.push(ProvinceRegion::new(plate_pixels.clone(), platform_chars, None));
+            regions.push(ProvinceRegion::new(
+                plate_pixels.clone(),
+                platform_chars,
+                None,
+            ));
 
             // 2. CONTINENTAL CORE / SHIELD (ORANGE) - Single massive core
             self.generate_continental_shield(plate_pixels, &mut regions);
@@ -723,12 +797,14 @@ impl GeologyGenerator {
         let plate_center_y = (min_y + max_y) / 2;
 
         // Target size: fraction of plate area for the exposed shield
-        let target_shield_area = (plate_pixels.len() as f64 * geo_const::SHIELD_AREA_FRACTION) as usize;
+        let target_shield_area =
+            (plate_pixels.len() as f64 * geo_const::SHIELD_AREA_FRACTION) as usize;
         let target_radius = (target_shield_area as f64 / std::f64::consts::PI).sqrt();
 
         // Generate the core using a noise-distorted distance field
         // We want a cohesive blob, not a perfect circle
-        let shield_pixels: Vec<(usize, usize)> = plate_pixels.iter()
+        let shield_pixels: Vec<(usize, usize)> = plate_pixels
+            .iter()
             .filter(|&&(x, y)| {
                 let dx = (x as i32 - plate_center_x as i32) as f64;
                 let dy = (y as i32 - plate_center_y as i32) as f64;
@@ -764,7 +840,8 @@ impl GeologyGenerator {
     ) {
         // Only on large plates with low probability
         if stats.area_km2 <= geo_const::INTRACRATONIC_BASIN_MIN_AREA_KM2
-            || rng.gen::<f64>() >= geo_const::INTRACRATONIC_BASIN_PROBABILITY {
+            || rng.r#gen::<f64>() >= geo_const::INTRACRATONIC_BASIN_PROBABILITY
+        {
             return;
         }
 
@@ -773,7 +850,8 @@ impl GeologyGenerator {
         let basin_y = plate_pixels[rng.gen_range(0..plate_pixels.len())].1;
 
         // Generate circular basin
-        let basin_pixels: Vec<(usize, usize)> = plate_pixels.iter()
+        let basin_pixels: Vec<(usize, usize)> = plate_pixels
+            .iter()
             .filter(|&&(x, y)| {
                 let dx = (x as i32 - basin_x as i32).abs() as f64;
                 let dy = (y as i32 - basin_y as i32).abs() as f64;
@@ -785,7 +863,7 @@ impl GeologyGenerator {
 
         if basin_pixels.len() > geo_const::INTRACRATONIC_BASIN_MIN_PIXELS {
             let chars = ProvinceCharacteristics::intracratonic_basin(
-                basin_pixels.len() as f64 * geo_const::INTRACRATONIC_BASIN_AREA_PER_PIXEL_KM2
+                basin_pixels.len() as f64 * geo_const::INTRACRATONIC_BASIN_AREA_PER_PIXEL_KM2,
             );
             regions.push(ProvinceRegion::new(basin_pixels, chars, None));
         }
@@ -812,7 +890,8 @@ impl GeologyGenerator {
 
             if let (Some(a), Some(b)) = (stats_a, stats_b) {
                 // Only create passive margins at continental-oceanic or continental-continental boundaries
-                let is_continental_edge = a.plate_type == PlateType::Continental || b.plate_type == PlateType::Continental;
+                let is_continental_edge = a.plate_type == PlateType::Continental
+                    || b.plate_type == PlateType::Continental;
 
                 if !is_continental_edge {
                     continue; // Skip oceanic-oceanic boundaries
@@ -831,7 +910,8 @@ impl GeologyGenerator {
                 let pixels = self.expand_boundary_spherical(&boundary.pixels, width_km, plate_map);
 
                 // Filter to only include continental pixels
-                let continental_pixels: Vec<(usize, usize)> = pixels.iter()
+                let continental_pixels: Vec<(usize, usize)> = pixels
+                    .iter()
                     .filter(|&&(x, y)| {
                         let idx = y * plate_map.width + x;
                         if idx >= plate_map.data.len() {
@@ -848,9 +928,7 @@ impl GeologyGenerator {
                     .collect();
 
                 if !continental_pixels.is_empty() {
-                    let chars = ProvinceCharacteristics::extended_crust(
-                        boundary.length_km,
-                    );
+                    let chars = ProvinceCharacteristics::extended_crust(boundary.length_km);
                     regions.push(ProvinceRegion::new(continental_pixels, chars, Some(idx)));
                 }
             }
@@ -883,23 +961,37 @@ impl GeologyGenerator {
 
         // Rarely generate LIPs on plates
         for (plate_id, stats) in sorted_plates {
-            if rng.gen::<f64>() < self.config.lip_probability {
+            if rng.r#gen::<f64>() < self.config.lip_probability {
                 let (province_type, area) = if stats.plate_type == PlateType::Continental {
-                    (GeologicProvince::ContinentalFloodBasalt, stats.area_km2 as f64 * geo_const::CONTINENTAL_FLOOD_BASALT_AREA_FRACTION)
+                    (
+                        GeologicProvince::ContinentalFloodBasalt,
+                        stats.area_km2 as f64 * geo_const::CONTINENTAL_FLOOD_BASALT_AREA_FRACTION,
+                    )
                 } else {
-                    (GeologicProvince::OceanicPlateau, stats.area_km2 as f64 * geo_const::OCEANIC_PLATEAU_AREA_FRACTION)
+                    (
+                        GeologicProvince::OceanicPlateau,
+                        stats.area_km2 as f64 * geo_const::OCEANIC_PLATEAU_AREA_FRACTION,
+                    )
                 };
 
                 let characteristics = match province_type {
-                    GeologicProvince::ContinentalFloodBasalt =>
-                        ProvinceCharacteristics::continental_flood_basalt(area),
-                    GeologicProvince::OceanicPlateau =>
-                        ProvinceCharacteristics::oceanic_plateau(area),
+                    GeologicProvince::ContinentalFloodBasalt => {
+                        ProvinceCharacteristics::continental_flood_basalt(area)
+                    }
+                    GeologicProvince::OceanicPlateau => {
+                        ProvinceCharacteristics::oceanic_plateau(area)
+                    }
                     _ => continue,
                 };
 
-                let pixels_sample = self.sample_plate_interior(*plate_id, plate_index, geo_const::LIP_INTERIOR_SAMPLE_FRACTION, rng);
-                let unassigned: Vec<(usize, usize)> = pixels_sample.into_iter()
+                let pixels_sample = self.sample_plate_interior(
+                    *plate_id,
+                    plate_index,
+                    geo_const::LIP_INTERIOR_SAMPLE_FRACTION,
+                    rng,
+                );
+                let unassigned: Vec<(usize, usize)> = pixels_sample
+                    .into_iter()
                     .filter(|p| !assigned_pixels.contains(p))
                     .collect();
 
@@ -988,10 +1080,15 @@ impl GeologyGenerator {
         plate_map: &TerrainMap<u16>,
     ) -> Vec<(usize, usize)> {
         // Only accept pixels belonging to the target plate
-        self.expand_boundary_filtered(boundary_pixels, distance_pixels, plate_map, move |x, y, map| {
-            let idx = y * map.width + x;
-            idx < map.data.len() && map.data[idx] == target_plate
-        })
+        self.expand_boundary_filtered(
+            boundary_pixels,
+            distance_pixels,
+            plate_map,
+            move |x, y, map| {
+                let idx = y * map.width + x;
+                idx < map.data.len() && map.data[idx] == target_plate
+            },
+        )
     }
 
     /// Helper: Spherical-aware expansion with latitude-dependent distance
@@ -1107,8 +1204,9 @@ impl GeologyGenerator {
         };
 
         // Randomly sample the requested fraction
-        plate_pixels.iter()
-            .filter(|_| rng.gen::<f64>() < fraction)
+        plate_pixels
+            .iter()
+            .filter(|_| rng.r#gen::<f64>() < fraction)
             .copied()
             .collect()
     }
@@ -1133,7 +1231,8 @@ impl GeologyGenerator {
         };
 
         // Filter for deep interior pixels (far from any boundary)
-        plate_pixels.iter()
+        plate_pixels
+            .iter()
             .filter(|&&(x, y)| {
                 // Check if all neighbors within min_distance are same plate
                 for dy in -(min_distance as i32)..=(min_distance as i32) {
@@ -1142,7 +1241,11 @@ impl GeologyGenerator {
                         let ny = y as i32 + dy;
 
                         // Out of bounds = not interior
-                        if nx < 0 || ny < 0 || nx >= plate_map.width as i32 || ny >= plate_map.height as i32 {
+                        if nx < 0
+                            || ny < 0
+                            || nx >= plate_map.width as i32
+                            || ny >= plate_map.height as i32
+                        {
                             return false;
                         }
 
@@ -1167,7 +1270,9 @@ impl GeologyGenerator {
     /// # Returns
     /// Kilometers per pixel (guaranteed to be positive and non-zero)
     fn km_per_pixel(&self, plate_map: &TerrainMap<u16>) -> f64 {
-        let km_per_px = plate_map.projection.km_per_pixel(self.planetary_params.radius_km);
+        let km_per_px = plate_map
+            .projection
+            .km_per_pixel(self.planetary_params.radius_km);
         // Guard against zero or negative values (should never happen with valid inputs)
         km_per_px.max(0.01)
     }
@@ -1181,9 +1286,7 @@ impl GeologyGenerator {
 
         for (y, row) in plate_map.data.chunks(plate_map.width).enumerate() {
             for (x, &plate_id) in row.iter().enumerate() {
-                index.entry(plate_id)
-                    .or_default()
-                    .push((x, y));
+                index.entry(plate_id).or_default().push((x, y));
             }
         }
 
@@ -1246,13 +1349,17 @@ impl GeologyGenerator {
                 geo_const::HOTSPOT_PROBABILITY_MEDIUM_PLATE
             };
 
-            if rng.gen::<f64>() > probability {
+            if rng.r#gen::<f64>() > probability {
                 continue;
             }
 
             // Select hotspot location in deep plate interior
             let hotspot_location = match self.select_hotspot_location(
-                *plate_id, stats.area_km2, plate_index, plate_map, rng
+                *plate_id,
+                stats.area_km2,
+                plate_index,
+                plate_map,
+                rng,
             ) {
                 Some(loc) => loc,
                 None => continue,
@@ -1307,9 +1414,8 @@ impl GeologyGenerator {
             geo_const::HOTSPOT_MIN_INTERIOR_DISTANCE_MEDIUM_PX
         };
 
-        let interior_pixels = self.find_deep_interior_pixels(
-            plate_id, plate_index, plate_map, min_distance
-        );
+        let interior_pixels =
+            self.find_deep_interior_pixels(plate_id, plate_index, plate_map, min_distance);
 
         if interior_pixels.is_empty() {
             return None;
@@ -1331,29 +1437,38 @@ impl GeologyGenerator {
         stats: &PlateStats,
         rng: &mut StdRng,
     ) -> (f64, f64, ProvinceCharacteristics) {
-        let (time_ma, max_length_km, width_km, chars_fn): (f64, f64, f64, fn(f64) -> ProvinceCharacteristics) =
-            if stats.plate_type == PlateType::Oceanic {
-                // Oceanic: young islands/atolls
-                let time = geo_const::HOTSPOT_OCEANIC_MIN_AGE_MA
-                    + rng.gen::<f64>() * geo_const::HOTSPOT_OCEANIC_AGE_RANGE_MA;
-                (time,
-                 geo_const::HOTSPOT_OCEANIC_MAX_LENGTH_KM,
-                 geo_const::HOTSPOT_OCEANIC_WIDTH_KM,
-                 ProvinceCharacteristics::oceanic_hotspot_track)
-            } else {
-                // Continental: recent calderas
-                let time = geo_const::HOTSPOT_CONTINENTAL_MIN_AGE_MA
-                    + rng.gen::<f64>() * geo_const::HOTSPOT_CONTINENTAL_AGE_RANGE_MA;
-                (time,
-                 geo_const::HOTSPOT_CONTINENTAL_MAX_LENGTH_KM,
-                 geo_const::HOTSPOT_CONTINENTAL_WIDTH_KM,
-                 ProvinceCharacteristics::continental_hotspot_track)
-            };
+        let (time_ma, max_length_km, width_km, chars_fn): (
+            f64,
+            f64,
+            f64,
+            fn(f64) -> ProvinceCharacteristics,
+        ) = if stats.plate_type == PlateType::Oceanic {
+            // Oceanic: young islands/atolls
+            let time = geo_const::HOTSPOT_OCEANIC_MIN_AGE_MA
+                + rng.r#gen::<f64>() * geo_const::HOTSPOT_OCEANIC_AGE_RANGE_MA;
+            (
+                time,
+                geo_const::HOTSPOT_OCEANIC_MAX_LENGTH_KM,
+                geo_const::HOTSPOT_OCEANIC_WIDTH_KM,
+                ProvinceCharacteristics::oceanic_hotspot_track,
+            )
+        } else {
+            // Continental: recent calderas
+            let time = geo_const::HOTSPOT_CONTINENTAL_MIN_AGE_MA
+                + rng.r#gen::<f64>() * geo_const::HOTSPOT_CONTINENTAL_AGE_RANGE_MA;
+            (
+                time,
+                geo_const::HOTSPOT_CONTINENTAL_MAX_LENGTH_KM,
+                geo_const::HOTSPOT_CONTINENTAL_WIDTH_KM,
+                ProvinceCharacteristics::continental_hotspot_track,
+            )
+        };
 
         // Formula: length = velocity (cm/yr) × time (Ma) × conversion factor
         // Units: cm/yr × Ma × 1,000,000 yr/Ma ÷ 100,000 cm/km = km
-        let chain_length_km = (stats.seed.motion_speed * time_ma
-            * geo_const::HOTSPOT_LENGTH_CONVERSION_FACTOR).min(max_length_km);
+        let chain_length_km =
+            (stats.seed.motion_speed * time_ma * geo_const::HOTSPOT_LENGTH_CONVERSION_FACTOR)
+                .min(max_length_km);
 
         let chars = chars_fn(chain_length_km);
 
@@ -1430,17 +1545,21 @@ impl GeologyGenerator {
         rng: &mut StdRng,
     ) -> Vec<ProvinceRegion> {
         let mut regions = Vec::new();
-        
+
         // Deterministic iteration
         let mut sorted_plates: Vec<_> = plate_stats.iter().collect();
         sorted_plates.sort_by_key(|(plate_id, _)| **plate_id);
 
         for (plate_id, stats) in sorted_plates {
             // Only continental plates
-            if stats.plate_type != PlateType::Continental { continue; }
+            if stats.plate_type != PlateType::Continental {
+                continue;
+            }
 
             // Only distinct on medium/large continents
-            if stats.area_km2 < geo_const::PALEO_OROGEN_MIN_AREA_KM2 { continue; }
+            if stats.area_km2 < geo_const::PALEO_OROGEN_MIN_AREA_KM2 {
+                continue;
+            }
 
             // 1-2 belts per large continent
             let num_belts = if stats.area_km2 > geo_const::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 {
@@ -1448,67 +1567,83 @@ impl GeologyGenerator {
             } else {
                 geo_const::PALEO_OROGEN_COUNT_MEDIUM
             };
-            
+
             if let Some(pixels) = plate_index.get(plate_id) {
-                if pixels.len() < 100 { continue; }
-                
+                if pixels.len() < 100 {
+                    continue;
+                }
+
                 for _ in 0..num_belts {
                     // Pick start/end points
                     // Try a few times to get points far apart
                     let mut start = pixels[0];
                     let mut end = pixels[0];
                     let mut valid = false;
-                    
+
                     for _ in 0..10 {
                         let p1 = pixels[rng.gen_range(0..pixels.len())];
                         let p2 = pixels[rng.gen_range(0..pixels.len())];
-                        
+
                         let dx = (p1.0 as i32 - p2.0 as i32).pow(2);
                         let dy = (p1.1 as i32 - p2.1 as i32).pow(2);
                         let dist_sq = dx + dy;
-                        
+
                         // Minimum length check (approximate spatial distance square)
-                        if dist_sq > geo_const::PALEO_OROGEN_MIN_DISTANCE_SQ { // heuristic minimum distance
+                        if dist_sq > geo_const::PALEO_OROGEN_MIN_DISTANCE_SQ {
+                            // heuristic minimum distance
                             start = p1;
                             end = p2;
                             valid = true;
                             break;
                         }
                     }
-                    
-                    if !valid { continue; }
-                    
+
+                    if !valid {
+                        continue;
+                    }
+
                     // Rasterize a line between start and end using Bresenham's algorithm
                     let mut line_pixels = Vec::new();
                     let x0 = start.0 as i32;
                     let y0 = start.1 as i32;
                     let x1 = end.0 as i32;
                     let y1 = end.1 as i32;
-                    
+
                     let dx = (x1 - x0).abs();
                     let dy = -(y1 - y0).abs();
                     let sx = if x0 < x1 { 1 } else { -1 };
                     let sy = if y0 < y1 { 1 } else { -1 };
                     let mut err = dx + dy;
-                    
+
                     let mut cx = x0;
                     let mut cy = y0;
-                    
+
                     loop {
                         line_pixels.push((cx as usize, cy as usize));
-                        if cx == x1 && cy == y1 { break; }
+                        if cx == x1 && cy == y1 {
+                            break;
+                        }
                         let e2 = 2 * err;
-                        if e2 >= dy { err += dy; cx += sx; }
-                        if e2 <= dx { err += dx; cy += sy; }
+                        if e2 >= dy {
+                            err += dy;
+                            cx += sx;
+                        }
+                        if e2 <= dx {
+                            err += dx;
+                            cy += sy;
+                        }
                     }
-                    
+
                     // Expand line to width
-                    let width_km = geo_const::PALEO_OROGEN_MIN_WIDTH_KM + rng.gen::<f64>() * geo_const::PALEO_OROGEN_WIDTH_RANGE_KM;
-                    let expanded = self.expand_boundary_spherical(&line_pixels, width_km / 2.0, plate_map);
+                    let width_km = geo_const::PALEO_OROGEN_MIN_WIDTH_KM
+                        + rng.r#gen::<f64>() * geo_const::PALEO_OROGEN_WIDTH_RANGE_KM;
+                    let expanded =
+                        self.expand_boundary_spherical(&line_pixels, width_km / 2.0, plate_map);
 
                     // Filter to keep only on this continent
                     // (Paleo-orogens don't cross into the ocean usually, they are internal sutures)
-                    let final_pixels: Vec<(usize, usize)> = expanded.iter()
+                    let final_pixels: Vec<(usize, usize)> = expanded
+                        .iter()
                         .filter(|&&(x, y)| {
                             let idx = y * plate_map.width + x;
                             idx < plate_map.data.len() && plate_map.data[idx] == *plate_id
@@ -1517,13 +1652,13 @@ impl GeologyGenerator {
                         .collect();
 
                     if final_pixels.len() > geo_const::PALEO_OROGEN_MIN_PIXELS {
-                         let chars = ProvinceCharacteristics::paleo_orogen(width_km);
-                         regions.push(ProvinceRegion::new(final_pixels, chars, None));
+                        let chars = ProvinceCharacteristics::paleo_orogen(width_km);
+                        regions.push(ProvinceRegion::new(final_pixels, chars, None));
                     }
                 }
             }
         }
-        
+
         regions
     }
 }

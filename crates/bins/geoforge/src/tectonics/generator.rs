@@ -1,17 +1,16 @@
 //! Main tectonic plate generator
 
-use crate::map::terrain::{TerrainMap, PlateMap};
-use crate::tectonics::plates::{PlateSeed, PlateStats};
-use crate::tectonics::electrostatic::*;
-use crate::tectonics::boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
+use crate::map::terrain::{PlateMap, TerrainMap};
 use crate::tectonics::PlateError;
-use rand::rngs::StdRng;
+use crate::tectonics::boundary_refinement::{BoundaryRefinementConfig, BoundaryRefiner};
+use crate::tectonics::electrostatic::*;
+use crate::tectonics::plates::{PlateSeed, PlateStats};
 use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use rayon::prelude::*;
-
 
 /// Method used for tectonic plate generation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,9 +38,16 @@ impl TectonicPlateGenerator {
     }
 
     /// Create a new tectonic plate generator with specific seed
-    pub fn with_seed(width: usize, height: usize, num_plates: usize, seed: u64) -> Result<Self, PlateError> {
+    pub fn with_seed(
+        width: usize,
+        height: usize,
+        num_plates: usize,
+        seed: u64,
+    ) -> Result<Self, PlateError> {
         if width == 0 || height == 0 {
-            return Err(PlateError::Config("Width and height must be > 0".to_string()));
+            return Err(PlateError::Config(
+                "Width and height must be > 0".to_string(),
+            ));
         }
         if num_plates == 0 || num_plates > u16::MAX as usize {
             return Err(PlateError::Config("Invalid number of plates".to_string()));
@@ -78,45 +84,48 @@ impl TectonicPlateGenerator {
     /// Generate plates using electrostatic simulation
     pub fn generate_plates_electrostatic(&mut self) -> Result<(), PlateError> {
         println!("Generating plates using electrostatic simulation...");
-        
+
         // Generate random charges
         let config = ElectrostaticConfig::default();
         let mut charges = generate_random_charges(self.num_plates, &mut self.rng, &config)?;
-        
+
         // Simulate to equilibrium
         simulate_equilibrium(&mut charges, &config)?;
-        
+
         // Convert charges to seeds
         self.plate_seeds = charges_to_seeds(&charges, self.width, self.height, &mut self.rng);
-        
+
         // Generate plates using Voronoi from equilibrium positions
         let width = self.width;
         let plate_seeds = &self.plate_seeds;
         let projection = self.plate_map.projection.clone();
 
-        self.plate_map.data.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                let point = projection.get_spherical_point(x, y);
+        self.plate_map
+            .data
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (x, pixel) in row.iter_mut().enumerate() {
+                    let point = projection.get_spherical_point(x, y);
 
-                let mut nearest_plate = 1;
-                let mut min_distance = f64::INFINITY;
+                    let mut nearest_plate = 1;
+                    let mut min_distance = f64::INFINITY;
 
-                // Find closest seed using geodesic distance
-                for seed in plate_seeds {
-                    let distance = point.distance_to(seed.spherical_point());
-                    if distance < min_distance {
-                        min_distance = distance;
-                        nearest_plate = seed.id;
+                    // Find closest seed using geodesic distance
+                    for seed in plate_seeds {
+                        let distance = point.distance_to(seed.spherical_point());
+                        if distance < min_distance {
+                            min_distance = distance;
+                            nearest_plate = seed.id;
+                        }
                     }
-                }
 
-                *pixel = nearest_plate;
-            }
-        });
-        
+                    *pixel = nearest_plate;
+                }
+            });
+
         Ok(())
     }
-
 
     /// Apply boundary refinement to add realistic irregularity to plate edges (Stage 1.2)
     ///
@@ -149,8 +158,10 @@ impl TectonicPlateGenerator {
     pub fn generate(&mut self, method: GenerationMethod) -> Result<&Vec<u16>, PlateError> {
         match method {
             GenerationMethod::Electrostatic => {
-                println!("Generating {} tectonic plates using electrostatic physics... (seed: {})",
-                         self.num_plates, self.current_seed);
+                println!(
+                    "Generating {} tectonic plates using electrostatic physics... (seed: {})",
+                    self.num_plates, self.current_seed
+                );
                 self.generate_plates_electrostatic()?;
             }
         }
@@ -162,18 +173,18 @@ impl TectonicPlateGenerator {
     /// Generate comprehensive statistics with area-weighted calculations
     pub fn get_plate_stats(&self) -> HashMap<u16, PlateStats> {
         let mut plate_areas = HashMap::new();
-        
+
         // Calculate area for each plate accounting for latitude
         for y in 0..self.height {
             for x in 0..self.width {
                 let (lat, _lon) = self.plate_map.projection.pixel_to_coords(x, y);
                 let pixel_area = self.plate_map.projection.pixel_area_km2(lat);
                 let pixel = self.plate_map.data[self.plate_map.get_index(x, y)];
-                
+
                 if pixel > 0 {
                     let entry = plate_areas.entry(pixel).or_insert((0, 0.0));
-                    entry.0 += 1;  // pixel count
-                    entry.1 += pixel_area;  // area
+                    entry.0 += 1; // pixel count
+                    entry.1 += pixel_area; // area
                 }
             }
         }
@@ -182,10 +193,7 @@ impl TectonicPlateGenerator {
         let mut stats = HashMap::new();
         for (&plate_id, &(pixels, area_km2)) in &plate_areas {
             if let Some(seed) = self.plate_seeds.iter().find(|s| s.id == plate_id) {
-                stats.insert(
-                    plate_id,
-                    PlateStats::new(pixels, area_km2, seed.clone()),
-                );
+                stats.insert(plate_id, PlateStats::new(pixels, area_km2, seed.clone()));
             }
         }
 
@@ -194,19 +202,29 @@ impl TectonicPlateGenerator {
 
     /// Get plate map dimensions and data
     pub fn get_plate_data(&self) -> (usize, usize, &Vec<u16>, &Vec<PlateSeed>) {
-        (self.width, self.height, &self.plate_map.data, &self.plate_seeds)
+        (
+            self.width,
+            self.height,
+            &self.plate_map.data,
+            &self.plate_seeds,
+        )
     }
 
     /// Export as little-endian bytes for file writing
     pub fn export_raw_u16_le(&self) -> Vec<u8> {
-        self.plate_map.data
+        self.plate_map
+            .data
             .iter()
             .flat_map(|&value| value.to_le_bytes())
             .collect()
     }
 
     /// Export raw binary data to file
-    pub fn export_binary(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn export_binary(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
         let raw_bytes = self.export_raw_u16_le();
@@ -215,34 +233,42 @@ impl TectonicPlateGenerator {
     }
 
     /// Export all available formats
-    pub fn export_all(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn export_all(
+        &self,
+        output_dir: &str,
+        base_name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         fs::create_dir_all(output_dir)?;
-        
+
         // Always export binary
         self.export_binary(output_dir, &format!("{}.bin", base_name))?;
-        
+
         #[cfg(feature = "export-png")]
         self.export_png(output_dir, &format!("{}.png", base_name))?;
-        
+
         #[cfg(feature = "export-tiff")]
         self.export_geotiff(output_dir, &format!("{}.tiff", base_name))?;
-        
+
         Ok(())
     }
 
     #[cfg(feature = "export-png")]
-    pub fn export_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn export_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         use image::{ImageBuffer, Rgb};
         use rand::prelude::*;
-        
+
         let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
-        
+
         // Generate a color for each plate
         let mut rng = StdRng::seed_from_u64(42); // Consistent colors
-        let colors: Vec<[u8; 3]> = (0..=self.num_plates).map(|_| {
-            [rng.gen(), rng.gen(), rng.gen()]
-        }).collect();
-        
+        let colors: Vec<[u8; 3]> = (0..=self.num_plates)
+            .map(|_| [rng.r#gen(), rng.r#gen(), rng.r#gen()])
+            .collect();
+
         // Draw the image
         for (y, row) in self.plate_map.data.chunks(self.width).enumerate() {
             for (x, &plate_id) in row.iter().enumerate() {
@@ -250,48 +276,52 @@ impl TectonicPlateGenerator {
                 img.put_pixel(x as u32, y as u32, Rgb(color));
             }
         }
-        
+
         let path = Path::new(output_dir).join(filename);
         img.save(path)?;
         Ok(())
     }
 
     #[cfg(feature = "export-tiff")]
-    pub fn export_geotiff(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        use gdal::Dataset;
-        use gdal::Driver;
+    pub fn export_geotiff(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use gdal::DriverManager;
         use gdal::spatial_ref::SpatialRef;
-        
-        let driver = Driver::get("GTiff")?;
+
+        let driver = DriverManager::get_driver_by_name("GTiff")?;
         let path = Path::new(output_dir).join(filename);
         let mut ds = driver.create_with_band_type::<u16, _>(
             path,
             self.width as isize,
             self.height as isize,
-            1
+            1,
         )?;
-        
+
         // Set geotransform and projection
         ds.set_geo_transform(&self.get_geotransform())?;
-        let srs = SpatialRef::from_epsg(4326)?;  // WGS84
+        let srs = SpatialRef::from_epsg(4326)?; // WGS84
         ds.set_spatial_ref(&srs)?;
-        
+
         // Write data
-        let band = ds.rasterband(1)?;
-        band.write_band_as_slice(0, 0, self.width as usize, self.height as usize, &self.plate_map.data)?;
-        
+        let mut band = ds.rasterband(1)?;
+        let buffer = gdal::raster::Buffer::new((self.width, self.height), self.plate_map.data.clone());
+        band.write((0, 0), (self.width, self.height), &buffer)?;
+
         Ok(())
     }
 
     /// Get GeoTIFF geotransform parameters
     pub fn get_geotransform(&self) -> [f64; 6] {
         [
-            -180.0,                              // Top-left X (longitude)
-            360.0 / self.width as f64,          // Pixel width (degrees per pixel)
-            0.0,                                // Row rotation (typically 0)
-            90.0,                               // Top-left Y (latitude)
-            0.0,                                // Column rotation (typically 0)
-            -180.0 / self.height as f64,        // Pixel height (negative = north up)
+            -180.0,                      // Top-left X (longitude)
+            360.0 / self.width as f64,   // Pixel width (degrees per pixel)
+            0.0,                         // Row rotation (typically 0)
+            90.0,                        // Top-left Y (latitude)
+            0.0,                         // Column rotation (typically 0)
+            -180.0 / self.height as f64, // Pixel height (negative = north up)
         ]
     }
 
@@ -299,7 +329,9 @@ impl TectonicPlateGenerator {
     pub fn validate(&self) -> Result<(), PlateError> {
         // Check all pixels are assigned
         if self.plate_map.data.contains(&0) {
-            return Err(PlateError::Simulation("Unassigned pixels found".to_string()));
+            return Err(PlateError::Simulation(
+                "Unassigned pixels found".to_string(),
+            ));
         }
 
         // Check all plate IDs are valid

@@ -4,8 +4,8 @@
 //! including direction (azimuth) and velocity (cm/year). Motion can be assigned
 //! randomly or using physics-based angular velocity models.
 
-use crate::tectonics::plates::PlateSeed;
 use crate::map::spherical::SphericalPoint;
+use crate::tectonics::plates::PlateSeed;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -114,9 +114,9 @@ impl PlateMotionAssigner {
             seed.motion_direction = self.rng.gen_range(0.0..360.0);
 
             // Random speed within range
-            let speed = self.rng.gen_range(
-                self.config.min_speed_cm_year..=self.config.max_speed_cm_year
-            );
+            let speed = self
+                .rng
+                .gen_range(self.config.min_speed_cm_year..=self.config.max_speed_cm_year);
             seed.motion_speed = speed * self.config.global_speed_scale;
         }
     }
@@ -173,18 +173,15 @@ impl PlateMotionAssigner {
         // Speed depends on distance from pole: v = ω × r × sin(θ)
         // Where θ is the angular distance from pole
         const EARTH_RADIUS_KM: f64 = 6371.0;
-        let speed_km_per_my = angular_vel_deg_per_my.to_radians()
-            * EARTH_RADIUS_KM
-            * angular_distance.sin();
+        let speed_km_per_my =
+            angular_vel_deg_per_my.to_radians() * EARTH_RADIUS_KM * angular_distance.sin();
 
         // Convert km/million years to cm/year
         let speed_cm_per_year = speed_km_per_my * 100_000.0 / 1_000_000.0;
 
         // Clamp to reasonable range
-        let speed_clamped = speed_cm_per_year.clamp(
-            self.config.min_speed_cm_year,
-            self.config.max_speed_cm_year,
-        );
+        let speed_clamped =
+            speed_cm_per_year.clamp(self.config.min_speed_cm_year, self.config.max_speed_cm_year);
 
         (motion_direction, speed_clamped)
     }
@@ -382,28 +379,30 @@ mod tests {
         let seed_a = PlateSeed::new(1, 0, 0, 0.0, 0.0, 0.0, 5.0); // Moving east
         let seed_b = PlateSeed::new(2, 100, 0, 0.0, 10.0, 180.0, 5.0); // Moving west
 
-        let interaction = PlateMotionAssigner::classify_boundary_interaction(&seed_a, &seed_b, 45.0);
+        let interaction =
+            PlateMotionAssigner::classify_boundary_interaction(&seed_a, &seed_b, 45.0);
         assert_eq!(interaction, PlateInteraction::Convergent);
 
         // Diverging plates
         let seed_c = PlateSeed::new(3, 0, 0, 0.0, 0.0, 180.0, 5.0); // Moving west
         let seed_d = PlateSeed::new(4, 100, 0, 0.0, 10.0, 0.0, 5.0); // Moving east
 
-        let interaction = PlateMotionAssigner::classify_boundary_interaction(&seed_c, &seed_d, 45.0);
+        let interaction =
+            PlateMotionAssigner::classify_boundary_interaction(&seed_c, &seed_d, 45.0);
         assert_eq!(interaction, PlateInteraction::Divergent);
 
         // Transform boundary
         let seed_e = PlateSeed::new(5, 0, 0, 0.0, 0.0, 90.0, 5.0); // Moving north
         let seed_f = PlateSeed::new(6, 100, 0, 0.0, 10.0, 270.0, 5.0); // Moving south
 
-        let interaction = PlateMotionAssigner::classify_boundary_interaction(&seed_e, &seed_f, 45.0);
+        let interaction =
+            PlateMotionAssigner::classify_boundary_interaction(&seed_e, &seed_f, 45.0);
         assert_eq!(interaction, PlateInteraction::Transform);
     }
 
     #[test]
     fn test_speed_range_respected() {
-        let config = PlateMotionConfig::with_seed(789)
-            .with_speed_range(3.0, 6.0);
+        let config = PlateMotionConfig::with_seed(789).with_speed_range(3.0, 6.0);
 
         let mut assigner = PlateMotionAssigner::with_config(config);
 
@@ -417,8 +416,16 @@ mod tests {
         assigner.assign_motion(&mut seeds);
 
         for seed in &seeds {
-            assert!(seed.motion_speed >= 3.0, "Speed {} below minimum", seed.motion_speed);
-            assert!(seed.motion_speed <= 6.0, "Speed {} above maximum", seed.motion_speed);
+            assert!(
+                seed.motion_speed >= 3.0,
+                "Speed {} below minimum",
+                seed.motion_speed
+            );
+            assert!(
+                seed.motion_speed <= 6.0,
+                "Speed {} above maximum",
+                seed.motion_speed
+            );
         }
     }
 }

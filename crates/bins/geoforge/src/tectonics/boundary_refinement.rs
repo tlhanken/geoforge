@@ -6,8 +6,8 @@
 
 use crate::map::terrain::TerrainMap;
 use crate::tectonics::plates::PlateInteraction;
-use std::collections::HashSet;
 use rayon::prelude::*;
+use std::collections::HashSet;
 
 /// Configuration for boundary refinement
 #[derive(Debug, Clone)]
@@ -36,18 +36,18 @@ pub struct BoundaryRefinementConfig {
     pub smoothing_iterations: usize,
 
     /// Boundary type variation - scale different boundary types differently
-    pub convergent_scale: f64,  // default: 1.2 (more irregular)
-    pub divergent_scale: f64,   // default: 1.0 (normal)
-    pub transform_scale: f64,   // default: 0.8 (less irregular)
+    pub convergent_scale: f64, // default: 1.2 (more irregular)
+    pub divergent_scale: f64, // default: 1.0 (normal)
+    pub transform_scale: f64, // default: 0.8 (less irregular)
 }
 
 impl Default for BoundaryRefinementConfig {
     fn default() -> Self {
         Self {
             seed: 0,
-            noise_scale: 0.020,       // Medium-scale features
-            noise_amplitude: 80.0,    // Moderate warping (default)
-            octaves: 5,               // Multi-scale detail
+            noise_scale: 0.020,    // Medium-scale features
+            noise_amplitude: 80.0, // Moderate warping (default)
+            octaves: 5,            // Multi-scale detail
             persistence: 0.5,
             smoothing_iterations: 1,
             convergent_scale: 1.2,
@@ -113,7 +113,10 @@ impl BoundaryRefiner {
 
         // Optional smoothing to prevent over-jaggedness
         if self.config.smoothing_iterations > 0 {
-            println!("  Applying {} smoothing iterations", self.config.smoothing_iterations);
+            println!(
+                "  Applying {} smoothing iterations",
+                self.config.smoothing_iterations
+            );
             self.smooth_boundaries(plate_map, self.config.smoothing_iterations);
         }
 
@@ -121,7 +124,7 @@ impl BoundaryRefiner {
     }
 
     /// Identify all boundary pixels (pixels adjacent to different plates)
-    #[allow(dead_code)]  // Reserved for future boundary-type analysis
+    #[allow(dead_code)] // Reserved for future boundary-type analysis
     fn identify_boundaries(&self, plate_map: &TerrainMap<u16>) -> HashSet<(usize, usize)> {
         let mut boundaries = HashSet::new();
 
@@ -152,7 +155,10 @@ impl BoundaryRefiner {
         // Create a copy of the original data
         let original_data = plate_map.data.clone();
 
-        println!("  Applying 3D spherical domain warping to {} pixels...", plate_map.width * plate_map.height);
+        println!(
+            "  Applying 3D spherical domain warping to {} pixels...",
+            plate_map.width * plate_map.height
+        );
 
         // Convert amplitude to radians on unit sphere
         // amplitude is in "pixels at equator", convert to angular distance
@@ -160,8 +166,10 @@ impl BoundaryRefiner {
         let amplitude_degrees = self.config.noise_amplitude * degrees_per_pixel;
         let amplitude_radians = amplitude_degrees.to_radians();
 
-        println!("  Warping amplitude: {:.2}° ({:.0} pixels at equator)",
-                 amplitude_degrees, self.config.noise_amplitude);
+        println!(
+            "  Warping amplitude: {:.2}° ({:.0} pixels at equator)",
+            amplitude_degrees, self.config.noise_amplitude
+        );
 
         // Pre-calculate projection data to avoid borrow checker issues
         let projection = plate_map.projection.clone();
@@ -169,71 +177,78 @@ impl BoundaryRefiner {
         let height = plate_map.height;
 
         // Process each row in parallel
-        plate_map.data.par_chunks_mut(width).enumerate().for_each(|(y, row)| {
-            for (x, pixel) in row.iter_mut().enumerate() {
-                // Get current pixel's geographic coordinates
-                let (lat, lon) = projection.pixel_to_coords(x, y);
+        plate_map
+            .data
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for (x, pixel) in row.iter_mut().enumerate() {
+                    // Get current pixel's geographic coordinates
+                    let (lat, lon) = projection.pixel_to_coords(x, y);
 
-                // Convert to 3D Cartesian coordinates on unit sphere
-                let lat_rad = lat.to_radians();
-                let lon_rad = lon.to_radians();
+                    // Convert to 3D Cartesian coordinates on unit sphere
+                    let lat_rad = lat.to_radians();
+                    let lon_rad = lon.to_radians();
 
-                let orig_x = lat_rad.cos() * lon_rad.cos();
-                let orig_y = lat_rad.cos() * lon_rad.sin();
-                let orig_z = lat_rad.sin();
+                    let orig_x = lat_rad.cos() * lon_rad.cos();
+                    let orig_y = lat_rad.cos() * lon_rad.sin();
+                    let orig_z = lat_rad.sin();
 
-                // Generate 3D displacement vector using three independent 3D noise channels
-                // Use all three spatial coordinates for each channel to ensure isotropy
-                let scale = self.config.noise_scale * 100.0;
+                    // Generate 3D displacement vector using three independent 3D noise channels
+                    // Use all three spatial coordinates for each channel to ensure isotropy
+                    let scale = self.config.noise_scale * 100.0;
 
-                let noise_x = self.multi_octave_noise_3d(
-                    orig_x * scale,
-                    orig_y * scale,
-                    orig_z * scale,
-                    0,  // Channel 0
-                ) * amplitude_radians;
+                    let noise_x = self.multi_octave_noise_3d(
+                        orig_x * scale,
+                        orig_y * scale,
+                        orig_z * scale,
+                        0, // Channel 0
+                    ) * amplitude_radians;
 
-                let noise_y = self.multi_octave_noise_3d(
-                    orig_x * scale,
-                    orig_y * scale,
-                    orig_z * scale,
-                    1,  // Channel 1
-                ) * amplitude_radians;
+                    let noise_y = self.multi_octave_noise_3d(
+                        orig_x * scale,
+                        orig_y * scale,
+                        orig_z * scale,
+                        1, // Channel 1
+                    ) * amplitude_radians;
 
-                let noise_z = self.multi_octave_noise_3d(
-                    orig_x * scale,
-                    orig_y * scale,
-                    orig_z * scale,
-                    2,  // Channel 2
-                ) * amplitude_radians;
+                    let noise_z = self.multi_octave_noise_3d(
+                        orig_x * scale,
+                        orig_y * scale,
+                        orig_z * scale,
+                        2, // Channel 2
+                    ) * amplitude_radians;
 
-                // Apply displacement and project back onto sphere
-                let displaced_x = orig_x + noise_x;
-                let displaced_y = orig_y + noise_y;
-                let displaced_z = orig_z + noise_z;
+                    // Apply displacement and project back onto sphere
+                    let displaced_x = orig_x + noise_x;
+                    let displaced_y = orig_y + noise_y;
+                    let displaced_z = orig_z + noise_z;
 
-                // Normalize to ensure point stays on unit sphere
-                let length = (displaced_x * displaced_x + displaced_y * displaced_y + displaced_z * displaced_z).sqrt();
-                let warped_x = displaced_x / length;
-                let warped_y = displaced_y / length;
-                let warped_z = displaced_z / length;
+                    // Normalize to ensure point stays on unit sphere
+                    let length = (displaced_x * displaced_x
+                        + displaced_y * displaced_y
+                        + displaced_z * displaced_z)
+                        .sqrt();
+                    let warped_x = displaced_x / length;
+                    let warped_y = displaced_y / length;
+                    let warped_z = displaced_z / length;
 
-                // Convert back to lat/lon
-                let warped_lat = warped_z.asin().to_degrees();
-                let warped_lon = warped_y.atan2(warped_x).to_degrees();
+                    // Convert back to lat/lon
+                    let warped_lat = warped_z.asin().to_degrees();
+                    let warped_lon = warped_y.atan2(warped_x).to_degrees();
 
-                // Convert to pixel coordinates
-                let (sample_x, sample_y) = projection.coords_to_pixel(warped_lat, warped_lon);
+                    // Convert to pixel coordinates
+                    let (sample_x, sample_y) = projection.coords_to_pixel(warped_lat, warped_lon);
 
-                // Bounds check
-                let sample_x = sample_x.min(width - 1);
-                let sample_y = sample_y.min(height - 1);
+                    // Bounds check
+                    let sample_x = sample_x.min(width - 1);
+                    let sample_y = sample_y.min(height - 1);
 
-                // Sample from warped position
-                let idx = sample_y * width + sample_x;
-                *pixel = original_data[idx];
-            }
-        });
+                    // Sample from warped position
+                    let idx = sample_y * width + sample_x;
+                    *pixel = original_data[idx];
+                }
+            });
     }
 
     /// Multi-octave 3D noise with channel parameter
@@ -244,7 +259,8 @@ impl BoundaryRefiner {
         let mut max_value = 0.0;
 
         for _ in 0..self.config.octaves {
-            total += self.simple_noise_3d(x * frequency, y * frequency, z * frequency, channel) * amplitude;
+            total += self.simple_noise_3d(x * frequency, y * frequency, z * frequency, channel)
+                * amplitude;
             max_value += amplitude;
 
             amplitude *= self.config.persistence;
@@ -299,7 +315,11 @@ impl BoundaryRefiner {
     /// 3D hash function with channel parameter
     fn hash_noise_3d(&self, x: i64, y: i64, z: i64, channel: u64) -> f64 {
         // Simple hash using prime numbers, seed, and channel
-        let mut hash = self.config.seed.wrapping_add(channel.wrapping_mul(1000000007)).wrapping_mul(2654435761);
+        let mut hash = self
+            .config
+            .seed
+            .wrapping_add(channel.wrapping_mul(1000000007))
+            .wrapping_mul(2654435761);
         hash = hash.wrapping_add(x as u64).wrapping_mul(2654435761);
         hash = hash.wrapping_add(y as u64).wrapping_mul(2654435761);
         hash = hash.wrapping_add(z as u64).wrapping_mul(2654435761);
@@ -325,57 +345,74 @@ impl BoundaryRefiner {
 
         for iter in 0..iterations {
             let original_data = plate_map.data.clone();
-            
-            let changed: usize = plate_map.data.par_chunks_mut(width).enumerate().map(|(y, row)| {
-                // Skip borders
-                if y == 0 || y == height - 1 {
-                    return 0;
-                }
-                
-                let mut local_changed = 0;
-                
-                for (x, pixel) in row.iter_mut().enumerate() {
+
+            let changed: usize = plate_map
+                .data
+                .par_chunks_mut(width)
+                .enumerate()
+                .map(|(y, row)| {
                     // Skip borders
-                    if x == 0 || x == width - 1 {
-                        continue;
+                    if y == 0 || y == height - 1 {
+                        return 0;
                     }
-                    
-                    let current_plate = original_data[y * width + x];
 
-                    // Check neighbors (inline logic to avoid borrowing plate_map)
-                    let mut plate_counts = std::collections::HashMap::new();
+                    let mut local_changed = 0;
 
-                    for dy in -1i32..=1 {
-                        for dx in -1i32..=1 {
-                            if dx == 0 && dy == 0 { continue; }
-                            
-                            let ny = y as i32 + dy;
-                            let mut nx = x as i32 + dx;
-                            
-                            // Wrapping
-                            if nx < 0 { nx = width as i32 - 1; }
-                            else if nx >= width as i32 { nx = 0; }
-                            
-                            let neighbor_idx = (ny as usize) * width + (nx as usize);
-                            let neighbor_plate = original_data[neighbor_idx];
-                            *plate_counts.entry(neighbor_plate).or_insert(0) += 1;
+                    for (x, pixel) in row.iter_mut().enumerate() {
+                        // Skip borders
+                        if x == 0 || x == width - 1 {
+                            continue;
+                        }
+
+                        let current_plate = original_data[y * width + x];
+
+                        // Check neighbors (inline logic to avoid borrowing plate_map)
+                        let mut plate_counts = std::collections::HashMap::new();
+
+                        for dy in -1i32..=1 {
+                            for dx in -1i32..=1 {
+                                if dx == 0 && dy == 0 {
+                                    continue;
+                                }
+
+                                let ny = y as i32 + dy;
+                                let mut nx = x as i32 + dx;
+
+                                // Wrapping
+                                if nx < 0 {
+                                    nx = width as i32 - 1;
+                                } else if nx >= width as i32 {
+                                    nx = 0;
+                                }
+
+                                let neighbor_idx = (ny as usize) * width + (nx as usize);
+                                let neighbor_plate = original_data[neighbor_idx];
+                                *plate_counts.entry(neighbor_plate).or_insert(0) += 1;
+                            }
+                        }
+
+                        // If current plate is a minority among neighbors, consider changing it
+                        if let Some((&most_common, &count)) =
+                            plate_counts.iter().max_by_key(|(_, &c)| c)
+                        {
+                            // Only smooth very isolated pixels
+                            if most_common != current_plate && count >= 6 {
+                                *pixel = most_common;
+                                local_changed += 1;
+                            }
                         }
                     }
-
-                    // If current plate is a minority among neighbors, consider changing it
-                    if let Some((&most_common, &count)) = plate_counts.iter().max_by_key(|(_, &c)| c) {
-                        // Only smooth very isolated pixels
-                        if most_common != current_plate && count >= 6 {
-                            *pixel = most_common;
-                            local_changed += 1;
-                        }
-                    }
-                }
-                local_changed
-            }).sum();
+                    local_changed
+                })
+                .sum();
 
             if changed > 0 {
-                println!("    Iteration {}/{}: smoothed {} pixels", iter + 1, iterations, changed);
+                println!(
+                    "    Iteration {}/{}: smoothed {} pixels",
+                    iter + 1,
+                    iterations,
+                    changed
+                );
             }
         }
     }
@@ -383,7 +420,7 @@ impl BoundaryRefiner {
 
 /// Convenience function to detect boundary type between two plates
 pub fn detect_boundary_type(
-    _plate_a_motion: (f64, f64),  // (direction_deg, speed_cm_yr)
+    _plate_a_motion: (f64, f64), // (direction_deg, speed_cm_yr)
     _plate_b_motion: (f64, f64),
 ) -> PlateInteraction {
     // TODO: Implement proper boundary type detection based on relative motion
@@ -426,9 +463,15 @@ mod tests {
         let boundaries = refiner.identify_boundaries(&plate_map);
 
         // Should have boundary pixels at x=2 and x=3
-        assert!(boundaries.len() > 0, "Should have detected boundaries");
-        assert!(boundaries.contains(&(2, 2)), "x=2 should be a boundary (next to plate 2)");
-        assert!(boundaries.contains(&(3, 2)), "x=3 should be a boundary (next to plate 1)");
+        assert!(!boundaries.is_empty(), "Should have detected boundaries");
+        assert!(
+            boundaries.contains(&(2, 2)),
+            "x=2 should be a boundary (next to plate 2)"
+        );
+        assert!(
+            boundaries.contains(&(3, 2)),
+            "x=3 should be a boundary (next to plate 1)"
+        );
 
         // Note: Due to longitude wraparound in global projection, (0,0) might be detected as boundary
         // This is actually correct behavior for a global map where x=0 wraps to x=width-1
@@ -437,12 +480,15 @@ mod tests {
     #[test]
     fn test_noise_determinism() {
         let config = BoundaryRefinementConfig::with_seed(123);
-        let mut refiner1 = BoundaryRefiner::new(config.clone());
-        let mut refiner2 = BoundaryRefiner::new(config);
+        let refiner1 = BoundaryRefiner::new(config.clone());
+        let refiner2 = BoundaryRefiner::new(config);
 
         let noise1 = refiner1.multi_octave_noise_3d(5.5, 10.2, 3.3, 0);
         let noise2 = refiner2.multi_octave_noise_3d(5.5, 10.2, 3.3, 0);
 
-        assert_eq!(noise1, noise2, "Noise should be deterministic with same seed");
+        assert_eq!(
+            noise1, noise2,
+            "Noise should be deterministic with same seed"
+        );
     }
 }

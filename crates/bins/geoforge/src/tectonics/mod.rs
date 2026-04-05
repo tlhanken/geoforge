@@ -4,19 +4,21 @@
 //! electrostatic physics simulation on the sphere for natural boundaries
 //! and Earth-like size variety.
 
-pub mod generator;
-pub mod plates;
-pub mod electrostatic;
-pub mod boundary_refinement;
-pub mod island_removal;
 pub mod boundary_analysis;
+pub mod boundary_refinement;
+pub mod electrostatic;
+pub mod generator;
+pub mod island_removal;
 pub mod motion;
+pub mod plates;
 
-pub use generator::{TectonicPlateGenerator, GenerationMethod};
-pub use plates::{PlateSeed, PlateStats, PlateType, PlateInteraction, PlateBoundary};
-pub use boundary_refinement::{BoundaryRefiner, BoundaryRefinementConfig};
-pub use island_removal::{IslandRemover, IslandRemovalConfig, IslandRemovalStats};
-pub use boundary_analysis::{BoundaryAnalyzer, BoundaryAnalysisConfig, BoundarySegment, BoundaryStatistics};
+pub use boundary_analysis::{
+    BoundaryAnalysisConfig, BoundaryAnalyzer, BoundarySegment, BoundaryStatistics,
+};
+pub use boundary_refinement::{BoundaryRefinementConfig, BoundaryRefiner};
+pub use generator::{GenerationMethod, TectonicPlateGenerator};
+pub use island_removal::{IslandRemovalConfig, IslandRemovalStats, IslandRemover};
 pub use motion::{PlateMotionAssigner, PlateMotionConfig};
+pub use plates::{PlateBoundary, PlateInteraction, PlateSeed, PlateStats, PlateType};
 
 pub use crate::error::GeoforgeError as PlateError;

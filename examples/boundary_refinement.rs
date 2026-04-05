@@ -7,7 +7,7 @@
 //!
 //! Run with: cargo run --example boundary_refinement --features export-png
 
-use geoforge::{WorldMap, BoundaryRefinementConfig, MapExporter};
+use geoforge::{BoundaryRefinementConfig, MapExporter, WorldMap};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 Geoforge - Boundary Refinement Example");
@@ -32,9 +32,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_standard.export_tectonics_png(
             "outputs/examples/boundary_refinement",
-            "01_standard_boundaries.png"
+            "01_standard_boundaries.png",
         )?;
-        println!("✅ Standard boundaries exported to: outputs/examples/boundary_refinement/01_standard_boundaries.png");
+        println!(
+            "✅ Standard boundaries exported to: outputs/examples/boundary_refinement/01_standard_boundaries.png"
+        );
     }
 
     // ========================================
@@ -45,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_mild.generate_tectonics(num_plates)?;
 
     let mild_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.01, 8.0, 3)    // Larger scale, modest warping
+        .with_noise(0.01, 8.0, 3) // Larger scale, modest warping
         .with_smoothing(1);
 
     world_mild.refine_boundaries(Some(mild_config))?;
@@ -54,9 +56,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_mild.export_tectonics_png(
             "outputs/examples/boundary_refinement",
-            "02_mild_refinement.png"
+            "02_mild_refinement.png",
         )?;
-        println!("✅ Mild refinement exported to: outputs/examples/boundary_refinement/02_mild_refinement.png");
+        println!(
+            "✅ Mild refinement exported to: outputs/examples/boundary_refinement/02_mild_refinement.png"
+        );
     }
 
     // ========================================
@@ -67,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_moderate.generate_tectonics(num_plates)?;
 
     let moderate_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.020, 80.0, 5)  // Medium features, solid warping (was strong)
+        .with_noise(0.020, 80.0, 5) // Medium features, solid warping (was strong)
         .with_smoothing(1);
 
     world_moderate.refine_boundaries(Some(moderate_config))?;
@@ -76,9 +80,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_moderate.export_tectonics_png(
             "outputs/examples/boundary_refinement",
-            "03_moderate_refinement.png"
+            "03_moderate_refinement.png",
         )?;
-        println!("✅ Moderate refinement exported to: outputs/examples/boundary_refinement/03_moderate_refinement.png");
+        println!(
+            "✅ Moderate refinement exported to: outputs/examples/boundary_refinement/03_moderate_refinement.png"
+        );
     }
 
     // ========================================
@@ -89,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_strong.generate_tectonics(num_plates)?;
 
     let strong_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.025, 100.0, 5)  // Tighter features, strong warping (new intermediate)
+        .with_noise(0.025, 100.0, 5) // Tighter features, strong warping (new intermediate)
         .with_smoothing(2);
 
     world_strong.refine_boundaries(Some(strong_config))?;
@@ -98,9 +104,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_strong.export_tectonics_png(
             "outputs/examples/boundary_refinement",
-            "04_strong_refinement.png"
+            "04_strong_refinement.png",
         )?;
-        println!("✅ Strong refinement exported to: outputs/examples/boundary_refinement/04_strong_refinement.png");
+        println!(
+            "✅ Strong refinement exported to: outputs/examples/boundary_refinement/04_strong_refinement.png"
+        );
     }
 
     // ========================================
@@ -111,7 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     world_extreme.generate_tectonics(num_plates)?;
 
     let extreme_config = BoundaryRefinementConfig::with_seed(seed)
-        .with_noise(0.030, 120.0, 6)  // Tight, frequent features with massive warping
+        .with_noise(0.030, 120.0, 6) // Tight, frequent features with massive warping
         .with_smoothing(3);
 
     world_extreme.refine_boundaries(Some(extreme_config))?;
@@ -120,9 +128,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         world_extreme.export_tectonics_png(
             "outputs/examples/boundary_refinement",
-            "05_extreme_refinement.png"
+            "05_extreme_refinement.png",
         )?;
-        println!("✅ Extreme refinement exported to: outputs/examples/boundary_refinement/05_extreme_refinement.png");
+        println!(
+            "✅ Extreme refinement exported to: outputs/examples/boundary_refinement/05_extreme_refinement.png"
+        );
     }
 
     // ========================================

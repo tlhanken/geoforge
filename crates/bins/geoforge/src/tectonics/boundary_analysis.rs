@@ -4,11 +4,11 @@
 //! It provides the foundation for Stage 1.4 (Plate Motion & Boundary Classification)
 //! and Stage 2 (Geologic Provinces).
 
-use crate::map::terrain::TerrainMap;
 use crate::map::spherical::SphericalPoint;
-use crate::tectonics::plates::{PlateSeed, PlateInteraction};
+use crate::map::terrain::TerrainMap;
+use crate::tectonics::plates::{PlateInteraction, PlateSeed};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// Configuration for boundary analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,9 +152,7 @@ impl BoundaryAnalyzer {
                             (neighbor_plate, current_plate)
                         };
 
-                        boundary_pixels.entry(plate_pair)
-                            .or_default()
-                            .push((x, y));
+                        boundary_pixels.entry(plate_pair).or_default().push((x, y));
                     }
                 }
             }
@@ -193,10 +191,8 @@ impl BoundaryAnalyzer {
         use crate::tectonics::motion::PlateMotionAssigner;
 
         // Create lookup map for seeds
-        let seed_map: HashMap<u16, &PlateSeed> = plate_seeds
-            .iter()
-            .map(|seed| (seed.id, seed))
-            .collect();
+        let seed_map: HashMap<u16, &PlateSeed> =
+            plate_seeds.iter().map(|seed| (seed.id, seed)).collect();
 
         for segment in segments.iter_mut() {
             // Get seeds for both plates
@@ -227,7 +223,11 @@ impl BoundaryAnalyzer {
     }
 
     /// Get the approximate center point of a boundary
-    fn get_boundary_center(&self, pixels: &[(usize, usize)], plate_map: &TerrainMap<u16>) -> SphericalPoint {
+    fn get_boundary_center(
+        &self,
+        pixels: &[(usize, usize)],
+        plate_map: &TerrainMap<u16>,
+    ) -> SphericalPoint {
         if pixels.is_empty() {
             return SphericalPoint::from_lat_lon(0.0, 0.0);
         }
@@ -266,9 +266,18 @@ impl BoundaryAnalyzer {
     /// Get statistics about all boundaries
     pub fn boundary_statistics(&self, segments: &[BoundarySegment]) -> BoundaryStatistics {
         let total_boundaries = segments.len();
-        let convergent = segments.iter().filter(|s| s.interaction_type == PlateInteraction::Convergent).count();
-        let divergent = segments.iter().filter(|s| s.interaction_type == PlateInteraction::Divergent).count();
-        let transform = segments.iter().filter(|s| s.interaction_type == PlateInteraction::Transform).count();
+        let convergent = segments
+            .iter()
+            .filter(|s| s.interaction_type == PlateInteraction::Convergent)
+            .count();
+        let divergent = segments
+            .iter()
+            .filter(|s| s.interaction_type == PlateInteraction::Divergent)
+            .count();
+        let transform = segments
+            .iter()
+            .filter(|s| s.interaction_type == PlateInteraction::Transform)
+            .count();
 
         let total_length_km: f64 = segments.iter().map(|s| s.length_km).sum();
         let avg_velocity: f64 = if !segments.is_empty() {

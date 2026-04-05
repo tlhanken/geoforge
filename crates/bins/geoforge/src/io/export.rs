@@ -1,12 +1,11 @@
-use crate::map::world::WorldMap;
 #[cfg(feature = "export-png")]
 use crate::geology::provinces::GeologicProvince;
+use crate::map::world::WorldMap;
 #[cfg(feature = "export-png")]
 use image::{ImageBuffer, Rgb};
 use std::error::Error;
 use std::fs;
 use std::path::Path;
-
 
 /// Trait for exporting map data to various formats
 pub trait MapExporter {
@@ -19,19 +18,32 @@ pub trait MapExporter {
 
     /// Export boundary visualization
     #[cfg(feature = "export-png")]
-    fn export_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>>;
+    fn export_boundaries_png(&self, output_dir: &str, filename: &str)
+    -> Result<(), Box<dyn Error>>;
 
     /// Export plate motion visualization
     #[cfg(feature = "export-png")]
-    fn export_plate_motion_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>>;
+    fn export_plate_motion_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>>;
 
     /// Export motion reference visualization
     #[cfg(feature = "export-png")]
-    fn export_motion_reference_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>>;
+    fn export_motion_reference_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>>;
 
     /// Export plate type visualization (Oceanic vs Continental)
     #[cfg(feature = "export-png")]
-    fn export_plate_types_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>>;
+    fn export_plate_types_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>>;
 
     /// Export geological provinces visualization (Stage 2)
     #[cfg(feature = "export-png")]
@@ -39,7 +51,11 @@ pub trait MapExporter {
 
     /// Export geological provinces with boundary overlays
     #[cfg(feature = "export-png")]
-    fn export_geology_with_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>>;
+    fn export_geology_with_boundaries_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>>;
 
     /// Export all available visualizations
     #[cfg(feature = "export-png")]
@@ -49,32 +65,32 @@ pub trait MapExporter {
 impl MapExporter for WorldMap {
     fn save_to_file(&self, filepath: &str) -> Result<(), Box<dyn Error>> {
         use std::io::Write;
-        
+
         let mut file = fs::File::create(filepath)?;
-        
+
         // Write header
         file.write_all(b"GEOFORGE_MAP_V1\0")?;
         file.write_all(&(self.width as u32).to_le_bytes())?;
         file.write_all(&(self.height as u32).to_le_bytes())?;
         file.write_all(&self.seed.to_le_bytes())?;
-        
+
         // Write layer flags
         let flags = self.get_layer_flags();
         file.write_all(&flags.to_le_bytes())?;
-        
+
         // Write layer data
         if let Some(ref tectonic_map) = self.tectonics {
             for &value in &tectonic_map.data {
                 file.write_all(&value.to_le_bytes())?;
             }
         }
-        
+
         if let Some(ref elevation_map) = self.elevation {
             for &value in &elevation_map.data {
                 file.write_all(&value.to_le_bytes())?;
             }
         }
-        
+
         // Write complete tectonic metadata if available
         if let Some(ref metadata) = self.tectonic_metadata {
             crate::map::world::TectonicMetadata::write_to_file(&mut file, metadata)?;
@@ -87,41 +103,47 @@ impl MapExporter for WorldMap {
     #[cfg(feature = "export-png")]
     fn export_tectonics_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
         use rand::prelude::*;
-        
+
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
-        
+
         if let Some(ref tectonic_map) = self.tectonics {
             let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
-            
+
             // Generate consistent colors for each plate
             let mut rng = StdRng::seed_from_u64(42);
             let max_plate_id = tectonic_map.data.iter().max().unwrap_or(&0);
-            let colors: Vec<[u8; 3]> = (0..=*max_plate_id).map(|_| {
-                [rng.gen(), rng.gen(), rng.gen()]
-            }).collect();
-            
+            let colors: Vec<[u8; 3]> = (0..=*max_plate_id)
+                .map(|_| [rng.r#gen(), rng.r#gen(), rng.r#gen()])
+                .collect();
+
             for (y, row) in tectonic_map.data.chunks(self.width).enumerate() {
                 for (x, &plate_id) in row.iter().enumerate() {
                     let color = colors[plate_id as usize];
                     img.put_pixel(x as u32, y as u32, Rgb(color));
                 }
             }
-            
+
             img.save(path)?;
         } else {
             return Err("Tectonic layer not generated".into());
         }
-        
+
         Ok(())
     }
 
     #[cfg(feature = "export-png")]
-    fn export_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+    fn export_boundaries_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
 
-        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+        if let (Some(ref tectonic_map), Some(ref metadata)) =
+            (&self.tectonics, &self.tectonic_metadata)
+        {
             if metadata.plate_boundaries.is_empty() {
                 return Err("Boundaries not analyzed. Call analyze_boundaries() first.".into());
             }
@@ -133,7 +155,11 @@ impl MapExporter for WorldMap {
                 for (x, &plate_id) in row.iter().enumerate() {
                     // Vary grayscale based on plate ID for subtle differentiation
                     let gray_value = (((plate_id as f64) * 37.5).rem_euclid(128.0) + 64.0) as u8;
-                    img.put_pixel(x as u32, y as u32, Rgb([gray_value, gray_value, gray_value]));
+                    img.put_pixel(
+                        x as u32,
+                        y as u32,
+                        Rgb([gray_value, gray_value, gray_value]),
+                    );
                 }
             }
 
@@ -142,9 +168,9 @@ impl MapExporter for WorldMap {
                 use crate::tectonics::plates::PlateInteraction;
 
                 let color = match boundary.interaction_type {
-                    PlateInteraction::Convergent => [255, 0, 0],     // Red
-                    PlateInteraction::Divergent => [0, 128, 255],    // Blue
-                    PlateInteraction::Transform => [0, 255, 0],      // Green
+                    PlateInteraction::Convergent => [255, 0, 0],  // Red
+                    PlateInteraction::Divergent => [0, 128, 255], // Blue
+                    PlateInteraction::Transform => [0, 255, 0],   // Green
                 };
 
                 for (x, y) in &boundary.pixels {
@@ -161,15 +187,22 @@ impl MapExporter for WorldMap {
     }
 
     #[cfg(feature = "export-png")]
-    fn export_plate_motion_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+    fn export_plate_motion_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
 
-        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+        if let (Some(ref tectonic_map), Some(ref metadata)) =
+            (&self.tectonics, &self.tectonic_metadata)
+        {
             let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
 
             // Create motion color map for each plate
-            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> = std::collections::HashMap::new();
+            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> =
+                std::collections::HashMap::new();
 
             for seed in &metadata.plate_seeds {
                 let color = motion_to_rgb(seed.motion_direction, seed.motion_speed);
@@ -198,7 +231,11 @@ impl MapExporter for WorldMap {
     }
 
     #[cfg(feature = "export-png")]
-    fn export_motion_reference_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+    fn export_motion_reference_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
 
@@ -241,18 +278,25 @@ impl MapExporter for WorldMap {
     }
 
     #[cfg(feature = "export-png")]
-    fn export_plate_types_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
-        use rand::prelude::*;
+    fn export_plate_types_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>> {
         use crate::tectonics::plates::PlateType;
+        use rand::prelude::*;
 
         fs::create_dir_all(output_dir)?;
         let path = Path::new(output_dir).join(filename);
 
-        if let (Some(ref tectonic_map), Some(ref metadata)) = (&self.tectonics, &self.tectonic_metadata) {
+        if let (Some(ref tectonic_map), Some(ref metadata)) =
+            (&self.tectonics, &self.tectonic_metadata)
+        {
             let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
 
             // Generate colors for each plate based on its type
-            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> = std::collections::HashMap::new();
+            let mut plate_colors: std::collections::HashMap<u16, [u8; 3]> =
+                std::collections::HashMap::new();
             let mut rng = StdRng::seed_from_u64(self.seed);
 
             for (plate_id, stats) in &metadata.plate_stats {
@@ -268,7 +312,7 @@ impl MapExporter for WorldMap {
                     PlateType::Continental => {
                         let hue = rng.gen_range(0..50) as f64; // Red to orange (avoiding yellow-green)
                         let sat = rng.gen_range(70..100) as f64 / 100.0; // High saturation
-                        let val = rng.gen_range(60..95) as f64 / 100.0;  // Bright
+                        let val = rng.gen_range(60..95) as f64 / 100.0; // Bright
                         crate::utils::color::hsv_to_rgb(hue, sat, val)
                     }
                 };
@@ -305,7 +349,7 @@ impl MapExporter for WorldMap {
             let mut img = ImageBuffer::from_pixel(
                 self.width as u32,
                 self.height as u32,
-                Rgb([255, 255, 255])
+                Rgb([255, 255, 255]),
             );
 
             for region in geology {
@@ -320,22 +364,28 @@ impl MapExporter for WorldMap {
 
             img.save(path)?;
         } else {
-             return Err("Geological provinces not generated. Call generate_geology() first.".into());
+            return Err(
+                "Geological provinces not generated. Call generate_geology() first.".into(),
+            );
         }
 
         Ok(())
     }
 
     #[cfg(feature = "export-png")]
-    fn export_geology_with_boundaries_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
+    fn export_geology_with_boundaries_png(
+        &self,
+        output_dir: &str,
+        filename: &str,
+    ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let (Some(ref geology), Some(ref metadata)) = (&self.geology, &self.tectonic_metadata) {
             let mut img = ImageBuffer::from_pixel(
                 self.width as u32,
                 self.height as u32,
-                Rgb([255, 255, 255])
+                Rgb([255, 255, 255]),
             );
 
             // First layer: Geology
@@ -355,9 +405,9 @@ impl MapExporter for WorldMap {
                     use crate::tectonics::plates::PlateInteraction;
 
                     let color = match boundary.interaction_type {
-                        PlateInteraction::Convergent => [255, 0, 0],     // Red
-                        PlateInteraction::Divergent => [0, 128, 255],    // Blue
-                        PlateInteraction::Transform => [0, 255, 0],      // Green
+                        PlateInteraction::Convergent => [255, 0, 0],  // Red
+                        PlateInteraction::Divergent => [0, 128, 255], // Blue
+                        PlateInteraction::Transform => [0, 255, 0],   // Green
                     };
 
                     for (x, y) in &boundary.pixels {
@@ -370,7 +420,7 @@ impl MapExporter for WorldMap {
 
             img.save(path)?;
         } else {
-             return Err("Missing geology or tectonic metadata".into());
+            return Err("Missing geology or tectonic metadata".into());
         }
 
         Ok(())
@@ -379,7 +429,7 @@ impl MapExporter for WorldMap {
     #[cfg(feature = "export-png")]
     fn export_all_png(&self, output_dir: &str, base_name: &str) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        
+
         if self.tectonics.is_some() {
             self.export_tectonics_png(output_dir, &format!("{}_tectonics.png", base_name))?;
             self.export_boundaries_png(output_dir, &format!("{}_boundaries.png", base_name))?;
@@ -389,7 +439,10 @@ impl MapExporter for WorldMap {
 
         if self.geology.is_some() {
             self.export_geology_png(output_dir, &format!("{}_geology.png", base_name))?;
-            self.export_geology_with_boundaries_png(output_dir, &format!("{}_geology_boundaries.png", base_name))?;
+            self.export_geology_with_boundaries_png(
+                output_dir,
+                &format!("{}_geology_boundaries.png", base_name),
+            )?;
         }
 
         Ok(())

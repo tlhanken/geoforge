@@ -95,11 +95,7 @@ pub fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
     let v = max;
 
     // Saturation
-    let s = if max == 0.0 {
-        0.0
-    } else {
-        delta / max
-    };
+    let s = if max == 0.0 { 0.0 } else { delta / max };
 
     // Hue
     let h = if delta == 0.0 {
