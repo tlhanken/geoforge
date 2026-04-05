@@ -3,7 +3,7 @@ lto = "fat"
 codegen-units = 1
 
 [workspace]
-members = ["crates/bins/*", "crates/libs/geoforge_domains"]
+members = ["crates/bins/*", "crates/libs/types"]
 resolver = "2"
 
 [workspace.package]
