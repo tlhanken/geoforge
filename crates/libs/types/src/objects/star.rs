@@ -1,3 +1,5 @@
+use uom::si::f64::{Ratio, Mass, Length, ThermodynamicTemperature, Time, Power};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SpectralClass {
     O,
@@ -11,12 +13,11 @@ pub enum SpectralClass {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Star {
-    /// Stellar luminosity relative to Sun (1.0 = solar luminosity)
-    pub stellar_luminosity: f64,
-    pub mass: f64, // solar masses
-    pub radius: f64, // solar radii
-    pub temperature: f64, // kelvin
-    pub age: f64, // years
-    pub metallicity: f64, // solar metallicity
+    pub stellar_luminosity: Power,
+    pub mass: Mass,
+    pub radius: Length,
+    pub surface_temperature: ThermodynamicTemperature,
+    pub age: Time,
+    pub metallicity: Ratio,
     pub spectral_class: SpectralClass,
 }

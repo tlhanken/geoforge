@@ -4,7 +4,7 @@ use crate::coordinates::universe::UniverseCoordinates;
 use crate::coordinates::supercluster::SuperclusterCoordinates;
 use crate::objects::Supercluster;
 use super::Seed;
-use super::galaxy::GalaxySeed;
+use super::galaxies::GalaxySeed;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuperclusterLayer {

@@ -1,1 +1,0 @@
-// TODO: make kg, years, Myrs, etc. Go back to objects and populate with proper types rather than f64 or other raw types. Let's get safety inside.

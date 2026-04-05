@@ -1,13 +1,13 @@
 pub mod universe;
-pub mod supercluster;
-pub mod galaxy;
-pub mod solarsystem;
+pub mod superclusters;
+pub mod galaxies;
+pub mod solarsystems;
 pub mod planetary;
 
 pub use universe::UniverseLayer;
-pub use supercluster::SuperclusterLayer;
-pub use galaxy::GalaxyLayer;
-pub use solarsystem::SolarSystemLayer;
+pub use superclusters::SuperclusterLayer;
+pub use galaxies::GalaxyLayer;
+pub use solarsystems::SolarSystemLayer;
 pub use planetary::PlanetaryLayer;
 use clap::ValueEnum;
 

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use super::solarsystem::SolarSystemLayer;
+use super::solarsystems::SolarSystemLayer;
 use crate::coordinates::orbital::OrbitalCoordinates;
 use crate::objects::planetary_body::PlanetaryBody;
 use super::Seed;

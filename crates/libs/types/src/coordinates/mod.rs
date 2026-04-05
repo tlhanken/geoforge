@@ -4,20 +4,22 @@ pub mod galaxy;
 pub mod orbital;
 pub mod planetary;
 
+use uom::si::f64::Length;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct XYZPosition {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub x: Length,
+    pub y: Length,
+    pub z: Length,
 }
 
 impl Eq for XYZPosition {}
 #[allow(clippy::derive_hash_xor_eq)]
 impl std::hash::Hash for XYZPosition {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.x.to_bits().hash(state);
-        self.y.to_bits().hash(state);
-        self.z.to_bits().hash(state);
+        self.x.value.to_bits().hash(state);
+        self.y.value.to_bits().hash(state);
+        self.z.value.to_bits().hash(state);
     }
 }
 

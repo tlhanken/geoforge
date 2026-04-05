@@ -1,16 +1,16 @@
 #[derive(Debug, Clone, PartialEq)]
-pub enum HydrosphereComposition {
-    Water,
+pub enum AtmosphereComposition {
+    Nitrogen,
+    Oxygen,
+    CarbonDioxide,
     Methane,
     Ammonia,
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum AtmosphereComposition {
-    Nitrogen,
-    Oxygen,
-    CarbonDioxide,
+pub enum HydrosphereComposition {
+    Water,
     Methane,
     Ammonia,
     Other,

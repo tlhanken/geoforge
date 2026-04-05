@@ -6,3 +6,4 @@ rust-version.workspace = true
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+uom = "0.36.0"

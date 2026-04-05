@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use super::galaxy::GalaxyLayer;
+use super::galaxies::GalaxyLayer;
 use crate::coordinates::galaxy::GalaxyCoordinates;
 use crate::coordinates::orbital::OrbitalCoordinates;
-use crate::objects::star::Star;
+use crate::objects::solarsystem::SolarSystem;
 use super::Seed;
 use super::planetary::PlanetarySeed;
 
@@ -10,7 +10,7 @@ use super::planetary::PlanetarySeed;
 pub struct SolarSystemLayer {
     pub seed: SolarSystemSeed,
     pub galaxy_layer: GalaxyLayer,
-    pub stars: HashMap<GalaxyCoordinates, Star>,
+    pub solar_systems: HashMap<GalaxyCoordinates, SolarSystem>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +19,7 @@ pub struct SolarSystemSeed(pub u64);
 impl Seed for SolarSystemSeed {
     type Coordinate = OrbitalCoordinates;
     type Subseed = PlanetarySeed;
-    fn generate_subseed(&self, coordinates: &Self::Coordinate) -> Self::Subseed {
+    fn generate_subseed(&self, _coordinates: &Self::Coordinate) -> Self::Subseed {
         todo!("Use seed and parent coordinates to generate a new subseed")
     }
     fn generate_random_seed() -> Self {

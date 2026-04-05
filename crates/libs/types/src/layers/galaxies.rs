@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use super::supercluster::SuperclusterLayer;
+use super::superclusters::SuperclusterLayer;
 use crate::coordinates::supercluster::SuperclusterCoordinates;
 use crate::coordinates::galaxy::GalaxyCoordinates;
 use crate::objects::Galaxy;
 use super::Seed;
-use super::solarsystem::SolarSystemSeed;
+use super::solarsystems::SolarSystemSeed;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GalaxyLayer {

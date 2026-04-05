@@ -1,3 +1,5 @@
+use uom::si::f64::{Mass, Length, Time};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum GalaxyType {
     Elliptical,
@@ -8,7 +10,7 @@ pub enum GalaxyType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Galaxy {
     pub galaxy_type: GalaxyType,
-    pub mass: f64,
-    pub radius: f64,
-    pub age: f64,
+    pub mass: Mass,
+    pub radius: Length,
+    pub age: Time,
 }

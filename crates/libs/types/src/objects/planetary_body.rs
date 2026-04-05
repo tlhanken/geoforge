@@ -1,26 +1,28 @@
-use crate::objects::materials::{
+use crate::objects::composition::{
     AtmosphereComposition,
     HydrosphereComposition,
     LithosphereComposition,
 };
+use uom::si::f64::{Length, Area, Acceleration, Mass, MassDensity, Angle, Time, Pressure, Ratio};
+use crate::objects::OrbitalGroup;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetaryBody {
-    /// Planet radius in kilometers
-    pub radius_km: f64,
-    /// Planet surface area in square kilometers
-    pub surface_area_km2: f64,
-    /// Planet surface gravity in m/s² (affects geological processes)
-    pub surface_gravity_ms2: f64,
-    /// Planet mass in kg (derived parameter)
-    pub mass_kg: f64,
-    /// Planet density in kg/m³ (affects internal structure)
-    pub density_kgm3: f64,
+    /// Planet radius
+    pub radius: Length,
+    /// Planet surface area
+    pub surface_area: Area,
+    /// Planet surface gravity (affects geological processes)
+    pub surface_gravity: Acceleration,
+    /// Planet mass (derived parameter)
+    pub mass: Mass,
+    /// Planet density (affects internal structure)
+    pub density: MassDensity,
 
-    /// Axial tilt in degrees (affects seasonal variation)
-    pub axial_tilt_degrees: f64,
-    /// Rotation period in hours (day length)
-    pub rotation_period_hours: f64,
+    /// Axial tilt (affects seasonal variation)
+    pub axial_tilt: Angle,
+    /// Rotation period (day length)
+    pub rotation_period: Time,
 
     /// Atmosphere
     pub atmosphere: Option<Atmosphere>,
@@ -34,10 +36,10 @@ pub struct PlanetaryBody {
 pub struct Atmosphere {
     /// Atmospheric Composition
     pub composition: AtmosphereComposition,
-    /// Atmospheric pressure at sea level in kPa
-    pub atmospheric_pressure_kpa: f64,
+    /// Atmospheric pressure at sea level
+    pub atmospheric_pressure: Pressure,
     /// Normalized greenhouse effect (1.0 = Earth-like, 0.18 = Mars, ~15 = Venus)
-    pub greenhouse_factor: f64,
+    pub greenhouse_factor: Ratio,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +47,7 @@ pub struct Hydrosphere {
     /// Ocean Liquid
     pub composition: HydrosphereComposition,
     /// Ocean Coverage
-    pub ocean_coverage: f64,
+    pub ocean_coverage: Ratio,
 }
 
 #[derive(Debug, Clone, PartialEq)]

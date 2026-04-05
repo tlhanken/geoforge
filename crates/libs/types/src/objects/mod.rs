@@ -1,14 +1,18 @@
-pub mod universe;
-pub mod star;
-pub mod planetary_body;
-pub mod supercluster;
+pub mod composition;
 pub mod galaxy;
-pub mod materials;
+pub mod orbital_group;
+pub mod planetary_body;
+pub mod solarsystem;
+pub mod star;
+pub mod supercluster;
 pub mod tectonicplate;
+pub mod universe;
 
-pub use universe::Universe;
-pub use star::Star;
-pub use planetary_body::PlanetaryBody;
-pub use supercluster::Supercluster;
 pub use galaxy::Galaxy;
+pub use orbital_group::OrbitalGroup;
+pub use planetary_body::PlanetaryBody;
+pub use solarsystem::SolarSystem;
+pub use star::Star;
+pub use supercluster::Supercluster;
 pub use tectonicplate::TectonicPlate;
+pub use universe::Universe;

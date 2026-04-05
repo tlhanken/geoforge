@@ -1,9 +1,10 @@
 use super::Coordinates;
+use uom::si::f64::Angle;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetaryCoordinates {
-    pub lat: f64,
-    pub lon: f64,
+    pub lat: Angle,
+    pub lon: Angle,
 }
 
 impl Coordinates for PlanetaryCoordinates {

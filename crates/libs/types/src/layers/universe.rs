@@ -1,6 +1,6 @@
 use super::Seed;
 use crate::{coordinates::universe::UniverseCoordinates, objects::Universe};
-use super::supercluster::SuperclusterSeed;
+use super::superclusters::SuperclusterSeed;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UniverseLayer {
