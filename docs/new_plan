@@ -1,0 +1,74 @@
+# Geoforge Master Plan Synthesis
+*A compilation of the best ideas and critical insights from architecture plans, code reviews, and documentation.*
+
+## 1. Architectural Philosophy
+* **Strict Linearity & Per-Pixel Design**: The pipeline progresses strictly from Stage 0 to 10 without backwards modification. All data must be structured as `TerrainMap<T>` rather than vector overlays, ensuring per-pixel queryability throughout the pipeline.
+* **Physics over Magic**: Outcomes should derive from fundamental physical principles—computing climate using planetary parameters (insolation, orbital mechanics) and deriving terrain shapes from tectonic convergence rates and crustal physics.
+* **Cached Intermediaries**: High-cost intermediate data (like slope, computed from elevation) must be cached and passed to subsequent stages (climate/hydrology) rather than being recalculated, leading to massive performance gains.
+
+## 2. Redesigning Stage 1 & 2 for Geological Realism
+* **Per-Pixel Crust Types**: Stage 1 must generate `crust_type` (Oceanic vs. Continental) and `crust_age` maps. Elevation profoundly depends on crust logic (oceanic crust sinks as it ages, continental crust stays buoyant).
+* **Fixing Oceanic-Continental Convergence**: Current generation is missing Andes-style mountain ranges. Subduction zones must appropriately respond to the crust type they sit on, placing volcanic arcs on top of high continental crust rather than deep oceanic crust.
+* **Paleo-Orogens**: Ancient, inactive mountain ranges (e.g., Appalachians) should be scanned and built in stable plate interiors, bringing deep-time geological history to the maps.
+
+## 3. High-Impact Code Refactoring
+* **The PlatePixelIndex Optimization**: Repeated O(N) map scans must be eliminated by building a uniform `PlatePixelIndex` map up front. This converts $O(W \times H)$ plate queries into $O(1)$ lookups, yielding exponential generation speedups (5x–20x faster).
+* **Decomposing `generator.rs`**: The monolithic 1,469-line geology generator must be factored out into independent handlers: `oceanic_features`, `arc_systems`, `stable_regions`, and `igneous_features`.
+* **Subduction Zone Builder**: Replace monstrous linear logic for creating subduction zones (Trench → Wedge → Forearc → Arc → Backarc) with a structured `SubductionZoneBuilder`.
+* **Fix Critical Math Bugs**: Current cm/yr out-of-bounds calculations in Hotspot conversions must be rectified.
+
+## 4. Visualizations & Scaling
+* **HSV Motion Vectors**: Use HSV-encoded color maps to intuitively show tectonic flow (Hue = Direction, Saturation/Brightness = Speed). This offers immediate visual intuition for likely collision/rift zones.
+* **Convergence-Based Scaling**: Terrain width dimensions and geological features (accretionary wedges, backarcs) should dynamically scale using formulas driven by convergence rate (e.g., `width = base_width * (1.0 + 0.15 * (rate - min))`).
+* **Spherical Reality Distortions**: Maintain strict awareness that polar regions experience massive horizontal compression in equirectangular outputs despite appearing "wide". 
+
+## 5. Precise Separation of Logic
+* **Differentiating Water Flags**: Keep `is_ocean` (determined strictly by elevation < sea level in Stage 3) completely distinct from `is_lake` (endorheic basins generated algorithmically in Stage 5). This honors lakes standing thousands of meters above sea level (like Titicaca).
+
+## 6. Pipeline Stages & Data Layers
+The project operates on an explicit pipeline, evolving from the 8-stage outline in the README to a fully realized 10-stage logical sequence. Each stage produces specific **per-pixel data layers**:
+
+* **Stage 0: Stellar Systems / Planetary Parameters**: Base config (`PlanetaryParams`).
+* **Stage 1: Tectonic Foundation** (Completed to v1.4):
+  * **Phases**: 1.1 Core Generation, 1.2 Boundary Refinement, 1.3 Island Removal, 1.4 Plate Motion.
+  * **Layers**: `plate_id`, `crust_type`, `crust_age`.
+* **Stage 2: Geologic Provinces**: Subduction setups, orogens, shields, and hotspot features.
+  * **Layers**: `province_id`, `intensity`.
+* **Stage 3: Elevation Generation**: Combining crust buoyancy + geological intensity to shape terrain.
+  * **Layers**: `elevation`, `is_ocean`, with cached computed `slope`.
+* **Stage 4: Climate Modeling**: Physics-based insolation, ocean currents, and wind.
+  * **Layers**: `temperature`, `precipitation`, `wind`.
+* **Stage 5: Hydrology**: Watersheds and rivers.
+  * **Layers**: `river_flow`, `is_lake` (endorheic basins).
+* **Stage 6: Biomes**: Whittaker diagram placement based on temp/precip.
+* **Stage 7-10 (Advanced Features in README)**: Breaking down into **Stage 7 (Resources/Deposits)**, **Stage 8 (Natural Hazards)**, **Stage 9 (Settlements)**, and **Stage 10 (Kingdoms)**.
+
+**Implementation Phases for Redesign**:
+1. **Phase 1**: Base Data (Add fundamental `crust_type` and `crust_age`).
+2. **Phase 2**: Refactor Stage 2 geology for per-pixel output (`province_id`).
+3. **Phase 3**: Oceanic-Continental Fixes (use `crust_type` to build Andes-style arcs vs island arcs).
+4. **Phase 4**: Implement Stage 3 (Elevation Generation using the precise crust contexts).
+
+
+
+
+
+Let's create a new lib in lib folder, and talk through creating the fundamental data structures for each layer.
+
+CLAP Interface
+* Generate from random seed
+* Generate from specific seed
+
+
+Each layer has a struct.
+
+Layer  1: Galaxy
+* Seed
+
+Layer 2: Stellar System
+
+Layer 3: Planet
+
+Layer 4: Tectonics
+
+Layer 5: Geologic Domains
