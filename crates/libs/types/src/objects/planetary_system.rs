@@ -4,7 +4,7 @@ use crate::objects::planetary_system::PlanetarySystem;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetarySystem {
-    pub central_star: PlanetaryBody,
+    pub central_planetary_body: PlanetaryBody,
     pub moons: HashMap<OrbitalCoordinates, PlanetaryBody>,
     pub rings: HashMap<OrbitalCoordinates, OrbitalGroup>,
 }

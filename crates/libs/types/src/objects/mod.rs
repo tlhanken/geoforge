@@ -2,6 +2,7 @@ pub mod composition;
 pub mod galaxy;
 pub mod orbital_group;
 pub mod planetary_body;
+pub mod planetary_system;
 pub mod solarsystem;
 pub mod star;
 pub mod supercluster;
