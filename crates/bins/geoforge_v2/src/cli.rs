@@ -1,5 +1,6 @@
 use clap::{Subcommand, ValueEnum};
 use std::path::PathBuf;
+use types::Layers;
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
@@ -29,30 +30,6 @@ pub enum Commands {
         #[arg(short = 'v', long, action = clap::ArgAction::Count)]
         cli_verbosity: u8,
     },
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-pub enum Layers {
-    Universe,
-    Supercluster,
-    Galaxy,
-    SolarSystem,
-    PlanetaryBody,
-    Tectonics,
-    GeologicDomains,
-    Heightmap,
-    OceanCoverage,
-    PrevailingWinds,
-    Temperature,
-    Precipitation,
-    Watersheds,
-    RiversAndLakes,
-    Biomes,
-    Resources,
-    NaturalHazards,
-    Settlements,
-    TransportPaths,
-    PoliticalEntities,
 }
 
 #[derive(ValueEnum, Clone, Debug)]

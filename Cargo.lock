@@ -376,10 +376,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "geoforge_domains"
+version = "0.1.0"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "geoforge_v2"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "geoforge_domains",
 ]
 
 [[package]]
