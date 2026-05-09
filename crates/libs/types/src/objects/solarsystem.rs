@@ -9,5 +9,5 @@ use crate::objects::star::Star;
 pub struct SolarSystem {
     pub stars: Vec<Star>,
     pub planetary_bodies: HashMap<OrbitalCoordinates, PlanetaryBody>,
-    pub orbital_groups: HashMap<OrbitalCoordinates, OrbitalGroup>,
+    pub belts: HashMap<OrbitalCoordinates, OrbitalGroup>,
 }
