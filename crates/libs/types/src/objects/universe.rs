@@ -2,7 +2,8 @@ use uom::si::f64::*;
 use uom::typenum::{N1, N2, P3, Z0};
 
 /// Inverse area: m⁻² — L⁻² (cosmological constant units)
-type InverseArea = uom::si::Quantity<uom::si::ISQ<N2, Z0, Z0, Z0, Z0, Z0, Z0>, uom::si::SI<f64>, f64>;
+type InverseArea =
+    uom::si::Quantity<uom::si::ISQ<N2, Z0, Z0, Z0, Z0, Z0, Z0>, uom::si::SI<f64>, f64>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Universe {
@@ -11,11 +12,8 @@ pub struct Universe {
 }
 
 /// Gravitational constant: m³·kg⁻¹·s⁻² — L³ M⁻¹ T⁻²
-type GravitationalConstantUnit = uom::si::Quantity<
-    uom::si::ISQ<P3, N1, N2, Z0, Z0, Z0, Z0>,
-    uom::si::SI<f64>,
-    f64,
->;
+type GravitationalConstantUnit =
+    uom::si::Quantity<uom::si::ISQ<P3, N1, N2, Z0, Z0, Z0, Z0>, uom::si::SI<f64>, f64>;
 
 /// Fundamental constants — fixed by nature, not tunable
 #[derive(Debug, Clone, PartialEq)]

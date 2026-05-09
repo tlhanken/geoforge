@@ -1,8 +1,10 @@
-pub mod universe;
-pub mod supercluster;
 pub mod galaxy;
 pub mod orbital;
 pub mod planetary;
+pub mod supercluster;
+pub mod universe;
+
+pub use orbital::OrbitalCoordinates;
 
 use uom::si::f64::Length;
 
@@ -14,7 +16,7 @@ pub struct XYZPosition {
 }
 
 impl Eq for XYZPosition {}
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for XYZPosition {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.x.value.to_bits().hash(state);
@@ -24,11 +26,14 @@ impl std::hash::Hash for XYZPosition {
 }
 
 pub trait Coordinates {
-    fn generate_random_coordinates() -> Self where Self: Sized {
+    fn generate_random_coordinates() -> Self
+    where
+        Self: Sized,
+    {
         todo!("Generate a new random coordinate");
     }
     /// Calculate the distance between two coordinates within the same coordinate frame of reference
-    fn calculate_distance(&self, other: &Self) -> f64 {
+    fn calculate_distance(&self, _other: &Self) -> f64 {
         todo!("Calculate the distance between two coordinates");
     }
 }

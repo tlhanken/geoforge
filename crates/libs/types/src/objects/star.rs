@@ -1,4 +1,4 @@
-use uom::si::f64::{Ratio, Mass, Length, ThermodynamicTemperature, Time, Power};
+use uom::si::f64::{Length, Mass, Power, Ratio, ThermodynamicTemperature, Time};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SpectralClass {

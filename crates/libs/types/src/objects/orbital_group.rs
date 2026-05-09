@@ -1,5 +1,4 @@
-use uom::si::f64::{Length, Mass, MassDensity, Ratio, Angle};
-use crate::objects::composition::LithosphereComposition;
+use uom::si::f64::{Length, Mass, MassDensity, Ratio};
 
 /// Represents a collection of small bodies (asteroids, dust, ice) in an orbital shell.
 /// Used for both planetary rings and solar asteroid belts.

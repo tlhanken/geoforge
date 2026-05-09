@@ -10,6 +10,7 @@ in
     // {
       pname = "workspace-coverage";
       RUSTFLAGS = "-Cdebuginfo=2 -Cstrip=none --cfg=tarpaulin -Cdebug-assertions=off -Cinstrument-coverage";
+      LLVM_PROFILE_FILE = "tarpaulin-%p-%m.profraw";
       buildPhaseCargoCommand = "cargo test --release --all-features";
     }
   )

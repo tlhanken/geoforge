@@ -1,20 +1,20 @@
-pub mod universe;
-pub mod superclusters;
 pub mod galaxies;
-pub mod solarsystems;
 pub mod planetary;
+pub mod solarsystems;
+pub mod superclusters;
+pub mod universe;
 
-pub use universe::UniverseLayer;
-pub use superclusters::SuperclusterLayer;
-pub use galaxies::GalaxyLayer;
-pub use solarsystems::SolarSystemLayer;
-pub use planetary::PlanetaryLayer;
 use clap::ValueEnum;
+pub use galaxies::GalaxyLayer;
+pub use planetary::PlanetaryLayer;
+pub use solarsystems::SolarSystemLayer;
+pub use superclusters::SuperclusterLayer;
+pub use universe::UniverseLayer;
 
 pub trait Seed: Clone + PartialEq {
     type Coordinate: crate::coordinates::Coordinates;
     type Subseed: Seed;
-    fn generate_subseed(&self, coordinates: &Self::Coordinate) -> Self::Subseed {
+    fn generate_subseed(&self, _coordinates: &Self::Coordinate) -> Self::Subseed {
         todo!("Generate a new seed from a previous seed and coordinates");
     }
     fn generate_random_seed() -> Self {

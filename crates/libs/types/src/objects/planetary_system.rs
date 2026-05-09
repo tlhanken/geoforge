@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
+use crate::coordinates::OrbitalCoordinates;
 use crate::objects::orbital_group::OrbitalGroup;
 use crate::objects::planetary_body::PlanetaryBody;
-use crate::objects::planetary_system::PlanetarySystem;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetarySystem {

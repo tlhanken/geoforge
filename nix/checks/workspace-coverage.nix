@@ -14,6 +14,7 @@ in
       inherit cargoArtifacts;
       pname = "workspace";
       cargoTarpaulinExtraArgs = "--skip-clean --out lcov --output-dir $out --engine llvm";
+      LLVM_PROFILE_FILE = "tarpaulin-%p-%m.profraw";
 
       # TODO: Re-enable this when we have a baseline set of tests
       # cargoTarpaulinExtraArgs = "--skip-clean --out lcov --output-dir $out --fail-under 60 --engine llvm";

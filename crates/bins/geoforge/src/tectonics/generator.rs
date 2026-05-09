@@ -307,7 +307,8 @@ impl TectonicPlateGenerator {
 
         // Write data
         let mut band = ds.rasterband(1)?;
-        let buffer = gdal::raster::Buffer::new((self.width, self.height), self.plate_map.data.clone());
+        let buffer =
+            gdal::raster::Buffer::new((self.width, self.height), self.plate_map.data.clone());
         band.write((0, 0), (self.width, self.height), &buffer)?;
 
         Ok(())

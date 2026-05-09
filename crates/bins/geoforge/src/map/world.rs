@@ -258,13 +258,12 @@ impl WorldMap {
                     } else {
                         // New color - extract motion from it
                         let (direction, speed) = rgb_to_motion(color);
+                        if next_plate_id == u16::MAX {
+                            return Err("Too many unique colors in PNG (max 65535 plates)".into());
+                        }
                         let new_id = next_plate_id;
                         color_to_plate.insert(color, (new_id, direction, speed));
                         next_plate_id += 1;
-
-                        if next_plate_id > u16::MAX {
-                            return Err("Too many unique colors in PNG (max 65535 plates)".into());
-                        }
 
                         (new_id, direction, speed)
                     };
@@ -289,10 +288,7 @@ impl WorldMap {
                 let plate_id = tectonic_data[idx];
 
                 if plate_id > 0 {
-                    plate_pixels
-                        .entry(plate_id)
-                        .or_insert_with(Vec::new)
-                        .push((x, y));
+                    plate_pixels.entry(plate_id).or_default().push((x, y));
                 }
             }
         }
@@ -1097,9 +1093,7 @@ mod tests {
 
         // Step 5: Verify exact boundary preservation using the mapping
         let mut boundaries_preserved = true;
-        for (_i, (&orig_plate, &imp_plate)) in
-            original_data.iter().zip(imported_data.iter()).enumerate()
-        {
+        for (&orig_plate, &imp_plate) in original_data.iter().zip(imported_data.iter()) {
             let expected_imp_plate = plate_mapping[&orig_plate];
             if imp_plate != expected_imp_plate {
                 boundaries_preserved = false;

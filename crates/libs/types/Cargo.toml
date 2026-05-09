@@ -1,9 +1,9 @@
+[dependencies]
+clap = { workspace = true } # unified
+uom = "0.36.0"
+
 [package]
 name = "types"
-version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-
-[dependencies]
-clap = { version = "4.5", features = ["derive"] }
-uom = "0.36.0"
+version.workspace = true

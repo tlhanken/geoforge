@@ -1,4 +1,4 @@
-use uom::si::f64::{Mass, Length, Time};
+use uom::si::f64::{Length, Mass, Time};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SuperclusterType {

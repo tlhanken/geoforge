@@ -5,7 +5,6 @@ use crate::map::world::WorldMap;
 use image::{ImageBuffer, Rgb};
 use std::error::Error;
 use std::fs;
-use std::path::Path;
 
 /// Trait for exporting map data to various formats
 pub trait MapExporter {
@@ -105,7 +104,7 @@ impl MapExporter for WorldMap {
         use rand::prelude::*;
 
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let Some(ref tectonic_map) = self.tectonics {
             let mut img = ImageBuffer::new(self.width as u32, self.height as u32);
@@ -139,7 +138,7 @@ impl MapExporter for WorldMap {
         filename: &str,
     ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let (Some(ref tectonic_map), Some(ref metadata)) =
             (&self.tectonics, &self.tectonic_metadata)
@@ -193,7 +192,7 @@ impl MapExporter for WorldMap {
         filename: &str,
     ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let (Some(ref tectonic_map), Some(ref metadata)) =
             (&self.tectonics, &self.tectonic_metadata)
@@ -237,7 +236,7 @@ impl MapExporter for WorldMap {
         filename: &str,
     ) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         // Create 400x400 reference image
         let size = 400;
@@ -287,7 +286,7 @@ impl MapExporter for WorldMap {
         use rand::prelude::*;
 
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let (Some(ref tectonic_map), Some(ref metadata)) =
             (&self.tectonics, &self.tectonic_metadata)
@@ -343,7 +342,7 @@ impl MapExporter for WorldMap {
     #[cfg(feature = "export-png")]
     fn export_geology_png(&self, output_dir: &str, filename: &str) -> Result<(), Box<dyn Error>> {
         fs::create_dir_all(output_dir)?;
-        let path = Path::new(output_dir).join(filename);
+        let path = std::path::Path::new(output_dir).join(filename);
 
         if let Some(ref geology) = self.geology {
             let mut img = ImageBuffer::from_pixel(

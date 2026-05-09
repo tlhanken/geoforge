@@ -1,10 +1,10 @@
+[dependencies]
+clap = { workspace = true }           # unified
+types = { path = "../../libs/types" }
+
 [package]
 name = "geoforge_v2"
-version.workspace = true
+description = "GeoForge V2 CLI Tool"
 edition.workspace = true
 rust-version.workspace = true
-description = "GeoForge V2 CLI Tool"
-
-[dependencies]
-clap = { version = "4.5", features = ["derive"] }
-types = { path = "../../libs/types" }
+version.workspace = true

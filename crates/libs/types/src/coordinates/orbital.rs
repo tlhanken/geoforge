@@ -1,5 +1,5 @@
 use super::Coordinates;
-use uom::si::f64::{Time, Length, Ratio, Angle};
+use uom::si::f64::{Angle, Length, Ratio, Time};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrbitalCoordinates {
@@ -21,7 +21,7 @@ pub struct OrbitalCoordinates {
 }
 
 impl Eq for OrbitalCoordinates {}
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for OrbitalCoordinates {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.orbital_period.value.to_bits().hash(state);
@@ -35,11 +35,14 @@ impl std::hash::Hash for OrbitalCoordinates {
 }
 
 impl Coordinates for OrbitalCoordinates {
-    fn generate_random_coordinates() -> Self where Self: Sized {
+    fn generate_random_coordinates() -> Self
+    where
+        Self: Sized,
+    {
         todo!("Generate a new random coordinate");
     }
     /// Calculate the distance between two coordinates within the same coordinate frame of reference
-    fn calculate_distance(&self, other: &Self) -> f64 {
+    fn calculate_distance(&self, _other: &Self) -> f64 {
         todo!("Calculate the distance between two coordinates");
     }
 }

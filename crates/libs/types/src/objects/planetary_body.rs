@@ -1,10 +1,7 @@
 use crate::objects::composition::{
-    AtmosphereComposition,
-    HydrosphereComposition,
-    LithosphereComposition,
+    AtmosphereComposition, HydrosphereComposition, LithosphereComposition,
 };
-use uom::si::f64::{Length, Area, Acceleration, Mass, MassDensity, Angle, Time, Pressure, Ratio};
-use crate::objects::OrbitalGroup;
+use uom::si::f64::{Acceleration, Angle, Area, Length, Mass, MassDensity, Pressure, Ratio, Time};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlanetaryBody {

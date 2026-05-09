@@ -13,8 +13,5 @@ in
       inherit cargoArtifacts;
       pname = "workspace";
       doCheck = true;
-      partitions = 10;
-      partitionType = "hash";
-      cargoNextestPartitionsExtraArgs = "--no-tests=pass";
     }
   )

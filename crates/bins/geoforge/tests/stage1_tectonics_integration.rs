@@ -787,7 +787,7 @@ fn test_complete_export_import_workflow() {
     let _stats1 = world1.tectonics().generate(6).unwrap();
 
     // Export all formats
-    world1.tectonics().export(test_dir).unwrap();
+    world1.tectonics().export(test_dir, true).unwrap();
 
     // Verify files were created
     assert!(std::path::Path::new(&format!("{}/world.map", test_dir)).exists());

@@ -6,6 +6,9 @@ codegen-units = 1
 members = ["crates/bins/*", "crates/libs/types"]
 resolver = "2"
 
+[workspace.dependencies]
+clap = { version = "^4.5.60", features = ["derive"] } # unified
+
 [workspace.package]
 rust-version = "1.87.0"
 version = "0.1.0"

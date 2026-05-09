@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Monocontinent with all boundary interactions: 2837,
     // Good continent Continent collision: 3487130930717999446
 
-    let seed = cli.seed.unwrap_or_else(|| rand::random::<u64>());
+    let seed = cli.seed.unwrap_or_else(rand::random::<u64>);
     println!("World Seed: {}", seed);
 
     println!("\n🗺️ Creating new world map (1800x900, seed: {})...", seed);
