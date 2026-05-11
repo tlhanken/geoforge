@@ -5,7 +5,7 @@
 //! Stage 1.2: Boundary Refinement
 //! Stage 1.3: Island Removal
 
-use geoforge::{BoundaryRefinementConfig, WorldMap};
+use geoforge::{BoundaryRefinementConfig, MapExporter, PlateSeed, WorldMap};
 
 #[test]
 fn test_full_pipeline_integration() {
