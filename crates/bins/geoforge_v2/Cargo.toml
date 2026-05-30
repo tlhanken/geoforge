@@ -1,10 +1,14 @@
-[dependencies]
-clap = { workspace = true }           # unified
-types = { path = "../../libs/types" }
-
 [package]
 name = "geoforge_v2"
-description = "GeoForge V2 CLI Tool"
+description = "GeoForge V2 CLI — procedural world generation"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
+
+[[bin]]
+name = "geoforge_v2"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+geoforge-types = { path = "../../libs/geoforge-types" }

@@ -1,0 +1,19 @@
+[package]
+name = "geoforge-types"
+description = "Core domain types for the Geoforge procedural world-generation pipeline"
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lib]
+name = "geoforge_types"
+path = "src/lib.rs"
