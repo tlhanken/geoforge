@@ -1,24 +1,19 @@
 # geoforge-types
 
-Core domain types for Geoforge v2: seeds, coordinates, planetary parameters, tectonic and geologic enums, and pipeline layer identifiers.
+Core domain types for Geoforge v2: seeds, coordinates, cosmology, planetary parameters, tectonics, geology, and pipeline layer IDs.
 
-This crate is **data-only** — no raster grids, no generators, no I/O. Downstream crates (`geoforge-grid`, `geoforge-tectonics`, etc.) depend on these types.
+**Data-only** — no generators, no rasters, no I/O.
 
-## Modules
+## Cosmology (Stage 0)
 
-| Module | Purpose |
-|--------|---------|
-| `seed` | Deterministic `Seed` derivation for hierarchical generation |
-| `coordinates` | `LatLon`, `PixelCoord`, `MapExtent`, orbital and Euclidean points |
-| `planetary` | `PlanetaryParams` presets (Earth, Mars, Venus) |
-| `tectonics` | Crust, plates, boundaries, `TectonicLayerData` |
-| `geology` | `GeologicProvince`, tectonic context, `GeologyLayerData` |
-| `pipeline` | `PipelineLayerId` — ordered pipeline stages |
-| `cosmology` | Optional large-scale stubs (stars, galaxies) for Stage 0 |
+- **`GalacticPoint`** — absolute positions in light-years for rendering
+- **`RegionId`** — cylindrical (disk/spiral/ring) or spherical (bubble/elliptical) cells
+- **`StellarSystemMarker`** — galaxy-map LOD (position + phenotype, no interiors)
+- **`SolarSystem`** — zoom LOD (stars, planet slots, belts)
+- **`CosmologyPreset`** — `Minimal` (1 system), `Rich` (local region), `Expansive`
 
-## Design rules
+Regenerate everything from **`Seed`** + preset; no JSON persistence required.
 
-1. **Per-pixel layers** are described here as typed fields (e.g. `CrustType`); actual `TerrainMap` storage lives in `geoforge-grid`.
-2. **Plate character ≠ crust composition** — `PlateType` is per-plate metadata; `CrustType` is per-pixel.
-3. **Serde** on all public types for snapshots and tests.
-4. **No `todo!()`** — every public API is implemented or explicitly documented as future.
+## Planetary pipeline (Stages 1+)
+
+See module docs for `tectonics`, `geology`, `planetary`, `pipeline`.

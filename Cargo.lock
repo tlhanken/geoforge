@@ -376,6 +376,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "geoforge-cosmology"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+ "serde_json",
+]
+
+[[package]]
 name = "geoforge-types"
 version = "0.2.0"
 dependencies = [
@@ -389,6 +397,7 @@ name = "geoforge_v2"
 version = "0.2.0"
 dependencies = [
  "clap",
+ "geoforge-cosmology",
  "geoforge-types",
 ]
 

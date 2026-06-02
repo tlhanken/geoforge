@@ -30,6 +30,10 @@ pub mod planetary;
 pub mod seed;
 pub mod tectonics;
 
+pub use cosmology::{
+    CosmologyConfig, CosmologyPreset, GalaxyInstance, GalaxyMorphology, GalaxyProfile,
+    StellarSystemMarker, StellarSystemRef, SolarSystem,
+};
 pub use error::TypesError;
 pub use pipeline::PipelineLayerId;
 pub use planetary::PlanetaryParams;

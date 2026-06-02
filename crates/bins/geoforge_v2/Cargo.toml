@@ -11,4 +11,5 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
+geoforge-cosmology = { path = "../../libs/geoforge-cosmology" }
 geoforge-types = { path = "../../libs/geoforge-types" }

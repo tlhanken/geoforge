@@ -3,7 +3,7 @@ lto = "fat"
 codegen-units = 1
 
 [workspace]
-members = ["crates/bins/*", "crates/libs/geoforge-types"]
+members = ["crates/bins/*", "crates/libs/geoforge-types", "crates/libs/geoforge-cosmology"]
 resolver = "2"
 
 [workspace.dependencies]

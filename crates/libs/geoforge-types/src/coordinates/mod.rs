@@ -1,10 +1,12 @@
 //! Coordinate systems used across the pipeline.
 
 mod euclidean;
+mod galactic;
 mod orbital;
 mod planetary;
 
 pub use euclidean::EuclideanPoint;
+pub use galactic::{GalacticBounds, GalacticPoint, LoadSphere};
 pub use orbital::OrbitalElements;
 pub use planetary::{LatLon, MapExtent, PixelCoord};
 

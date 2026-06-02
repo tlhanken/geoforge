@@ -10,22 +10,30 @@ use serde::{Deserialize, Serialize};
 )]
 #[repr(u8)]
 pub enum PipelineLayerId {
-    /// Stage 0 — stellar/planetary system (future).
-    PlanetarySystem = 0,
+    /// Stage 0 — universe constants (future).
+    Universe = 0,
+    /// Stage 0 — optional supercluster label.
+    Supercluster = 5,
+    /// Stage 0 — galaxy structure and region map.
+    Galaxy = 8,
+    /// Stage 0 — stellar system (stars + orbit slots).
+    SolarSystem = 15,
+    /// Stage 0.5 — full planetary body (surfaces; future).
+    PlanetaryBody = 18,
     /// Stage 1 — tectonic foundation.
-    Tectonics = 10,
+    Tectonics = 20,
     /// Stage 2 — geologic provinces.
-    Geology = 20,
+    Geology = 30,
     /// Stage 3 — elevation / bathymetry.
-    Elevation = 30,
+    Elevation = 40,
     /// Stage 4 — climate.
-    Climate = 40,
+    Climate = 50,
     /// Stage 5 — biomes.
-    Biomes = 50,
+    Biomes = 60,
     /// Stage 6 — hydrology.
-    Hydrology = 60,
-    /// Stage 7+ — resources, hazards, settlements (future).
-    Resources = 70,
+    Hydrology = 70,
+    /// Stage 7+ — resources (future).
+    Resources = 80,
 }
 
 impl PipelineLayerId {
@@ -33,7 +41,11 @@ impl PipelineLayerId {
     #[must_use]
     pub fn pipeline_order() -> &'static [Self] {
         &[
-            Self::PlanetarySystem,
+            Self::Universe,
+            Self::Supercluster,
+            Self::Galaxy,
+            Self::SolarSystem,
+            Self::PlanetaryBody,
             Self::Tectonics,
             Self::Geology,
             Self::Elevation,
@@ -48,7 +60,11 @@ impl PipelineLayerId {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::PlanetarySystem => "planetary_system",
+            Self::Universe => "universe",
+            Self::Supercluster => "supercluster",
+            Self::Galaxy => "galaxy",
+            Self::SolarSystem => "solar_system",
+            Self::PlanetaryBody => "planetary_body",
             Self::Tectonics => "tectonics",
             Self::Geology => "geology",
             Self::Elevation => "elevation",
@@ -63,7 +79,11 @@ impl PipelineLayerId {
     #[must_use]
     pub fn parse_str(s: &str) -> Option<Self> {
         Some(match s {
-            "planetary_system" => Self::PlanetarySystem,
+            "universe" => Self::Universe,
+            "supercluster" => Self::Supercluster,
+            "galaxy" => Self::Galaxy,
+            "solar_system" | "planetary_system" => Self::SolarSystem,
+            "planetary_body" => Self::PlanetaryBody,
             "tectonics" => Self::Tectonics,
             "geology" => Self::Geology,
             "elevation" => Self::Elevation,
