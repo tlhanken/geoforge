@@ -28,9 +28,9 @@ pub enum Commands {
         #[arg(short = 'd', long, default_value = "outputs")]
         output_directory: PathBuf,
 
-        /// Write inspectable export files: json, text, or both (default: json)
-        #[arg(long, value_enum, default_value = "json")]
-        export: ExportFormatArg,
+        /// Export format: json, text, or both (default: json). Writes under -d.
+        #[arg(long = "export-format", alias = "export", short = 'f', value_enum, default_value = "json")]
+        export_format: ExportFormatArg,
 
         /// Skip export files (stdout summary only)
         #[arg(long)]

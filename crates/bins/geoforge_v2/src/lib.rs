@@ -25,7 +25,7 @@ pub fn run() {
             from_layer,
             to_layer,
             output_directory,
-            export,
+            export_format,
             no_export,
             cli_verbosity,
         } => run_generate(
@@ -34,7 +34,7 @@ pub fn run() {
             from_layer.0,
             to_layer.0,
             output_directory,
-            export.into_export(),
+            export_format.into_export(),
             *no_export,
             *cli_verbosity,
         ),
