@@ -1,51 +1,68 @@
 # geoforge_v2
 
-CLI for Geoforge v2 cosmology (and future pipeline stages).
+CLI for Geoforge v2 cosmology. **Branch:** `cursor/v2-types-foundation-b88c` (or later).
 
-**Requires branch `cursor/v2-types-foundation-b88c` (or later merged main)** — older `cleanup_and_nix` only had a **placeholder** CLI.
+## Copy-paste commands that work
 
-## Important: SQLite was never implemented
-
-On the old stub CLI, the terminal printed something like `Output format: Sqlite` because the README listed `-f sqlite` as a planned format. **No SQLite file was ever written** — it was echo-only scaffolding, not real export.
-
-Current CLI writes real files: **JSON** (default), **text**, or **both**.
-
-## Generate and inspect
+From the **repository root**:
 
 ```bash
-# From repo root — rebuild so you pick up the latest CLI
 cargo build -p geoforge_v2
 
-cargo run -p geoforge_v2 -- generate --seed 42
-# → outputs/cosmology_seed42.json
+# Text report in ./inspect (recommended for reading)
+cargo run -p geoforge_v2 -- generate --seed 42 --format text -d ./inspect
+
+# JSON (default format)
+cargo run -p geoforge_v2 -- generate --seed 42 -d ./outputs
+
+# Both files
+cargo run -p geoforge_v2 -- generate --seed 42 --format both -d ./inspect
 ```
 
-### Export flags (any of these work)
+Or use the wrapper script (same behavior):
 
-| Flag | Files |
+```bash
+chmod +x scripts/v2-generate.sh
+./scripts/v2-generate.sh 42 ./inspect text
+```
+
+## Critical: the `--` before `generate`
+
+`cargo` will steal flags if they appear **before** `--`:
+
+```bash
+# WRONG — Cargo error: unexpected argument '--export'
+cargo run -p geoforge_v2 --export text -- generate --seed 42
+
+# RIGHT — flags after `--` go to geoforge_v2
+cargo run -p geoforge_v2 -- generate --seed 42 --format text -d ./inspect
+```
+
+## Export flags (on the binary, after `--`)
+
+| Flag | Output |
 |------|--------|
-| `-f json` or `--export-format json` (default) | `cosmology_seed<N>.json` |
-| `-f text` or `--export-format text` | `cosmology_seed<N>.txt` |
-| `-f both` | JSON + text |
-| `--no-export` | stdout only |
+| `--format json` (default) | `cosmology_seed<N>.json` |
+| `--format text` | `cosmology_seed<N>.txt` |
+| `--format both` | JSON + text |
+| `--export-format text` | alias of `--format` |
+| `--export text` | alias of `--format` |
+| `--no-export` | terminal only |
+
+**Do not use** `-f sqlite` — SQLite was never implemented (old stub only printed the word).
+
+## Verify your binary
 
 ```bash
-cargo run -p geoforge_v2 -- generate --seed 42 -f text -d ./inspect
-cargo run -p geoforge_v2 -- generate --seed 42 --export-format both -d ./inspect
+cargo run -p geoforge_v2 -- generate --help | grep format
 ```
 
-If you see `unexpected argument '--export'`, you are on an **old binary** — run `git pull`, checkout the v2 branch above, and `cargo build -p geoforge_v2` again. Then run `cargo run -p geoforge_v2 -- generate --help` and confirm you see `--export-format` / `-f`.
+You should see `--format` in the help. Startup should print:
 
-### Verify the CLI version
+`geoforge_v2 0.2.0 — cosmology export enabled`
+
+## Run smoke tests
 
 ```bash
-cargo run -p geoforge_v2 -- generate --help | grep -E 'export-format|sqlite'
+cargo test -p geoforge_v2 --test cli_smoke
 ```
-
-You should see `export-format` and **no** sqlite.
-
-## Other flags
-
-- `--cosmology-scale minimal|rich|expansive`
-- `--to-layer solar_system` (default)
-- `-v` verbose stdout

@@ -29,8 +29,16 @@ pub enum Commands {
         output_directory: PathBuf,
 
         /// Export format: json, text, or both (default: json). Writes under -d.
-        #[arg(long = "export-format", alias = "export", short = 'f', value_enum, default_value = "json")]
-        export_format: ExportFormatArg,
+        ///
+        /// Must appear **after** `cargo run -p geoforge_v2 --` (otherwise Cargo eats the flag).
+        #[arg(
+            long = "format",
+            alias = "export-format",
+            alias = "export",
+            value_enum,
+            default_value = "json"
+        )]
+        format: ExportFormatArg,
 
         /// Skip export files (stdout summary only)
         #[arg(long)]

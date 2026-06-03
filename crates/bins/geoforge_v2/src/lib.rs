@@ -25,7 +25,7 @@ pub fn run() {
             from_layer,
             to_layer,
             output_directory,
-            export_format,
+            format,
             no_export,
             cli_verbosity,
         } => run_generate(
@@ -34,7 +34,7 @@ pub fn run() {
             from_layer.0,
             to_layer.0,
             output_directory,
-            export_format.into_export(),
+            format.into_export(),
             *no_export,
             *cli_verbosity,
         ),
@@ -52,7 +52,8 @@ fn run_generate(
     verbosity: u8,
 ) {
     let root = Seed::new(seed.unwrap_or(0x60F0_06E5_5EED));
-    println!("GeoForge V2 — seed {}", root.value());
+    println!("geoforge_v2 {} — cosmology export enabled", env!("CARGO_PKG_VERSION"));
+    println!("Seed: {}", root.value());
     println!("Cosmology preset: {:?}", preset);
     println!("Pipeline: {} → {}", from_layer.as_str(), to_layer.as_str());
     if verbosity > 0 {
