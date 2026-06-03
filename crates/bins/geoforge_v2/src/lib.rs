@@ -3,6 +3,7 @@ use geoforge_cosmology::CosmologyContext;
 use geoforge_types::{PipelineLayerId, Seed};
 
 pub mod cli;
+pub mod export;
 use cli::Commands;
 
 /// GeoForge V2 — procedural world generation CLI
@@ -24,6 +25,8 @@ pub fn run() {
             from_layer,
             to_layer,
             output_directory,
+            export,
+            no_export,
             cli_verbosity,
         } => run_generate(
             *seed,
@@ -31,6 +34,8 @@ pub fn run() {
             from_layer.0,
             to_layer.0,
             output_directory,
+            export.into_export(),
+            *no_export,
             *cli_verbosity,
         ),
     }
@@ -42,6 +47,8 @@ fn run_generate(
     from_layer: PipelineLayerId,
     to_layer: PipelineLayerId,
     output_directory: &std::path::Path,
+    export_format: export::ExportFormat,
+    no_export: bool,
     verbosity: u8,
 ) {
     let root = Seed::new(seed.unwrap_or(0x60F0_06E5_5EED));
@@ -58,7 +65,15 @@ fn run_generate(
     }
 
     if to_layer >= PipelineLayerId::Galaxy {
-        run_cosmology(root, preset, to_layer, verbosity);
+        run_cosmology(
+            root,
+            preset,
+            to_layer,
+            output_directory,
+            export_format,
+            no_export,
+            verbosity,
+        );
     }
 
     if to_layer >= PipelineLayerId::Tectonics {
@@ -70,6 +85,9 @@ fn run_cosmology(
     root: Seed,
     preset: geoforge_types::cosmology::CosmologyPreset,
     to_layer: PipelineLayerId,
+    output_directory: &std::path::Path,
+    export_format: export::ExportFormat,
+    no_export: bool,
     verbosity: u8,
 ) {
     let ctx = CosmologyContext::new(root, preset);
@@ -149,6 +167,22 @@ fn run_cosmology(
         }
         if !system.belts.is_empty() {
             println!("  Belts: {}", system.belts.len());
+        }
+    }
+
+    if !no_export && to_layer >= PipelineLayerId::Galaxy {
+        let report = export::build_report(&ctx, root, preset, to_layer);
+        match export::write_report(output_directory, &report, export_format) {
+            Ok(paths) => {
+                println!("\n=== Exported ===");
+                for p in paths {
+                    println!("  {}", p.display());
+                }
+            }
+            Err(e) => {
+                eprintln!("Export failed: {e}");
+                std::process::exit(1);
+            }
         }
     }
 }

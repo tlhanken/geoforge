@@ -13,3 +13,5 @@ path = "src/main.rs"
 clap = { workspace = true }
 geoforge-cosmology = { path = "../../libs/geoforge-cosmology" }
 geoforge-types = { path = "../../libs/geoforge-types" }
+serde = { workspace = true }
+serde_json = "1.0"

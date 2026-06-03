@@ -24,14 +24,44 @@ pub enum Commands {
         #[arg(long, default_value = "solar_system")]
         to_layer: PipelineLayerArg,
 
-        /// Output directory (optional exports only)
+        /// Output directory for export files
         #[arg(short = 'd', long, default_value = "outputs")]
         output_directory: PathBuf,
+
+        /// Write inspectable export files: json, text, or both (default: json)
+        #[arg(long, value_enum, default_value = "json")]
+        export: ExportFormatArg,
+
+        /// Skip export files (stdout summary only)
+        #[arg(long)]
+        no_export: bool,
 
         /// CLI verbosity (repeat `-v` for more)
         #[arg(short = 'v', long, action = clap::ArgAction::Count)]
         cli_verbosity: u8,
     },
+}
+
+/// Export format for inspection.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum ExportFormatArg {
+    /// Pretty-printed JSON (`cosmology_seed<N>.json`).
+    Json,
+    /// Human-readable text (`cosmology_seed<N>.txt`).
+    Text,
+    /// Both JSON and text.
+    Both,
+}
+
+impl ExportFormatArg {
+    #[must_use]
+    pub fn into_export(self) -> crate::export::ExportFormat {
+        match self {
+            Self::Json => crate::export::ExportFormat::Json,
+            Self::Text => crate::export::ExportFormat::Text,
+            Self::Both => crate::export::ExportFormat::Both,
+        }
+    }
 }
 
 /// CLI wrapper for [`CosmologyPreset`].
