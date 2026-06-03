@@ -1,0 +1,17 @@
+[package]
+name = "geoforge-cosmology"
+description = "Seed-driven cosmology generation: galaxy regions, markers, solar systems"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-types = { path = "../geoforge-types" }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lib]
+name = "geoforge_cosmology"
+path = "src/lib.rs"
