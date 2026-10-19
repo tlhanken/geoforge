@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::marker::SystemPhenotype;
 use super::star::Star;
 use crate::coordinates::{GalacticPoint, OrbitalElements};
+use crate::Seed;
 
 /// Mass / composition class for a planet slot (not a full body).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,6 +46,8 @@ pub struct BeltSlot {
 /// Full stellar system at zoom LOD (regenerated from per-system seed).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SolarSystem {
+    /// Stable system seed (for stage 5 sub-draws).
+    pub system_seed: Seed,
     /// Galaxy index.
     pub galaxy_index: u32,
     /// Region id.

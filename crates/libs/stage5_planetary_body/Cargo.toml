@@ -1,0 +1,14 @@
+[package]
+name = "stage5-planetary-body"
+description = "Pipeline stage 5 — planetary physical parameters from solar system"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-types = { path = "../geoforge-types" }
+
+[lib]
+name = "stage5_planetary_body"
+path = "src/lib.rs"

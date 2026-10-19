@@ -376,11 +376,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoforge-cosmology"
+name = "geoforge-export"
 version = "0.2.0"
 dependencies = [
  "geoforge-types",
+ "serde",
  "serde_json",
+ "stage1-universe",
+ "stage2-supercluster",
+ "stage3-galaxy",
+ "stage4-solar-system",
+ "stage5-planetary-body",
 ]
 
 [[package]]
@@ -397,7 +403,7 @@ name = "geoforge_v2"
 version = "0.2.0"
 dependencies = [
  "clap",
- "geoforge-cosmology",
+ "geoforge-export",
  "geoforge-types",
 ]
 
@@ -834,6 +840,42 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "stage1-universe"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+]
+
+[[package]]
+name = "stage2-supercluster"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+]
+
+[[package]]
+name = "stage3-galaxy"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+]
+
+[[package]]
+name = "stage4-solar-system"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+ "stage3-galaxy",
+]
+
+[[package]]
+name = "stage5-planetary-body"
+version = "0.2.0"
+dependencies = [
+ "geoforge-types",
+]
 
 [[package]]
 name = "strsim"

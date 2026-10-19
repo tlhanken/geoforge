@@ -17,11 +17,11 @@ pub enum Commands {
         cosmology_scale: CosmologyScaleArg,
 
         /// First pipeline layer (inclusive)
-        #[arg(long, default_value = "galaxy")]
+        #[arg(long, default_value = "universe")]
         from_layer: PipelineLayerArg,
 
         /// Last pipeline layer (inclusive)
-        #[arg(long, default_value = "solar_system")]
+        #[arg(long, default_value = "planetary_body")]
         to_layer: PipelineLayerArg,
 
         /// Output directory for export files
@@ -36,7 +36,7 @@ pub enum Commands {
             alias = "export-format",
             alias = "export",
             value_enum,
-            default_value = "json"
+            default_value = "both"
         )]
         format: ExportFormatArg,
 
@@ -63,11 +63,11 @@ pub enum ExportFormatArg {
 
 impl ExportFormatArg {
     #[must_use]
-    pub fn into_export(self) -> crate::export::ExportFormat {
+    pub fn into_export(self) -> geoforge_export::ExportFormat {
         match self {
-            Self::Json => crate::export::ExportFormat::Json,
-            Self::Text => crate::export::ExportFormat::Text,
-            Self::Both => crate::export::ExportFormat::Both,
+            Self::Json => geoforge_export::ExportFormat::Json,
+            Self::Text => geoforge_export::ExportFormat::Text,
+            Self::Both => geoforge_export::ExportFormat::Both,
         }
     }
 }

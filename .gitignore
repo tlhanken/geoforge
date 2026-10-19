@@ -1,8 +1,9 @@
 # Rust
 /target/
 
-# Output files
+# Output files (generated review artifacts; keep directory via .gitkeep)
 /outputs/**
+!/outputs/.gitkeep
 
 # IDE
 .vscode/
@@ -19,3 +20,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Node (openspec dev dependency)
+node_modules/

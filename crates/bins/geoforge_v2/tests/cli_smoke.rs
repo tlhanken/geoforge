@@ -26,7 +26,8 @@ fn format_text_writes_file() {
     let txt = out.join("cosmology_seed42.txt");
     assert!(txt.is_file(), "missing {}", txt.display());
     let content = std::fs::read_to_string(&txt).unwrap();
-    assert!(content.contains("Geoforge V2 cosmology report"));
+    assert!(content.contains("Layer 1 · universe"));
+    assert!(content.contains("stage1_universe"));
 }
 
 #[test]

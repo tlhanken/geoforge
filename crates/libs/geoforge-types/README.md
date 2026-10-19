@@ -2,18 +2,13 @@
 
 Core domain types for Geoforge v2: seeds, coordinates, cosmology, planetary parameters, tectonics, geology, and pipeline layer IDs.
 
-**Data-only** — no generators, no rasters, no I/O.
+**Data-only** — no stage generation, no I/O.
 
-## Cosmology (Stage 0)
+## Modules
 
-- **`GalacticPoint`** — absolute positions in light-years for rendering
-- **`RegionId`** — cylindrical (disk/spiral/ring) or spherical (bubble/elliptical) cells
-- **`StellarSystemMarker`** — galaxy-map LOD (position + phenotype, no interiors)
-- **`SolarSystem`** — zoom LOD (stars, planet slots, belts)
-- **`CosmologyPreset`** — `Minimal` (1 system), `Rich` (local region), `Expansive`
+- **`seed`** — [`Seed`](src/seed.rs), deterministic `draw` / `unit` / `range`
+- **`cosmology`** — universe → solar system types, [`CosmologyLayers`](src/cosmology/layers.rs), seed paths
+- **`planetary`** — [`PlanetaryParams`](src/planetary/params.rs), [`PlanetaryBodies`](src/planetary/body.rs) (stage 5)
+- **`planetary`**, **`tectonics`**, **`geology`**, **`pipeline`**
 
-Regenerate everything from **`Seed`** + preset; no JSON persistence required.
-
-## Planetary pipeline (Stages 1+)
-
-See module docs for `tectonics`, `geology`, `planetary`, `pipeline`.
+Generation lives in `stage*` crates; export in `geoforge-export`; CLIs in `crates/bins/`.

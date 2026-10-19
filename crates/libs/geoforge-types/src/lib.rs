@@ -2,7 +2,7 @@
 //!
 //! This crate defines seeds, coordinates, planetary parameters, and typed descriptions
 //! of each pipeline stage's outputs. It intentionally contains **no** raster storage or
-//! simulation logic — those belong in `geoforge-grid` and stage crates.
+//! simulation logic — those belong in `geoforge-grid` and `stage*` crates.
 //!
 //! # Quick example
 //!
@@ -31,12 +31,13 @@ pub mod seed;
 pub mod tectonics;
 
 pub use cosmology::{
-    CosmologyConfig, CosmologyPreset, GalaxyInstance, GalaxyMorphology, GalaxyProfile,
-    StellarSystemMarker, StellarSystemRef, SolarSystem,
+    CosmologyConfig, CosmologyLayers, CosmologyPreset, GalaxyCatalog, GalaxyInstance,
+    GalaxyMorphology, GalaxyProfile, StellarSystemMarker, StellarSystemRef, SolarSystem,
+    Supercluster, Universe,
 };
+pub use planetary::{PlanetBodyRecord, PlanetaryBodies, PlanetaryParams};
 pub use error::TypesError;
 pub use pipeline::PipelineLayerId;
-pub use planetary::PlanetaryParams;
 pub use seed::Seed;
 
 #[cfg(test)]

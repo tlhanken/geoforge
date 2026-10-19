@@ -1,0 +1,24 @@
+[package]
+name = "geoforge-export"
+description = "Serialize and write pipeline layer output (JSON / text)"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-types = { path = "../geoforge-types" }
+stage1-universe = { path = "../stage1_universe" }
+stage2-supercluster = { path = "../stage2_supercluster" }
+stage3-galaxy = { path = "../stage3_galaxy" }
+stage4-solar-system = { path = "../stage4_solar_system" }
+stage5-planetary-body = { path = "../stage5_planetary_body" }
+serde = { workspace = true }
+serde_json = "1.0"
+
+[dev-dependencies]
+geoforge-types = { path = "../geoforge-types" }
+
+[lib]
+name = "geoforge_export"
+path = "src/lib.rs"

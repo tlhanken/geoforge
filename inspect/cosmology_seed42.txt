@@ -1,0 +1,33 @@
+Geoforge V2 cosmology report
+Seed: 42
+Preset: Minimal
+Pipeline to: solar_system
+Focus (ly): 0.0000, 0.0000, 0.0000
+
+=== Galaxy 0: Galaxy-8728 ===
+  Morphology: SpiralDisk
+  Radius: 1000.0 ly
+  Regions near focus: 1
+  Markers: 1
+
+  - #0 galaxy=0 region=cyl(r=0,w=0,z=0) @ (719.83, 25.31, 410.32) ly  Single/G [PRIMARY]
+
+=== Primary reference ===
+  galaxy=0 region=cyl(r=0,w=0,z=0) index=0
+
+=== Primary solar system ===
+  Barycenter (ly): 719.8315, 25.3077, 410.3194
+  Stars: 1
+    [0] G 1.000 L☉  offset AU (0.00, 0.00, 0.00)
+  Planet slots: 9
+    [0] SuperEarth  a=0.714 AU  period=220.2 d  e=0.078
+    [1] IceGiant  a=1.314 AU  period=549.9 d  e=0.049
+    [2] Dwarf  a=2.980 AU  period=1878.6 d  e=0.038
+    [3] GasGiant  a=4.400 AU  period=3370.9 d  e=0.156
+    [4] Dwarf  a=10.372 AU  period=12201.4 d  e=0.167
+    [5] SuperEarth  a=24.190 AU  period=43455.3 d  e=0.124
+    [6] Rocky  a=39.176 AU  period=89560.9 d  e=0.194
+    [7] Rocky  a=75.261 AU  period=238477.3 d  e=0.024
+    [8] IceGiant  a=123.012 AU  period=498323.0 d  e=0.146
+  Belts: 1
+    [0] 2.00–3.50 AU

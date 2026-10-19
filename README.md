@@ -2,6 +2,14 @@
 
 **Realistic tectonic plate generation using electrostatic physics simulation**
 
+> **V2 pre-tectonic pipeline (review):** generate universe → planetary body data under `outputs/`:
+>
+> ```bash
+> ./scripts/v2-generate.sh
+> ```
+>
+> See [docs/V2_PIPELINE.md](docs/V2_PIPELINE.md) and [crates/bins/geoforge_v2/README.md](crates/bins/geoforge_v2/README.md).
+
 Geoforge is a Rust library for generating scientifically-inspired tectonic plates for procedural world generation. It uses electrostatic physics simulation to create natural plate boundaries with Earth-like size variety.
 
 ## Features

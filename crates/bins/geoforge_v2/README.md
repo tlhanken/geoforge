@@ -1,68 +1,64 @@
 # geoforge_v2
 
-CLI for Geoforge v2 cosmology. **Branch:** `cursor/v2-types-foundation-b88c` (or later).
+CLI for the v2 **pre-tectonic** pipeline (universe → planetary body). Tectonics and surface stages are not in this binary yet.
 
-## Copy-paste commands that work
+## Quick review (recommended)
 
-From the **repository root**:
+From the repository root:
+
+```bash
+chmod +x scripts/v2-generate.sh
+./scripts/v2-generate.sh
+```
+
+Writes **`outputs/cosmology_seed42.json`** and **`outputs/cosmology_seed42.txt`** (seed 42, full pipeline through `planetary_body`).
+
+Custom seed or directory:
+
+```bash
+./scripts/v2-generate.sh 99 ./outputs both
+./scripts/v2-generate.sh 42 ./inspect text -v
+```
+
+## Manual `cargo` command
+
+Always put `--` before `generate` so Cargo does not swallow flags:
 
 ```bash
 cargo build -p geoforge_v2
 
-# Text report in ./inspect (recommended for reading)
-cargo run -p geoforge_v2 -- generate --seed 42 --format text -d ./inspect
-
-# JSON (default format)
-cargo run -p geoforge_v2 -- generate --seed 42 -d ./outputs
-
-# Both files
-cargo run -p geoforge_v2 -- generate --seed 42 --format both -d ./inspect
+cargo run -p geoforge_v2 -- generate \
+  --seed 42 \
+  --format both \
+  --output-directory outputs \
+  -v
 ```
 
-Or use the wrapper script (same behavior):
+## Defaults
 
-```bash
-chmod +x scripts/v2-generate.sh
-./scripts/v2-generate.sh 42 ./inspect text
-```
+| Flag | Default |
+|------|---------|
+| `--seed` | `0x60F06E55EED` if omitted |
+| `--to-layer` | `planetary_body` |
+| `--from-layer` | `universe` |
+| `--format` | `both` (JSON + text) |
+| `-d` / `--output-directory` | `outputs` |
+| `--cosmology-scale` | `minimal` |
 
-## Critical: the `--` before `generate`
+## Output files
 
-`cargo` will steal flags if they appear **before** `--`:
+| File | Contents |
+|------|----------|
+| `outputs/cosmology_seed<N>.json` | Full report (galaxies, markers, solar system, planetary bodies) |
+| `outputs/cosmology_seed<N>.txt` | Same data, human-readable |
 
-```bash
-# WRONG — Cargo error: unexpected argument '--export'
-cargo run -p geoforge_v2 --export text -- generate --seed 42
+The `outputs/` directory is gitignored; generated files are for local review only.
 
-# RIGHT — flags after `--` go to geoforge_v2
-cargo run -p geoforge_v2 -- generate --seed 42 --format text -d ./inspect
-```
-
-## Export flags (on the binary, after `--`)
-
-| Flag | Output |
-|------|--------|
-| `--format json` (default) | `cosmology_seed<N>.json` |
-| `--format text` | `cosmology_seed<N>.txt` |
-| `--format both` | JSON + text |
-| `--export-format text` | alias of `--format` |
-| `--export text` | alias of `--format` |
-| `--no-export` | terminal only |
-
-**Do not use** `-f sqlite` — SQLite was never implemented (old stub only printed the word).
-
-## Verify your binary
-
-```bash
-cargo run -p geoforge_v2 -- generate --help | grep format
-```
-
-You should see `--format` in the help. Startup should print:
-
-`geoforge_v2 0.2.0 — cosmology export enabled`
-
-## Run smoke tests
+## Tests
 
 ```bash
 cargo test -p geoforge_v2 --test cli_smoke
+cargo test -p geoforge-export
 ```
+
+See also [docs/V2_PIPELINE.md](../../docs/V2_PIPELINE.md) and [crates/libs/README.md](../../libs/README.md).

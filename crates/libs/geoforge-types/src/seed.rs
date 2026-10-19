@@ -52,6 +52,24 @@ impl Seed {
     }
 }
 
+/// Unit-interval sample from a seed (deterministic).
+#[must_use]
+pub fn unit(seed: Seed) -> f64 {
+    (mix(seed.value()) as f64) / (u64::MAX as f64)
+}
+
+/// Sample in `[min, max)`.
+#[must_use]
+pub fn range(seed: Seed, min: f64, max: f64) -> f64 {
+    min + unit(seed) * (max - min)
+}
+
+/// Derive a child seed for a labeled sub-draw.
+#[must_use]
+pub fn draw(parent: Seed, label: &[u8]) -> Seed {
+    parent.child(label)
+}
+
 /// SplitMix64 finalizer — fast, deterministic avalanche.
 #[must_use]
 pub fn mix(mut x: u64) -> u64 {

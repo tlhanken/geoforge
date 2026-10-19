@@ -1,0 +1,15 @@
+[package]
+name = "stage4-solar-system"
+description = "Pipeline stage 4 — solar-system zoom from galaxy catalog"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-types = { path = "../geoforge-types" }
+stage3-galaxy = { path = "../stage3_galaxy" }
+
+[lib]
+name = "stage4_solar_system"
+path = "src/lib.rs"

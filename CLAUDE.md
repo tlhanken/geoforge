@@ -75,6 +75,34 @@ Geoforge is a Rust library for generating scientifically-inspired geological fea
 - **Error handling** - All error paths and failure modes
 - **Determinism** - Verify the same seed reproduces the same output every time.
 
+### 7. Ideas and Proposals Convention
+
+Unscheduled ideas and committed design proposals live in `docs/` under a two-stage lifecycle:
+
+```
+docs/ideas/              # Seeds, brainstorming, future possibilities
+                         # No template required — just capture the thought
+                         # Descriptive kebab-case names (e.g., geologic-cartography-as-narrative-memory.md)
+
+docs/proposals/          # Committed design proposals
+                         # Numbered: 0001-name.md, 0002-name.md, ...
+                         # Uses docs/proposals/0000-template.md
+                         # Status field: draft | accepted | implemented | rejected | deferred
+```
+
+Lifecycle:
+```
+Idea (docs/ideas/)           → write freely, no structure required
+  ↓ you decide to pursue it
+Proposal (docs/proposals/)   → move file, add structure, assign next number
+  ↓ design is approved
+Implementation               → reference proposal # in commits, CLAUDE.md, tests
+```
+
+- Most ideas will never become proposals — that's fine. They stay in `docs/ideas/` as a record of thinking.
+- Proposal numbers are referenced in commit messages (e.g., "Implements proposal 0003") and can be linked from the Pipeline Roadmap.
+- When an idea graduates to a proposal, move the file from `docs/ideas/` to `docs/proposals/`, rename with the next number, and expand using the template.
+
 ## Pipeline Roadmap
 
 ### **Stage 0: Stellar System Generation** ⏳ FUTURE
