@@ -96,6 +96,11 @@ pub trait Grid: Send + Sync {
     fn cells(&self) -> std::ops::Range<Cell> {
         0..self.len() as Cell
     }
+    /// East–west and north–south extent of a cell, radians. Defaults to a square cell.
+    fn cell_extent_rad(&self, c: Cell) -> (f64, f64) {
+        let s = self.area_sr(c).sqrt();
+        (s, s)
+    }
 }
 
 /// Equirectangular (plate carrée) grid: `width × height` cells, row-major from the north-west.
@@ -219,6 +224,12 @@ impl Grid for EquirectGrid {
     fn spec(&self) -> GridSpec {
         GridSpec::Equirect { width: self.width, height: self.height }
     }
+
+    fn cell_extent_rad(&self, c: Cell) -> (f64, f64) {
+        let dlat = self.lat_res.to_radians();
+        // Width chosen so that width × height equals the exact cell area.
+        (self.area_sr(c) / dlat, dlat)
+    }
 }
 
 /// Any implemented grid (static dispatch).
@@ -265,6 +276,11 @@ impl Grid for AnyGrid {
     fn spec(&self) -> GridSpec {
         match self {
             AnyGrid::Equirect(g) => g.spec(),
+        }
+    }
+    fn cell_extent_rad(&self, c: Cell) -> (f64, f64) {
+        match self {
+            AnyGrid::Equirect(g) => g.cell_extent_rad(c),
         }
     }
 }

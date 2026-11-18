@@ -6,6 +6,7 @@ codegen-units = 1
 members = [
     "crates/bins/geoforge",
     "crates/libs/geoforge-core",
+    "crates/libs/geoforge-surface",
 ]
 resolver = "2"
 
