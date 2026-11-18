@@ -28,6 +28,8 @@ pub struct ElevationParams {
     pub continental_base_m: f64,
     /// Scale of terrain noise (1 = Earth-like relief).
     pub roughness_scale: f64,
+    /// Height of broad continental plateaus (dynamic topography, old uplifts), m.
+    pub plateau_m: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
     /// Depth of sediment and erosion that has smoothed closed land depressions, m. Basins
@@ -39,7 +41,7 @@ pub struct ElevationParams {
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, slope_width_km: 130.0, sediment_fill_m: 80.0, boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, sediment_fill_m: 80.0, boundaries: BoundaryParams::default() }
     }
 }
 
@@ -84,6 +86,7 @@ impl Generator for Elevation {
         let crust = &crust.values;
         let age: Vec<f32> = inputs.crust_age().map_or_else(|| vec![80.0; n], |f| f.values.clone());
         let noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value());
+        let plateau_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0x0071_A7EA);
 
         // Distance to the continent–ocean crust edge, both sides (km).
         let coast: Vec<Cell> = grid
@@ -162,6 +165,8 @@ impl Generator for Elevation {
             .map(|c| {
                 let i = c as usize;
                 let ocean = crust[i] == CrustType::Oceanic;
+                // Broad plateaus lift every continental province alike (Africa, Iran, Tibet).
+                let base_cont = if ocean { base_cont } else { base_cont + p.plateau_m * smoothstep(0.0, 0.3, plateau_noise.fbm(grid.center(c), 1.1, 2)) };
                 let mut z = if ocean {
                     // Sediment fill (isostatically compensated) thickens with age and toward
                     // continents (the continental rise).
@@ -169,7 +174,8 @@ impl Generator for Elevation {
                     let sediment = 380.0 * (a / 100.0).sqrt().min(1.4) + 1400.0 * (-edge_km[i] / 280.0).exp();
                     -gdh1_depth_m(a) + sediment
                 } else {
-                    base_cont + 650.0 * noise.fbm(grid.center(c), 1.6, 3) + 280.0 * noise.fbm(grid.center(c), 5.0, 3)
+                    let pt = grid.center(c);
+                    base_cont + 650.0 * noise.fbm(pt, 1.6, 3) + 280.0 * noise.fbm(pt, 5.0, 3)
                 };
                 let Some(key) = provinces.owner_of(c) else { return z };
                 let Some(prov) = provinces.table.get(key) else { return z };

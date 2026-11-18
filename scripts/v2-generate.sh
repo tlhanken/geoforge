@@ -1,40 +1,40 @@
 #!/usr/bin/env bash
-# Generate pre-tectonic pipeline output for review (JSON + text under outputs/).
+# Generate a v2 world with preview renders and realism stats.
 #
 # Usage:
-#   ./scripts/v2-generate.sh              # seed 42 → ./outputs/
-#   ./scripts/v2-generate.sh 99           # seed 99 → ./outputs/
-#   ./scripts/v2-generate.sh 99 ./inspect both
-#   ./scripts/v2-generate.sh 42 ./outputs text -v
+#   ./scripts/v2-generate.sh                 # seed 42 → ./outputs/world-42
+#   ./scripts/v2-generate.sh 99              # seed 99 → ./outputs/world-99
+#   ./scripts/v2-generate.sh 99 ./worlds     # seed 99 → ./worlds/world-99
+#   EARTH=1 ./scripts/v2-generate.sh 42      # Earth-like reference body
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SEED="${1:-42}"
 OUT_DIR="${2:-./outputs}"
-FMT="${3:-both}"
-EXTRA=()
-if [[ "${4:-}" == "-v" ]] || [[ "${4:-}" == "--verbose" ]]; then
-  EXTRA=(-v)
-fi
+WORLD="$OUT_DIR/world-$SEED"
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "error: cargo not found in PATH" >&2
   exit 1
 fi
 
-echo "Building geoforge_v2..."
-cargo build -p geoforge_v2 -q
+echo "Building geoforge-v2 (release)..."
+cargo build --release -p geoforge-cli -q
+BIN="$ROOT/target/release/geoforge-v2"
 
 mkdir -p "$OUT_DIR"
-
-# Flags after `--` are passed to the binary, not Cargo.
-cargo run -p geoforge_v2 -q -- generate \
-  --seed "$SEED" \
-  --format "$FMT" \
-  --output-directory "$OUT_DIR" \
-  "${EXTRA[@]}"
-
-echo ""
-echo "Review files:"
-ls -la "$OUT_DIR"/cosmology_seed"${SEED}".* 2>/dev/null || ls -la "$OUT_DIR"/
+if [[ ! -f "$WORLD/world.toml" ]]; then
+  if [[ "${EARTH:-}" == "1" ]]; then
+    "$BIN" new "$WORLD" --seed "$SEED" --earth-like
+  else
+    "$BIN" new "$WORLD" --seed "$SEED"
+  fi
+fi
+"$BIN" generate "$WORLD" --render
+"$BIN" stats "$WORLD" > "$WORLD/stats.json"
+echo
+echo "World:   $WORLD"
+echo "Renders: $WORLD/renders"
+echo "Stats:   $WORLD/stats.json"
+echo "Edit:    $BIN export $WORLD elevation   (then paint edit/elevation.png and: $BIN import $WORLD elevation)"

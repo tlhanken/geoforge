@@ -64,7 +64,7 @@ impl Default for HydrologyParams {
             ice_c: -10.0,
             min_river_m3_s: 50.0,
             min_basin_km2: 20_000.0,
-            budyko_w: 2.8,
+            budyko_w: 3.0,
             lake_evaporation_factor: 1.4,
             arid_channel_loss_per_1000km: 0.35,
             max_open_lake_km2: 80_000.0,

@@ -630,10 +630,10 @@ impl Generator for Climate {
 }
 
 /// Potential evapotranspiration, mm/yr, from mean annual temperature (Thornthwaite-like,
-/// calibrated to ~1500 mm at 25 °C and ~170 mm at 0 °C).
+/// calibrated to ~1650 mm at 25 °C, ~720 mm at 10 °C and ~190 mm at 0 °C).
 #[must_use]
 pub fn pet_mm(t: f64) -> f64 {
-    if t <= -5.0 { 0.0 } else { 25.0 * (t + 5.0).powf(1.2) }
+    if t <= -5.0 { 0.0 } else { 28.0 * (t + 5.0).powf(1.2) }
 }
 
 #[cfg(test)]

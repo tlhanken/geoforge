@@ -21,13 +21,17 @@
     dir = root + /crates/bins;
   in {
     geoforge = makeCrate (dir + /geoforge);
-    geoforge_v2 = makeCrate (dir + /geoforge_v2);
+    geoforge-cli = makeCrate (dir + /geoforge-cli);
   };
 
   libs = let
     dir = root + /crates/libs;
   in {
-    types = makeCrate (dir + /types);
+    geoforge-core = makeCrate (dir + /geoforge-core);
+    geoforge-surface = makeCrate (dir + /geoforge-surface);
+    geoforge-cosmos = makeCrate (dir + /geoforge-cosmos);
+    geoforge-store = makeCrate (dir + /geoforge-store);
+    geoforge-pipeline = makeCrate (dir + /geoforge-pipeline);
   };
 
   allCrates = bins // libs;

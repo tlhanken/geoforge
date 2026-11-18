@@ -260,7 +260,7 @@ pub fn interior_for(seed: Seed, ext: &BodyExterior, flux_w_m2: f64) -> BodyInter
                 Shell { kind: ShellKind::Crust, phase: Phase::Solid, thickness_km: crust, composition: Composition::from_weights(&[(Species::Basalt, 0.6), (Species::Granite, 0.4)]), pressure_bar: None },
             ];
             if temperate && ext.mass_kg > 0.3 * EARTH_MASS_KG {
-                shells.push(Shell { kind: ShellKind::Ocean, phase: Phase::Liquid, thickness_km: d.range(2.0, 3.3), composition: Composition::single(Species::Water), pressure_bar: None });
+                shells.push(Shell { kind: ShellKind::Ocean, phase: Phase::Liquid, thickness_km: d.range(2.35, 2.9), composition: Composition::single(Species::Water), pressure_bar: None });
                 shells.push(Shell {
                     kind: ShellKind::Atmosphere,
                     phase: Phase::Gas,

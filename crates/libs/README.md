@@ -1,31 +1,22 @@
 # Geoforge v2 libraries
 
-## Layout
+| Crate | Role | Depends on |
+|---|---|---|
+| `geoforge-core` | Data only: keys, seeds, geometry, the `Grid` trait and `EquirectGrid`, the five shapes (`Table`, `Field`, `Partition`, `Network`, `Timeline`), body and system types, surface entity types, product ids, sources, `Generator` trait | serde |
+| `geoforge-cosmos` | Thin cosmology: one solar system per seed, and the `BodyContext` handoff for its focus world | core |
+| `geoforge-surface` | The surface layers as `Generator`s: tectonics, geology, elevation, climate, hydrology, biomes | core |
+| `geoforge-store` | The world directory: manifest, lossless product storage with content hashes, edit views (PNG + world file + sidecar), patches, preview renders | core |
+| `geoforge-pipeline` | Plan, provenance, incremental generation, export/import/reset, realism stats | all of the above |
 
-| Crate | Role |
-|-------|------|
-| `geoforge-types` | Layer structs, enums, seeds (no generation) |
-| `stage1_universe` … `stage5_planetary_body` | One `generate()` per pipeline step |
-| `geoforge-export` | Run stages 1–5, query helpers, JSON/text reports |
-| `Materials` | Legacy materials data (not in workspace yet) |
+Binaries: `crates/bins/geoforge-cli` (`geoforge-v2`) and `crates/bins/geoforge` (v1, kept as
+the reference for parity tests).
 
-Empty directories `stage6_tectonics`, `stage7_geologic_domains`, `stage8_heightmap` are placeholders for the planetary surface pipeline.
+Rules:
 
-## Naming
+- `geoforge-core` has no algorithms and no I/O.
+- Surface layers see a `BodyContext` and earlier products, never cosmology.
+- Algorithms ask a `Grid` for positions, areas and neighbours; they never use pixel x/y, so a
+  Goldberg grid can be added without touching them.
+- Only `geoforge-store` reads or writes files.
 
-Folder `stageN_*` follows **pipeline layer order** (see `PipelineLayerId`), not the old v1 “Stage 1 = tectonics” README wording.
-
-| Folder | `PipelineLayerId` |
-|--------|-------------------|
-| `stage1_universe` | `universe` |
-| `stage2_supercluster` | `supercluster` |
-| `stage3_galaxy` | `galaxy` |
-| `stage4_solar_system` | `solar_system` |
-| `stage5_planetary_body` | `planetary_body` |
-| `stage6_tectonics` | `tectonics` (future) |
-
-## Dependency rule
-
-Each stage crate depends only on `geoforge-types` and (for stage 4→5) the prior stage crate when shared helpers are needed (`stage4` → `stage3::marker_position`).
-
-`geoforge-export` may depend on all stage crates to orchestrate and export; bins depend on `geoforge-export` + `geoforge-types`.
+See `docs/V2_PIPELINE.md` for the user guide.
