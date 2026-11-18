@@ -87,3 +87,73 @@ fn smoothstep(t: f64) -> f64 {
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
     a + (b - a) * t
 }
+
+/// Value noise with a well-mixed lattice hash and quintic fade, for terrain detail.
+#[derive(Debug, Clone, Copy)]
+pub struct TerrainNoise {
+    pub seed: u64,
+}
+
+impl TerrainNoise {
+    #[must_use]
+    pub fn new(seed: u64) -> Self {
+        Self { seed }
+    }
+
+    fn hash(&self, x: i64, y: i64, z: i64) -> f64 {
+        let h = geoforge_core::seed::mix(
+            self.seed ^ geoforge_core::seed::mix((x as u64).wrapping_mul(0x9E37_79B9) ^ geoforge_core::seed::mix((y as u64).wrapping_mul(0x85EB_CA6B) ^ (z as u64).wrapping_mul(0xC2B2_AE35))),
+        );
+        (h >> 11) as f64 / (1u64 << 52) as f64 - 1.0
+    }
+
+    fn value(&self, x: f64, y: f64, z: f64) -> f64 {
+        let (x0, y0, z0) = (x.floor(), y.floor(), z.floor());
+        let (fx, fy, fz) = (x - x0, y - y0, z - z0);
+        let q = |t: f64| t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+        let (sx, sy, sz) = (q(fx), q(fy), q(fz));
+        let (ix, iy, iz) = (x0 as i64, y0 as i64, z0 as i64);
+        let mut acc = [0.0; 8];
+        for (i, a) in acc.iter_mut().enumerate() {
+            let dx = (i & 1) as i64;
+            let dy = ((i >> 1) & 1) as i64;
+            let dz = ((i >> 2) & 1) as i64;
+            *a = self.hash(ix + dx, iy + dy, iz + dz);
+        }
+        let l = |a: f64, b: f64, t: f64| a + (b - a) * t;
+        let x00 = l(acc[0], acc[1], sx);
+        let x10 = l(acc[2], acc[3], sx);
+        let x01 = l(acc[4], acc[5], sx);
+        let x11 = l(acc[6], acc[7], sx);
+        l(l(x00, x10, sy), l(x01, x11, sy), sz)
+    }
+
+    /// Fractal noise in about `[-1, 1]` on the sphere; `freq` is in cycles per radian.
+    #[must_use]
+    pub fn fbm(&self, p: UnitVec3, freq: f64, octaves: u32) -> f64 {
+        let (mut f, mut amp, mut sum, mut norm) = (freq, 1.0, 0.0, 0.0);
+        for o in 0..octaves {
+            let off = f64::from(o) * 17.31;
+            sum += amp * self.value(p.x * f + off, p.y * f - off, p.z * f + off * 0.5);
+            norm += amp;
+            amp *= 0.5;
+            f *= 2.03;
+        }
+        sum / norm
+    }
+
+    /// Ridged fractal noise in `[0, 1]`: sharp crests, like mountain ranges.
+    #[must_use]
+    pub fn ridged(&self, p: UnitVec3, freq: f64, octaves: u32) -> f64 {
+        let (mut f, mut amp, mut sum, mut norm) = (freq, 1.0, 0.0, 0.0);
+        for o in 0..octaves {
+            let off = f64::from(o) * 9.71 + 3.3;
+            let v = 1.0 - self.value(p.x * f + off, p.y * f + off, p.z * f - off).abs();
+            sum += amp * v * v;
+            norm += amp;
+            amp *= 0.5;
+            f *= 2.07;
+        }
+        sum / norm
+    }
+}

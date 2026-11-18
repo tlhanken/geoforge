@@ -16,13 +16,14 @@ pub enum CrustMode {
     /// v1's rule: plates in the smallest `continental_percentile` by area are continental.
     PlateSize { continental_percentile: f64 },
     /// Continental crust covers about `target_fraction` of the surface, assembled from whole
-    /// plates (smallest-first per v1, then by size) until the target is reached.
+    /// plates (never the largest; mid-sized plates preferred) until the target is reached.
+    /// Earth: ~40% continental crust, ~29% land.
     TargetFraction { target_fraction: f64 },
 }
 
 impl Default for CrustMode {
     fn default() -> Self {
-        CrustMode::TargetFraction { target_fraction: 0.40 }
+        CrustMode::TargetFraction { target_fraction: 0.38 }
     }
 }
 
@@ -167,7 +168,7 @@ pub fn crust_age(
                         age[i] as f32
                     } else {
                         // No ridge on this plate: old ocean, oldest in the middle.
-                        (60.0 + 120.0 * rel) as f32
+                        (30.0 + 90.0 * rel) as f32
                     }
                 }
                 CrustType::Continental => (400.0 + 2600.0 * rel.powf(0.7)) as f32,

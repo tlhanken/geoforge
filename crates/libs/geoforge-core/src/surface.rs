@@ -129,6 +129,9 @@ pub struct Province {
     /// Age of the province's formation, Ma (for the timeline and elevation decay).
     #[serde(default)]
     pub age_ma: f64,
+    /// A defining point: a hotspot's active end, a LIP's or shield's centre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<UnitVec3>,
 }
 
 category!(Biome {
