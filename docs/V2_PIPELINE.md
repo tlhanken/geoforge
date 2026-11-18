@@ -6,7 +6,7 @@ downstream then regenerates from your version.
 
 ```text
 cosmology (thin: one solar system)  →  BodyContext  →  surface layers  →  (refinement, later)
-                                                   tectonics → geology → elevation → climate → hydrology → biomes
+                                  tectonics → geology → elevation → circulation → climate → hydrology → biomes
 ```
 
 ## Quick start
@@ -15,7 +15,7 @@ cosmology (thin: one solar system)  →  BodyContext  →  surface layers  →  
 cargo build --release -p geoforge-cli          # binary: target/release/geoforge-v2
 
 geoforge-v2 new worlds/demo --seed 42          # a solar system and its focus world
-geoforge-v2 generate worlds/demo --render      # ~25 s at 2048×1024; previews in worlds/demo/renders
+geoforge-v2 generate worlds/demo --render      # ~40 s at 2048×1024; previews in worlds/demo/renders
 geoforge-v2 stats worlds/demo                  # summary numbers next to Earth's
 ```
 
@@ -61,9 +61,10 @@ Changing one makes exactly that layer and everything after it stale.
 | Layer | Products | Shape |
 |---|---|---|
 | tectonics | `plates`, `crust_type`, `crust_age`, `tectonic_events` | partition, field, field, timeline |
-| geology | `provinces`, `geology_events` | partition, timeline |
+| geology | `provinces`, `geology_events`, `lithology` (14 rock classes), `rock_age` (Ma) | partition, timeline, field, field |
 | elevation | `elevation` (m above sea level) | field |
-| climate | `temperature` (°C), `temperature_range` (warmest − coldest month, °C), `precipitation` (mm/yr) | fields |
+| circulation | `wind_jan`, `wind_jul` (m/s), `ocean_currents` (m/s), `sst_anomaly` (°C) | vector fields, field |
+| climate | `temperature` (°C), `temperature_range` (warmest − coldest month, °C), `precipitation` (mm/yr), `precipitation_warm_share` (share in the warm half-year) | fields |
 | hydrology | `rivers`, `lakes`, `watersheds` | network, partition, partition |
 | biomes | `biome` | field |
 
@@ -83,7 +84,8 @@ Edit views:
 | Product kind | View |
 |---|---|
 | Continuous field | 16-bit greyscale PNG; `value = offset + scale × pixel` (range in the sidecar; elevation −12 000 … 12 000 m) |
-| Category field (crust type, biome) | RGB PNG in the category palette; off-palette pixels (anti-aliasing) snap to the nearest colour |
+| Vector field (winds, currents) | 16-bit RGB PNG: red = eastward, green = northward, each `offset + scale × channel` |
+| Category field (crust type, lithology, biome) | RGB PNG in the category palette; off-palette pixels (anti-aliasing) snap to the nearest colour |
 | Partition (plates, provinces, lakes, watersheds) | RGB PNG, one colour per key, black = none, plus `<p>.table.json` (key, colour, row). Add a region by adding a row with a new key and colour |
 | Timeline, network | The JSON document |
 
@@ -118,24 +120,38 @@ product's randomness. `seed <dir> <product>` prints it.
 
 ## Models (short)
 
-- **Tectonics**: v1's electrostatic plate seeding, domain warp and island removal (identical
-  output for v1 seeds), Euler-pole motion, per-cell boundary classification, crust age from
-  ridge distance, inferred event timeline.
-- **Geology**: v1's 20 province types with the documented fixes.
+- **Tectonics**: v1's electrostatic plate seeding (power-law charges), now with each cell
+  assigned by distance ÷ charge^0.22 so a seed's charge sets its plate's size
+  (`size_weighting = 0` gives v1's plates exactly); domain warp and island removal;
+  Euler-pole motion, per-cell boundary classification, crust age from ridge distance.
+  Continents are embedded in plates with ocean floor to their passive margins; the largest
+  plate and about 30% of the rest are oceanic.
+- **Geology**: v1's 20 province types (collision belts now swell and pinch along their
+  length), plus lithology: each province kind has a rock mix (craton: basement, greenstone,
+  granite; platform: sandstone, limestone, salt; orogen: metamorphic core, granite,
+  deformed sediment, ophiolite; arc: volcanics and plutons…) picked by smooth noise, with
+  rock ages from the province's history.
 - **Elevation**: GDH1 ocean depth from crust age, continental freeboard with plateaus,
   province relief, shelves and slopes planed to sea level, sea level from the ocean's volume,
-  long-term sediment fill of closed basins (rifts excepted).
+  then stream-power erosion (Braun & Willett implicit scheme) with erodibility from
+  lithology and uplift in active belts: rivers cut dendritic valleys while ranges stay high.
+- **Circulation**: January and July winds (Hadley/Ferrel/polar cells scaled by rotation,
+  seasonal ITCZ, monsoon, subtropical highs over each ocean basin); wind-driven ocean gyres
+  (Sverdrup interior, Stommel western boundary currents, Ekman drift, equatorial currents,
+  circumpolar current); SST anomaly from currents crossing the temperature gradient, carried
+  downstream, plus coastal upwelling.
 - **Climate**: zonal energy balance with ice–albedo feedback and a carbonate–silicate
-  thermostat; seasons from obliquity and eccentricity; Hadley/Ferrel/polar winds scaled by
-  rotation, with seasonal ITCZ and monsoon flow; a maritime-air tracer for continentality;
-  water vapour carried by the winds, raining out where air rises or cools, recycled over land;
-  global precipitation from a water budget; lapse rate and relief on the fine grid.
+  thermostat; seasons from obliquity and eccentricity; continentality and current-warmed air
+  carried by the winds; water vapour carried by each season's winds, raining out where air
+  rises or cools (storm tracks follow the seasons), recycled over land; global
+  precipitation from a water budget; lapse rate and relief on the fine grid.
 - **Hydrology**: Budyko (Fu) runoff; priority-flood drainage with jittered routing across
   flats; lakes from each depression's water balance (open where overflowing and kept open by
   rifting, depth or glaciation; endorheic and shrunk to balance where not); arid channel
   losses; Strahler-ordered rivers; watersheds by terminal outlet.
-- **Biomes**: Köppen thresholds (10 °C tree line, 18 °C tropics, temperature-scaled aridity)
-  and Whittaker's rainfall steps, alpine by altitude, wetlands on flat floodplains.
+- **Biomes**: Köppen thresholds (10 °C tree line, 18 °C tropics, aridity threshold that
+  depends on temperature and rain seasonality, dry-summer Mediterranean) and Whittaker's
+  rainfall steps, alpine by altitude, wetlands on flat floodplains.
 
 ## Realism status
 

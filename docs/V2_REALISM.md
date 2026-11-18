@@ -12,88 +12,71 @@ Six worlds at 2048×1024 (about 18 km cells at the equator), generated with
 | `s1234` | Vivi IV: 6278 km, 1.02×, 1.19 bar, day 36.8 h, obliquity 28.9° |
 | `s99` | Shulor III: 6344 km, 0.91×, 1.46 bar, day 20.5 h, obliquity 29.1° |
 
-Generation takes 20–30 s per world on one machine (tectonics 5 s, geology 4 s, elevation 8 s,
-climate 3 s, hydrology 1 s, biomes <0.1 s). Editing elevation and regenerating takes ~12 s.
+A world takes about 40 s (tectonics 7 s, geology 7 s, elevation with erosion 17 s,
+circulation 1 s, climate 5 s, hydrology 2 s, biomes <0.1 s).
 
 ## Numbers
 
 | Quantity | earth42 | s2837 | s42 | s7 | s1234 | s99 | Earth |
 |---|---|---|---|---|---|---|---|
-| Land fraction | 0.35 | 0.32 | 0.26 | 0.37 | 0.34 | 0.30 | 0.29 |
-| Mean land elevation, m | 924 | 708 | 657 | 1292 | 870 | 954 | 840 |
-| Land above 1000 m | 0.27 | 0.19 | 0.12 | 0.62 | 0.22 | 0.21 | 0.27 |
-| Mean ocean depth, m | 4004 | 3918 | 3713 | 3746 | 3874 | 3945 | 3680 |
-| Global mean temperature, °C | 14.0 | 10.6 | 10.7 | 10.9 | 16.1 | 13.1 | 14.5 |
-| Equator (5°S–5°N), °C | 25.6 | 21.6 | 21.2 | 20.7 | 25.7 | 20.1 | 26.5 |
-| 40–50°N, °C | 8.9 | 5.9 | 8.5 | 5.6 | 12.0 | 9.4 | 10 |
-| 55–65°N, °C | −4.8 | −4.3 | −4.6 | −2.3 | 3.9 | 2.6 | 0.5 |
-| Annual range, land 40–60°, °C | 32.7 | 24.6 | 23.0 | 30.6 | 42.9 | 27.2 | ~28 |
-| Annual range, ocean 40–60°, °C | 5.9 | 4.9 | 3.9 | 5.4 | 7.1 | 6.5 | ~7 |
-| Global precipitation, mm/yr | 997 | 896 | 943 | 899 | 1065 | 1004 | 1000 |
-| Land precipitation, mm/yr | 807 | 596 | 1021 | 666 | 968 | 968 | 780 |
-| Ocean precipitation, mm/yr | 1097 | 1039 | 915 | 1036 | 1113 | 1019 | 1100 |
-| Land drier than 250 mm/yr | 0.25 | 0.44 | 0.36 | 0.46 | 0.31 | 0.22 | ~0.2 |
-| Land wetter than 2000 mm/yr | 0.07 | 0.05 | 0.13 | 0.09 | 0.11 | 0.08 | ~0.11 |
-| Precipitation 5°S–10°N, mm/yr | 1835 | 1739 | 2000 | 1377 | 1802 | 1469 | ~2000 |
-| Precipitation 40–55°N, mm/yr | 729 | 531 | 716 | 823 | 542 | 1120 | ~1000 |
-| Precipitation 70–90°N, mm/yr | 106 | 201 | 195 | 209 | 414 | 458 | ~250 |
-| River discharge to the sea, km³/yr | 51 900 | 30 200 | 53 300 | 51 100 | 64 300 | 66 100 | 37 000 |
-| Largest river, m³/s | 71 100 | 33 100 | 43 600 | 255 200 | 54 200 | 60 700 | 209 000 |
-| Lakes over 10 000 km² | 26 | 3 | 13 | 23 | 17 | 35 | 16 |
-| Lake area / land | 0.007 | 0.002 | 0.013 | 0.007 | 0.006 | 0.008 | 0.018 |
-| Endorheic land | 0.03 | 0.14 | 0.14 | 0.22 | 0.07 | 0.03 | 0.18 |
-| Largest plate, of surface | 0.12 | 0.12 | 0.09 | 0.15 | 0.12 | 0.13 | 0.20 |
-
-Biomes, share of land, earth42 vs Earth: ice sheet 0.03 / 0.10 (no polar continent in this
-world), tundra 0.06 / 0.06, boreal forest 0.15 / 0.11, temperate forest 0.16 / 0.08, temperate
-grassland 0.22 / 0.08, Mediterranean 0.003 / 0.02, hot desert 0.04 / 0.14, cold desert
-0.06 / 0.05, savanna 0.13 / 0.15, tropical rainforest 0.03 / 0.07, tropical seasonal forest
-0.04 / 0.05.
+| Largest plate, of surface | 0.25 | 0.22 | 0.18 | 0.24 | 0.25 | 0.24 | 0.20 |
+| Seven largest plates | 0.81 | 0.81 | 0.82 | 0.85 | 0.83 | 0.81 | 0.81 |
+| Land fraction | 0.31 | 0.23 | 0.28 | 0.30 | 0.30 | 0.31 | 0.29 |
+| Mean land elevation, m | 804 | 1482 | 736 | 1137 | 773 | 940 | 840 |
+| Land above 1000 m | 0.29 | 0.76 | 0.15 | 0.65 | 0.15 | 0.23 | 0.27 |
+| Highest point, m | 8171 | 10682 | 9549 | 9629 | 10472 | 10501 | 8849 |
+| Mean ocean depth, m | 3773 | 3465 | 3811 | 3357 | 3684 | 4010 | 3680 |
+| Surface rock: Cenozoic / Precambrian | 0.24 / 0.38 | 0.28 / 0.34 | 0.23 / 0.38 | 0.25 / 0.36 | 0.27 / 0.39 | 0.29 / 0.38 | 0.28 / 0.32 |
+| Global mean temperature, °C | 14.4 | 9.5 | 10.4 | 11.2 | 16.4 | 13.0 | 14.5 |
+| Equator (5°S–5°N), °C | 26.1 | 21.3 | 22.1 | 21.2 | 25.3 | 22.1 | 26.5 |
+| 40–50°N, °C | 8.7 | 7.5 | 5.3 | 7.2 | 12.1 | 9.6 | 10 |
+| 55–65°N, °C | −2.2 | −3.9 | −8.1 | −5.9 | 4.9 | 2.8 | 0.5 |
+| Annual range, land 40–60°, °C | 32.4 | 29.5 | 22.6 | 26.8 | 40.6 | 34.5 | ~28 |
+| Annual range, ocean 40–60°, °C | 5.9 | 4.4 | 4.3 | 5.4 | 7.2 | 6.3 | ~7 |
+| Global precipitation, mm/yr | 1033 | 965 | 928 | 961 | 1097 | 994 | 1000 |
+| Land precipitation, mm/yr | 847 | 765 | 617 | 990 | 1088 | 801 | 780 |
+| Land drier than 250 mm/yr | 0.27 | 0.46 | 0.40 | 0.25 | 0.13 | 0.22 | ~0.2 |
+| Precipitation 5°S–10°N, mm/yr | 2099 | 1882 | 2035 | 1706 | 1851 | 1344 | ~2000 |
+| Precipitation 40–55°N, mm/yr | 654 | 694 | 543 | 785 | 603 | 962 | ~1000 |
+| River discharge to the sea, km³/yr | 47 400 | 41 900 | 25 000 | 68 500 | 56 800 | 43 000 | 37 000 |
+| Rivers over 10 000 m³/s | 24 | 21 | 10 | 39 | 25 | 25 | 8 |
+| Lakes over 10 000 km² | 7 | 5 | 7 | 3 | 8 | 15 | 16 |
+| Endorheic land | 0.08 | 0.00 | 0.06 | 0.00 | 0.02 | 0.14 | 0.18 |
+| Mediterranean biome, of land | 0.011 | 0.009 | 0.012 | 0.018 | 0.007 | 0.008 | 0.02 |
+| Hot desert, of land | 0.06 | 0.01 | 0.05 | 0.04 | 0.07 | 0.06 | 0.14 |
+| Temperate grassland, of land | 0.27 | 0.19 | 0.24 | 0.23 | 0.28 | 0.37 | 0.08 |
 
 The generated worlds are not Earth: most get 0.88–0.93× Earth's starlight and differ in
 size, air pressure, day length and tilt, so cooler means and different zonal values are
-expected. The weathering thermostat (default 0.75) keeps them habitable rather than snowballs.
+expected.
 
-## Edit check
-
-`earth42` with a 2.6 km coastal range painted into the elevation view (2437 cells, imported
-as a patch). Within ~12 s, climate, rivers and biomes follow:
-
-| Band | Before, mm/yr | After, mm/yr |
-|---|---|---|
-| Windward coast | 2216 | 2738 |
-| On the range | 1792 | 5389 |
-| Leeward, first ~500 km | 1140 | 525 |
-
-Boreal forest in the new rain shadow becomes grassland; the peaks become alpine.
+Drainage networks: on the Earth-like world at 1024×512, the exponent of the drainage-area
+distribution (P(A ≥ a) ∝ a^−β) went from 0.66 without erosion to 0.54 with it; Earth's
+networks give about 0.43–0.45.
 
 ## What matches
 
-- Ocean depth from crust age, land fraction, hypsometry (for Earth-like water amounts).
-- Zonal temperatures within ~2 °C of Earth from the equator to 50°; continental vs oceanic
-  seasonal range; global precipitation, land/ocean split and the ITCZ.
-- Rain shadows, wet windward coasts, dry continental interiors and subtropical deserts.
-- Rivers, lakes and drainage basins of plausible size and count; endorheic basins appear in
-  dry interiors; lakes persist only where rifting, depth or glaciation keep basins closed.
+- Plate sizes (largest ~0.2–0.25, seven largest ~0.81–0.85); continents inside plates with
+  passive margins.
+- Ocean depth by crust age, land fraction and hypsometry for Earth-like water; surface rock
+  ages close to Earth's mix.
+- Rivers carve dendritic valleys; mountain belts stay high.
+- Western boundary currents run warm and eastern margins cold with upwelling; zonal
+  temperatures within ~2 °C of Earth from the equator to 50°; land/ocean seasonal ranges;
+  global rainfall and the ITCZ; summer-dry west coasts in the subtropics (Mediterranean
+  ~1–2% of land).
 
 ## Known gaps
 
-1. **Plates are too uniform in size** (largest 9–15% of the surface vs Earth's 20%; seven
-   largest 55–65% vs 84%). v1's electrostatic seeding is unweighted. Fix: size-weighted
-   seeding or plate merging; it changes plates for every v1 seed, so it is a deliberate
-   decision.
-2. **High latitudes run cold** (55–65°N about 4 °C below Earth) and subtropics about 3 °C:
-   there is no ocean heat transport by currents (no Gulf Stream), and hot deserts are
-   under-represented (0.04 vs 0.14 of land) partly because of it.
-3. **Mid-latitude continental interiors are dry** (40–55°N about 730 vs 1000 mm on the
-   Earth-like world) and **polar precipitation is low** on cold worlds. Moisture transport is
-   a two-season, one-layer model; no frontal cyclones or subtropical-high gyres.
-4. **Too many large rivers** (rivers over 10 000 m³/s: 18–39 vs 8; runoff about 20% above
-   Earth's per land area). Continents here are bigger and less broken up than Earth's.
-5. **Closed basins depend on terrain**: endorheic land is 3–22% (Earth 18%) and lake area
-   0.2–1.5% (Earth 1.8%, much of it lakes too small for 18 km cells).
-6. **Province shapes**: wide collision orogens can have straight edges where their boundary
-   runs straight, giving rectangular plateaus.
-7. **Mediterranean biome is rare**: the climate products are annual, so summer drought is
-   approximated from latitude, range and rainfall.
-8. Elevation has no fluvial erosion (valleys are not carved); sediment fill stands in for it.
+1. **Mid-latitude interiors are dry and grassland is over-represented** (0.19–0.37 of land
+   vs 0.08); hot deserts under-represented (0.01–0.07 vs 0.14) as subtropics run ~2 °C cool.
+2. **Too many large rivers** (10–39 over 10 000 m³/s vs 8): continents here are bigger and
+   less broken up than Earth's, and runoff is somewhat high.
+3. **Drainage networks branch less than Earth's** (0.54 vs ~0.44); longer erosion flattens
+   the land without improving it, so the remaining gap is likely resolution.
+4. **Some worlds are very high** (s2837: 76% of land above 1000 m): a broad plateau term can
+   lift a whole large continent. `plateau_m` controls it.
+5. **Ocean currents are a diagnostic gyre model**, not a simulation: zonal flow comes from wind
+   drift; currents do not exchange between basins except via the circumpolar band.
+6. **Closed basins depend on terrain** (endorheic land 0–14% vs Earth's 18%).
+7. Elevation now takes ~17 s at 2048×1024 because erosion reroutes water eight times.

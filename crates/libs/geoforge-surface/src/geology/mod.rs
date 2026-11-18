@@ -162,6 +162,8 @@ struct B<'a> {
     regions: Vec<(Vec<Cell>, Province)>,
     events: Vec<Event>,
     rng: StdRng,
+    /// Smooth noise for varying belt widths along their length.
+    width_noise: crate::noise::TerrainNoise,
 }
 
 impl B<'_> {
@@ -398,8 +400,12 @@ impl B<'_> {
                 continue;
             }
             let width = pc::rate_scaled(pc::COLLISION_BASE_WIDTH_KM, pc::COLLISION_WIDTH_FACTOR, pc::COLLISION_MAX_MULTIPLIER, s.rate_cm_yr);
-            let m = self.reach(&s.cells, width / 2.0, |c| self.crust[c as usize] == CrustType::Continental);
-            let cells = Self::cells_of(&m, |_, _| true);
+            // Belts swell and pinch along their length (half to one and a half times the
+            // nominal width), so their edges are not parallel to a straight boundary.
+            let m = self.reach(&s.cells, width * 0.75, |c| self.crust[c as usize] == CrustType::Continental);
+            let wn = &self.width_noise;
+            let grid = self.grid;
+            let cells = Self::cells_of(&m, |c, d| d <= width / 2.0 * (1.0 + 1.6 * wn.fbm(grid.center(c), 6.0, 3)).clamp(0.5, 1.5));
             let age = (1500.0 / (s.rate_cm_yr * 10.0).max(5.0)).clamp(5.0, 80.0);
             self.push(cells, pc::collision_orogen(s.rate_cm_yr, width), Some(i), age);
         }
@@ -626,7 +632,7 @@ pub fn build(
     let edges: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|n| owner[n as usize] != owner[c as usize])).collect();
     let edge_dist_km: Vec<f64> = distance_field(grid, edges, std::f64::consts::PI, |_| true).into_iter().map(|d| d * radius_km).collect();
 
-    let mut b = B { grid, owner, crust, age, r: radius_km, plates, info, edge_dist_km, regions: vec![], events: vec![], rng: StdRng::seed_from_u64(seed) };
+    let mut b = B { grid, owner, crust, age, r: radius_km, plates, info, edge_dist_km, regions: vec![], events: vec![], rng: StdRng::seed_from_u64(seed), width_noise: crate::noise::TerrainNoise::new(seed ^ 0x0B1D_7A11) };
 
     if p.oceanic {
         b.oceanic_base();

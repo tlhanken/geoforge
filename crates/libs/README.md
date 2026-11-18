@@ -4,7 +4,7 @@
 |---|---|---|
 | `geoforge-core` | Data only: keys, seeds, geometry, the `Grid` trait and `EquirectGrid`, the five shapes (`Table`, `Field`, `Partition`, `Network`, `Timeline`), body and system types, surface entity types, product ids, sources, `Generator` trait | serde |
 | `geoforge-cosmos` | Thin cosmology: one solar system per seed, and the `BodyContext` handoff for its focus world | core |
-| `geoforge-surface` | The surface layers as `Generator`s: tectonics, geology, elevation, climate, hydrology, biomes | core |
+| `geoforge-surface` | The surface layers as `Generator`s: tectonics, geology (with lithology), elevation (with erosion), circulation, climate, hydrology, biomes | core |
 | `geoforge-store` | The world directory: manifest, lossless product storage with content hashes, edit views (PNG + world file + sidecar), patches, preview renders | core |
 | `geoforge-pipeline` | Plan, provenance, incremental generation, export/import/reset, realism stats | all of the above |
 
