@@ -45,8 +45,6 @@ pub struct ClimateParams {
     pub global_precip_mm: Option<f64>,
     /// How far maritime air reaches inland, km.
     pub maritime_reach_km: f64,
-    /// Strength of the summer monsoon flow toward continents (0 = none).
-    pub monsoon: f64,
     /// Rain-out rate per atmosphere step (sets how fast air dries inland).
     pub rainout: f64,
     /// Carbonate–silicate thermostat: the fraction of a radiative-forcing difference from
@@ -64,7 +62,6 @@ impl Default for ClimateParams {
             heat_transport: 3.2,
             global_precip_mm: None,
             maritime_reach_km: 1200.0,
-            monsoon: 0.7,
             rainout: 0.06,
             weathering_feedback: 0.75,
         }
@@ -200,9 +197,9 @@ impl AtmoGrid {
     }
 }
 
-/// Circulation of one season.
+/// Hadley, Ferrel and polar cells of one season.
 #[derive(Debug, Clone, Copy)]
-pub struct Circulation {
+pub struct Cells {
     /// Latitude of the ITCZ, degrees.
     pub itcz: f64,
     /// Width of each Hadley cell, degrees from the ITCZ.
@@ -211,7 +208,7 @@ pub struct Circulation {
     pub ferrel: f64,
 }
 
-impl Circulation {
+impl Cells {
     #[must_use]
     pub fn for_body(rotation_h: f64, obliquity: f64, season: f64) -> Self {
         // Hadley width ~ Ω^(-2/3) (GCM scaling); Earth: 30°.
@@ -251,8 +248,10 @@ impl Circulation {
         let itcz = 0.9 * (-(rel / 7.0).powi(2)).exp();
         let high = 0.65 * (-((rel - self.hadley) / 8.0).powi(2)).exp();
         // Mid-latitude storm tracks, and frequent frontal precipitation poleward of them.
-        let storm_lat = (self.hadley + 18.0).min(self.ferrel);
-        let storm = 0.8 * (-((lat.abs() - storm_lat) / 14.0).powi(2)).exp();
+        // The storm tracks follow the sun: poleward in summer, equatorward in winter, bringing
+        // winter rain to the subtropical west coasts.
+        let storm_lat = ((self.hadley + 18.0).min(self.ferrel) + 1.2 * self.itcz * lat.signum()).max(self.hadley);
+        let storm = 0.8 * (-((lat.abs() - storm_lat) / 12.0).powi(2)).exp();
         let subpolar = if lat.abs() > storm_lat { 0.5 } else { 0.0 };
         (1.0 + itcz - high + storm + subpolar).max(0.2)
     }
@@ -278,14 +277,98 @@ pub fn w_sat(t: f64) -> f64 {
 
 pub struct Climate;
 
-/// Coarse fields the moisture model works on.
-struct Atmo {
-    g: AtmoGrid,
-    land: Vec<f64>,
-    elev: Vec<f64>,
+/// The world's surface on the atmosphere grid.
+pub struct Atmo {
+    pub g: AtmoGrid,
+    /// Land fraction per atmosphere cell.
+    pub land: Vec<f64>,
+    /// Mean land surface height (sea counts as 0), m.
+    pub elev: Vec<f64>,
 }
 
-fn semi_lagrangian(g: &AtmoGrid, wind: &[(f64, f64)], f: &[f64], speed_floor: f64) -> Vec<f64> {
+impl Atmo {
+    /// Aggregate a world-grid elevation onto an atmosphere grid.
+    #[must_use]
+    pub fn from_world(grid: &dyn geoforge_core::grid::Grid, elev: &[f32], res_deg: f64) -> Self {
+        let g = AtmoGrid::new(res_deg);
+        let mut sum_e = vec![0.0; g.len()];
+        let mut sum_l = vec![0.0; g.len()];
+        let mut sum_a = vec![0.0; g.len()];
+        for c in grid.cells() {
+            let ll = grid.center(c).to_lat_lon();
+            let i = g.index(ll.lat_deg, ll.lon_deg);
+            let a = grid.area_sr(c);
+            let e = f64::from(elev[c as usize]);
+            sum_e[i] += e.max(0.0) * a;
+            sum_l[i] += if e >= 0.0 { a } else { 0.0 };
+            sum_a[i] += a;
+        }
+        let mut land = vec![0.0; g.len()];
+        let mut elev_c = vec![0.0; g.len()];
+        for i in 0..g.len() {
+            if sum_a[i] > 0.0 {
+                land[i] = sum_l[i] / sum_a[i];
+                elev_c[i] = sum_e[i] / sum_a[i];
+            } else {
+                let (x, y) = (i % g.w, i / g.w);
+                let c = grid.locate(geoforge_core::UnitVec3::from_lat_lon(g.lat(y), g.lon(x)));
+                let e = f64::from(elev[c as usize]);
+                land[i] = if e >= 0.0 { 1.0 } else { 0.0 };
+                elev_c[i] = e.max(0.0);
+            }
+        }
+        Self { g, land, elev: elev_c }
+    }
+
+    /// Area-weighted mean of a world-grid vector field on the atmosphere grid.
+    #[must_use]
+    pub fn vectors_from_world(&self, grid: &dyn geoforge_core::grid::Grid, v: &[[f32; 2]], scale: f64) -> Vec<(f64, f64)> {
+        let g = &self.g;
+        let mut su = vec![0.0; g.len()];
+        let mut sv = vec![0.0; g.len()];
+        let mut sa = vec![0.0; g.len()];
+        for c in grid.cells() {
+            let ll = grid.center(c).to_lat_lon();
+            let i = g.index(ll.lat_deg, ll.lon_deg);
+            let a = grid.area_sr(c);
+            su[i] += f64::from(v[c as usize][0]) * a;
+            sv[i] += f64::from(v[c as usize][1]) * a;
+            sa[i] += a;
+        }
+        (0..g.len())
+            .map(|i| {
+                if sa[i] > 0.0 {
+                    (su[i] / sa[i] / scale, sv[i] / sa[i] / scale)
+                } else {
+                    let (x, y) = (i % g.w, i / g.w);
+                    let c = grid.locate(geoforge_core::UnitVec3::from_lat_lon(g.lat(y), g.lon(x))) as usize;
+                    (f64::from(v[c][0]) / scale, f64::from(v[c][1]) / scale)
+                }
+            })
+            .collect()
+    }
+
+    /// Area-weighted mean of a world-grid scalar over sea cells only (0 where no sea).
+    #[must_use]
+    pub fn sea_mean_from_world(&self, grid: &dyn geoforge_core::grid::Grid, f: &[f32], elev: &[f32]) -> Vec<f64> {
+        let g = &self.g;
+        let mut s = vec![0.0; g.len()];
+        let mut a = vec![0.0; g.len()];
+        for c in grid.cells() {
+            if elev[c as usize] >= 0.0 {
+                continue;
+            }
+            let ll = grid.center(c).to_lat_lon();
+            let i = g.index(ll.lat_deg, ll.lon_deg);
+            let w = grid.area_sr(c);
+            s[i] += f64::from(f[c as usize]) * w;
+            a[i] += w;
+        }
+        s.iter().zip(&a).map(|(s, a)| if *a > 0.0 { s / a } else { 0.0 }).collect()
+    }
+}
+
+pub(crate) fn semi_lagrangian(g: &AtmoGrid, wind: &[(f64, f64)], f: &[f64], speed_floor: f64) -> Vec<f64> {
     (0..g.len())
         .into_par_iter()
         .map(|i| {
@@ -302,7 +385,7 @@ fn semi_lagrangian(g: &AtmoGrid, wind: &[(f64, f64)], f: &[f64], speed_floor: f6
         .collect()
 }
 
-fn diffuse(g: &AtmoGrid, f: &mut [f64], k: f64) {
+pub(crate) fn diffuse(g: &AtmoGrid, f: &mut [f64], k: f64) {
     let src = f.to_vec();
     for y in 0..g.h {
         for x in 0..g.w {
@@ -318,7 +401,7 @@ fn diffuse(g: &AtmoGrid, f: &mut [f64], k: f64) {
 
 /// Winds for one season: cell pattern plus monsoon flow toward (summer) or away from
 /// (winter) large heated land masses.
-fn winds(a: &Atmo, circ: &Circulation, season: f64, monsoon: f64) -> Vec<(f64, f64)> {
+pub(crate) fn winds(a: &Atmo, circ: &Cells, season: f64, monsoon: f64) -> Vec<(f64, f64)> {
     let g = &a.g;
     let rad = (12.0 / g.res).round().max(1.0) as usize;
     let ls = g.blur(&a.land, rad);
@@ -349,20 +432,24 @@ fn winds(a: &Atmo, circ: &Circulation, season: f64, monsoon: f64) -> Vec<(f64, f
         .collect()
 }
 
-/// Maritime-air fraction carried by the winds (1 over open sea, decaying inland).
-fn maritime(a: &Atmo, wind: &[(f64, f64)], reach_km: f64, radius_km: f64) -> Vec<f64> {
+/// A quantity carried by the winds: over sea it relaxes toward `sea` (25% per step), over
+/// land it decays with distance (`reach_km`). With `sea` = 1 this is the maritime-air
+/// fraction; with the sea-surface temperature anomaly it carries current-warmed or
+/// upwelling-cooled air inland.
+pub(crate) fn carry(a: &Atmo, wind: &[(f64, f64)], reach_km: f64, radius_km: f64, sea: &[f64]) -> Vec<f64> {
     let g = &a.g;
     let step_km = g.res.to_radians() * radius_km;
     let decay = (-step_km / reach_km).exp();
-    let mut m: Vec<f64> = a.land.iter().map(|l| 1.0 - l).collect();
+    let mut m: Vec<f64> = a.land.iter().zip(sea).map(|(l, s)| (1.0 - l) * s).collect();
     for _ in 0..(3.0 * reach_km / step_km).ceil() as usize + 20 {
         let up = semi_lagrangian(g, wind, &m, 0.35);
         m = up
             .iter()
             .zip(&a.land)
-            .map(|(&mu, &l)| {
+            .zip(sea)
+            .map(|((&mu, &l), &s)| {
                 let over_land = mu * decay;
-                let over_sea = mu + (1.0 - mu) * 0.25;
+                let over_sea = mu + (s - mu) * 0.25;
                 l * over_land + (1.0 - l) * over_sea
             })
             .collect();
@@ -373,7 +460,7 @@ fn maritime(a: &Atmo, wind: &[(f64, f64)], reach_km: f64, radius_km: f64) -> Vec
 
 /// One season of the moisture model; returns raw precipitation (mm per step).
 #[allow(clippy::too_many_arguments)]
-fn moisture(a: &Atmo, wind: &[(f64, f64)], circ: &Circulation, temp: &[f64], temp_mean: &[f64], rainout: f64) -> Vec<f64> {
+fn moisture(a: &Atmo, wind: &[(f64, f64)], circ: &Cells, temp: &[f64], temp_mean: &[f64], rainout: f64) -> Vec<f64> {
     let g = &a.g;
     let ws: Vec<f64> = temp.iter().map(|&t| w_sat(t)).collect();
     // Hot continental summers do not stop convective rain: judge humidity against a damped
@@ -447,40 +534,29 @@ fn continentality(is_land: bool, maritime: f64, coast_km: f64) -> f64 {
 }
 
 impl Climate {
-    /// Run the atmosphere on the coarse grid.
-    fn coarse(ctx: &RunContext<'_>, elev: &[f32], p: &ClimateParams) -> Coarse {
+    /// Run the atmosphere on the coarse grid. Winds and the sea-surface temperature anomaly
+    /// come from the circulation layer when present.
+    fn coarse(ctx: &RunContext<'_>, inputs: &Products, elev: &[f32], p: &ClimateParams) -> Coarse {
         let grid = ctx.grid;
         let body = ctx.body;
-        let g = AtmoGrid::new(p.resolution_deg);
         let r = ctx.radius_km();
-        // Aggregate the world grid onto the atmosphere grid.
-        let mut sum_e = vec![0.0; g.len()];
-        let mut sum_l = vec![0.0; g.len()];
-        let mut sum_a = vec![0.0; g.len()];
-        for c in grid.cells() {
-            let ll = grid.center(c).to_lat_lon();
-            let i = g.index(ll.lat_deg, ll.lon_deg);
-            let a = grid.area_sr(c);
-            let e = f64::from(elev[c as usize]);
-            sum_e[i] += e.max(0.0) * a;
-            sum_l[i] += if e >= 0.0 { a } else { 0.0 };
-            sum_a[i] += a;
-        }
-        let mut land = vec![0.0; g.len()];
-        let mut elev_c = vec![0.0; g.len()];
-        for i in 0..g.len() {
-            if sum_a[i] > 0.0 {
-                land[i] = sum_l[i] / sum_a[i];
-                elev_c[i] = sum_e[i] / sum_a[i];
-            } else {
-                let (x, y) = (i % g.w, i / g.w);
-                let c = grid.locate(geoforge_core::UnitVec3::from_lat_lon(g.lat(y), g.lon(x)));
-                let e = f64::from(elev[c as usize]);
-                land[i] = if e >= 0.0 { 1.0 } else { 0.0 };
-                elev_c[i] = e.max(0.0);
-            }
-        }
-        let atmo = Atmo { g, land, elev: elev_c };
+        let atmo = Atmo::from_world(grid, elev, p.resolution_deg);
+        let g = atmo.g;
+        let obl_w = body.exterior.obliquity_deg;
+        let season_winds: Vec<Vec<(f64, f64)>> = match (inputs.wind_jul(), inputs.wind_jan()) {
+            (Some(jul), Some(jan)) => vec![
+                atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S),
+                atmo.vectors_from_world(grid, &jan.values, crate::circulation::WIND_REF_M_S),
+            ],
+            _ => [1.0, -1.0]
+                .into_iter()
+                .map(|season| crate::circulation::season_winds(&atmo, &Cells::for_body(body.exterior.rotation_h, obl_w, season), season, &crate::circulation::CirculationParams::default()))
+                .collect(),
+        };
+        let sst: Vec<f64> = match inputs.sst_anomaly() {
+            Some(a) => atmo.sea_mean_from_world(grid, &a.values, elev),
+            None => vec![0.0; g.len()],
+        };
 
         // 1. Zonal energy balance.
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
@@ -491,10 +567,10 @@ impl Climate {
         let (tz, tmean) = zonal_temperature(&lats, flux, obl, ecc, olr_a, p.heat_transport);
         let swing_z: Vec<f64> = lats.iter().map(|&l| seasonal_swing(flux, l, obl, ecc)).collect();
 
-        // 2–4. Circulation and continentality from annual-mean winds.
-        let annual = Circulation::for_body(body.exterior.rotation_h, obl, 0.0);
-        let wind_annual = winds(&atmo, &annual, 0.0, 0.0);
-        let mar = maritime(&atmo, &wind_annual, p.maritime_reach_km, r);
+        // 2–4. Continentality and current-warmed air from annual-mean winds.
+        let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
+        let mar = carry(&atmo, &wind_annual, p.maritime_reach_km, r, &vec![1.0; g.len()]);
+        let sst_air = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &sst);
         let mut t_sl = vec![0.0; g.len()];
         let mut swing = vec![0.0; g.len()];
         let mut t_season = [vec![0.0; g.len()], vec![0.0; g.len()]];
@@ -506,7 +582,7 @@ impl Climate {
             let cont = continentality(is_land, mar[i], if is_land { 400.0 } else { 0.0 });
             // Interiors at higher latitude are colder than the zonal mean; mild west coasts warmer.
             let hi = (lat.to_radians().sin().abs() - 0.3).max(0.0);
-            let t = tz[y] - 7.0 * (cont - 0.35) * hi * atmo.land[i].max(0.3);
+            let t = tz[y] - 7.0 * (cont - 0.35) * hi * atmo.land[i].max(0.3) + sst_air[i];
             t_sl[i] = t;
             swing[i] = swing_z[y] * 0.10;
             let range = swing[i].abs() * (0.13 + 0.87 * cont);
@@ -520,9 +596,8 @@ impl Climate {
         // 5. Moisture, two solstice seasons.
         let mut seasons = Vec::new();
         for (k, season) in [1.0, -1.0].into_iter().enumerate() {
-            let circ = Circulation::for_body(body.exterior.rotation_h, obl, season);
-            let w = winds(&atmo, &circ, season, p.monsoon);
-            seasons.push(moisture(&atmo, &w, &circ, &t_season[k], &t_mean_here, p.rainout));
+            let circ = Cells::for_body(body.exterior.rotation_h, obl, season);
+            seasons.push(moisture(&atmo, &season_winds[k], &circ, &t_season[k], &t_mean_here, p.rainout));
         }
         let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
         let precip_jan = seasons.pop().expect("two seasons");
@@ -537,6 +612,9 @@ impl Generator for Climate {
 
     fn needs() -> &'static [ProductId] {
         &[ProductId::Elevation]
+    }
+    fn wants() -> &'static [ProductId] {
+        &[ProductId::WindJan, ProductId::WindJul, ProductId::SstAnomaly]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         if !body.interior.has_solid_surface() {
@@ -556,7 +634,7 @@ impl Generator for Climate {
         let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
         let grid = ctx.grid;
         let r = ctx.radius_km();
-        let co = Self::coarse(ctx, elev, p);
+        let co = Self::coarse(ctx, inputs, elev, p);
         let g = co.grid;
 
         // Fine coast distance (km), land side and sea side.
@@ -683,8 +761,8 @@ mod tests {
 
     #[test]
     fn hadley_cell_scales_with_rotation() {
-        let earth = Circulation::for_body(24.0, 23.0, 0.0);
-        let slow = Circulation::for_body(240.0, 23.0, 0.0);
+        let earth = Cells::for_body(24.0, 23.0, 0.0);
+        let slow = Cells::for_body(240.0, 23.0, 0.0);
         assert!((earth.hadley - 30.0).abs() < 1e-9);
         assert!(slow.hadley > 60.0);
         // Trades in the tropics, westerlies in mid-latitudes.

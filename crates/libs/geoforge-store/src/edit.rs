@@ -528,10 +528,11 @@ pub fn diff(baseline: &ProductData, view: &View) -> Result<Patch> {
             let scale = (hi - lo) / 65535.0;
             let mut out = Vec::new();
             for (c, (b, e)) in f.values.iter().zip(v).enumerate() {
-                let same = (0..2).all(|k| to_u16(f64::from(b[k]), lo, scale) == to_u16(f64::from(e[k]), lo, scale));
-                if !same {
+                // A component whose pixel value is unchanged keeps its exact base value.
+                let changed = [0, 1].map(|k| to_u16(f64::from(b[k]), lo, scale) != to_u16(f64::from(e[k]), lo, scale));
+                if changed[0] || changed[1] {
                     cells.push(c as u32);
-                    out.push([e[0] - b[0], e[1] - b[1]]);
+                    out.push([0, 1].map(|k| if changed[k] { e[k] - b[k] } else { 0.0 }));
                 }
             }
             PatchValues::Delta2(out)

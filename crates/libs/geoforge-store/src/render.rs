@@ -257,7 +257,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
 fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
     let Some(eq) = grid.as_equirect() else { return };
     let (w, h) = (eq.width(), eq.height());
-    let step = (w / 64).max(8);
+    let step = (w / 48).max(10);
     let mut y = step / 2;
     while y < h {
         let mut x = step / 2;
@@ -266,7 +266,7 @@ fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
             let (u, n) = (f64::from(v[c][0]), f64::from(v[c][1]));
             let sp = u.hypot(n);
             if sp > top * 0.03 {
-                let len = (f64::from(step) * 0.45) * (sp / top).clamp(0.3, 1.0);
+                let len = (f64::from(step) * 0.8) * (sp / top).clamp(0.45, 1.0);
                 let (dx, dy) = (u / sp * len, -n / sp * len);
                 let (x0, y0) = (f64::from(x) - dx / 2.0, f64::from(y) - dy / 2.0);
                 let steps = len.ceil() as i32 * 2;

@@ -53,7 +53,7 @@ fn generate_edit_regenerate() {
     // Only elevation and what depends on it rerun; the edit is in the result.
     let plan = pipe::plan(&w).unwrap();
     let stale: Vec<LayerId> = plan.layers.iter().filter(|l| l.needs_run()).map(|l| l.layer).collect();
-    assert_eq!(stale, vec![LayerId::Elevation, LayerId::Climate, LayerId::Hydrology, LayerId::Biomes]);
+    assert_eq!(stale, vec![LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Hydrology, LayerId::Biomes]);
     let (p3, r3) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
     assert_eq!(ran(&r3), stale);
     let (Some(e1), Some(e3)) = (p1.elevation(), p3.elevation()) else { panic!() };

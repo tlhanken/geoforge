@@ -130,3 +130,32 @@ fn partition_paint_with_new_key() {
     let authored = edit::view_to_product(&v, G, &edit::no_fill()).unwrap();
     assert_eq!(authored, out);
 }
+
+#[test]
+fn vector_field_views_round_trip() {
+    let d = tmp("vec");
+    let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
+    let v: Vec<[f32; 2]> = (0..G.cell_count()).map(|i| [((i % 17) as f32 - 8.0) * 1.5, ((i % 11) as f32 - 5.0) * 2.0]).collect();
+    let data = ProductData::WindJul(Field::from_values(G, v));
+    let h = codec::write_canonical(&d, &data, Hash([1; 32])).unwrap();
+    assert_eq!(codec::read_canonical(&d, ProductId::WindJul, G).unwrap(), data);
+    assert_eq!(codec::content_hash(&data).unwrap(), h);
+    edit::export_view(&d, &data, &body).unwrap();
+    let view = edit::read_view(&d, ProductId::WindJul, G).unwrap();
+    let patch = edit::diff(&data, &view).unwrap();
+    assert_eq!(patch.cell_count(), 0);
+    // Turn the wind around in one cell: a two-component delta.
+    let mut img = image::open(d.join("wind_jul.png")).unwrap().into_rgb16();
+    let px = img.get_pixel_mut(5, 5);
+    px.0[0] = 65535 - px.0[0];
+    img.save(d.join("wind_jul.png")).unwrap();
+    let view = edit::read_view(&d, ProductId::WindJul, G).unwrap();
+    let patch = edit::diff(&data, &view).unwrap();
+    assert_eq!(patch.cell_count(), 1);
+    let mut out = data.clone();
+    edit::apply(&mut out, &patch, &edit::no_fill()).unwrap();
+    let (ProductData::WindJul(a), ProductData::WindJul(b)) = (&data, &out) else { unreachable!() };
+    let c = 5 * 64 + 5;
+    assert!((a.values[c][0] + b.values[c][0]).abs() < 0.01, "{:?} {:?}", a.values[c], b.values[c]);
+    assert_eq!(a.values[c][1], b.values[c][1]);
+}

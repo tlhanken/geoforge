@@ -39,12 +39,15 @@ pub struct CellClimate {
     pub precip_mm: f64,
     pub elevation_m: f64,
     pub lat_deg: f64,
+    /// Share of the year's precipitation that falls in the warm half-year (0–1).
+    pub warm_share: f64,
 }
 
-/// Köppen's aridity threshold (mm/yr) for mean temperature `t` (even rainfall).
+/// Köppen's aridity threshold (mm/yr) for mean temperature `t`: higher when rain falls in
+/// the warm season (more of it evaporates), lower when it falls in winter.
 #[must_use]
-pub fn aridity_threshold(t: f64) -> f64 {
-    (20.0 * t + 140.0).max(60.0)
+pub fn aridity_threshold(t: f64, warm_share: f64) -> f64 {
+    (20.0 * t + 140.0 + 140.0 * ((warm_share - 0.5) / 0.2).clamp(-1.0, 1.0)).max(60.0)
 }
 
 /// Classify a land cell.
@@ -62,7 +65,7 @@ pub fn classify(c: &CellClimate, p: &BiomesParams) -> Biome {
     if warm < 10.0 {
         return if high { Biome::Alpine } else { Biome::Tundra };
     }
-    let th = aridity_threshold(c.t_mean);
+    let th = aridity_threshold(c.t_mean, c.warm_share);
     let pr = c.precip_mm;
     if pr < 0.5 * th {
         return if c.t_mean >= 18.0 { Biome::HotDesert } else { Biome::ColdDesert };
@@ -88,8 +91,8 @@ pub fn classify(c: &CellClimate, p: &BiomesParams) -> Biome {
     if semi_arid {
         return if c.t_mean >= 18.0 { Biome::Savanna } else { Biome::TemperateGrassland };
     }
-    let lat = c.lat_deg.abs();
-    if (28.0..46.0).contains(&lat) && cold > 0.0 && c.t_range < 17.0 && pr < 1.9 * th && pr < 1000.0 {
+    // Dry summers, wet mild winters (Köppen Cs).
+    if c.warm_share < 0.35 && cold > -3.0 && pr < 1200.0 {
         return Biome::Mediterranean;
     }
     if pr >= 2000.0 || (pr >= 1500.0 && c.t_range < 14.0 && c.t_mean < 16.0) {
@@ -114,7 +117,7 @@ impl Generator for Biomes {
         &[ProductId::Elevation, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation]
     }
     fn wants() -> &'static [ProductId] {
-        &[ProductId::Lakes, ProductId::Rivers]
+        &[ProductId::Lakes, ProductId::Rivers, ProductId::PrecipitationWarmShare]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         crate::climate::Climate::applies(body)
@@ -132,6 +135,7 @@ impl Generator for Biomes {
         let tr = &inputs.temperature_range().ok_or(Error::MissingInput(ProductId::TemperatureRange))?.values;
         let pr = &inputs.precipitation().ok_or(Error::MissingInput(ProductId::Precipitation))?.values;
         let lakes = inputs.lakes();
+        let share = inputs.precipitation_warm_share().map(|f| &f.values);
         let mut wet = vec![false; n];
         if let Some(rv) = inputs.rivers() {
             for node in rv.nodes.rows.values() {
@@ -159,7 +163,8 @@ impl Generator for Biomes {
                     return Biome::Ocean;
                 }
                 let lat = grid.center(i as Cell).to_lat_lon().lat_deg;
-                let c = CellClimate { t_mean: f64::from(t[i]), t_range: f64::from(tr[i]), precip_mm: f64::from(pr[i]), elevation_m: f64::from(elev[i]), lat_deg: lat };
+                let warm_share = share.map_or(0.5, |s| f64::from(s[i]));
+                let c = CellClimate { t_mean: f64::from(t[i]), t_range: f64::from(tr[i]), precip_mm: f64::from(pr[i]), elevation_m: f64::from(elev[i]), lat_deg: lat, warm_share };
                 let b = classify(&c, p);
                 if wet[i] && !matches!(b, Biome::IceSheet | Biome::HotDesert | Biome::ColdDesert | Biome::Alpine) {
                     // Wet floodplain, unless the climate leaves it bone dry.
@@ -180,7 +185,11 @@ mod tests {
     use super::*;
 
     fn at(t_mean: f64, t_range: f64, precip_mm: f64, lat: f64) -> Biome {
-        classify(&CellClimate { t_mean, t_range, precip_mm, elevation_m: 200.0, lat_deg: lat }, &BiomesParams::default())
+        at_s(t_mean, t_range, precip_mm, lat, 0.5)
+    }
+
+    fn at_s(t_mean: f64, t_range: f64, precip_mm: f64, lat: f64, warm_share: f64) -> Biome {
+        classify(&CellClimate { t_mean, t_range, precip_mm, elevation_m: 200.0, lat_deg: lat, warm_share }, &BiomesParams::default())
     }
 
     #[test]
@@ -190,7 +199,9 @@ mod tests {
         assert_eq!(at(-10.0, 62.0, 240.0, 62.0), Biome::BorealForest, "Yakutsk (dry boreal)");
         assert_eq!(at(-12.0, 33.0, 200.0, 72.0), Biome::Tundra, "Taymyr");
         assert_eq!(at(-30.0, 30.0, 100.0, 75.0), Biome::IceSheet, "Greenland");
-        assert_eq!(at(17.5, 15.0, 600.0, 38.0), Biome::Mediterranean, "Athens-like");
+        assert_eq!(at_s(17.5, 15.0, 600.0, 38.0, 0.2), Biome::Mediterranean, "Athens-like");
+        assert_eq!(at_s(15.0, 10.0, 450.0, 37.0, 0.15), Biome::Mediterranean, "San Francisco-like");
+        assert_ne!(at_s(17.5, 15.0, 600.0, 38.0, 0.6), Biome::Mediterranean, "summer rain is not Mediterranean");
         assert_eq!(at(10.5, 12.0, 2200.0, 47.5), Biome::TemperateRainforest, "Olympic Peninsula");
         assert_eq!(at(11.0, 27.0, 900.0, 41.0), Biome::TemperateForest, "Ohio");
         assert_eq!(at(9.0, 30.0, 380.0, 47.0), Biome::TemperateGrassland, "steppe");
