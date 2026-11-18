@@ -19,19 +19,106 @@ pub enum CrustMode {
     /// plates (never the largest; mid-sized plates preferred) until the target is reached.
     /// Earth: ~40% continental crust, ~29% land.
     TargetFraction { target_fraction: f64 },
+    /// Continents ride inside plates, as on Earth: most plates carry a continent covering
+    /// part of their area, with ocean floor between it and the plate's edges (passive
+    /// margins); the largest plate and about `oceanic_plate_share` of the others are purely
+    /// oceanic. Continental crust totals about `target_fraction` of the surface.
+    Embedded { target_fraction: f64, oceanic_plate_share: f64 },
 }
 
 impl Default for CrustMode {
     fn default() -> Self {
-        CrustMode::TargetFraction { target_fraction: 0.38 }
+        CrustMode::Embedded { target_fraction: 0.38, oceanic_plate_share: 0.3 }
     }
+}
+
+/// Crust type per cell for a plate partition.
+#[must_use]
+pub fn assign(grid: &dyn Grid, owner: &[u32], mode: CrustMode, seed: Seed, radius_km: f64) -> Vec<CrustType> {
+    match mode {
+        CrustMode::PlateSize { .. } | CrustMode::TargetFraction { .. } => {
+            let areas = super::partition::areas_km2(grid, owner, radius_km);
+            let kinds = plate_kinds(&areas, mode, seed);
+            owner.iter().map(|o| kinds.get(o).copied().unwrap_or(CrustType::Oceanic)).collect()
+        }
+        CrustMode::Embedded { target_fraction, oceanic_plate_share } => embedded(grid, owner, target_fraction, oceanic_plate_share, seed),
+    }
+}
+
+fn embedded(grid: &dyn Grid, owner: &[u32], target: f64, oceanic_share: f64, seed: Seed) -> Vec<CrustType> {
+    let n = grid.len();
+    let area: Vec<f64> = (0..n as Cell).map(|c| grid.area_sr(c)).collect();
+    let total: f64 = area.iter().sum();
+    let mut cells: BTreeMap<u32, Vec<Cell>> = BTreeMap::new();
+    for (c, &o) in owner.iter().enumerate() {
+        cells.entry(o).or_default().push(c as Cell);
+    }
+    let plate_area: BTreeMap<u32, f64> = cells.iter().map(|(&k, cs)| (k, cs.iter().map(|&c| area[c as usize]).sum())).collect();
+    let largest = plate_area.iter().max_by(|a, b| a.1.total_cmp(b.1).then(b.0.cmp(a.0))).map(|(&k, _)| k);
+    // Continental share of each plate: 0 for oceanic plates, otherwise a seeded draw.
+    let mut share: BTreeMap<u32, f64> = BTreeMap::new();
+    for (&k, &a) in &plate_area {
+        let s = seed.child_u64(b"continent", u64::from(k));
+        let oceanic = Some(k) == largest || geoforge_core::seed::unit(s.child(b"oceanic")) < oceanic_share || a / total < 0.004;
+        share.insert(k, if oceanic { 0.0 } else { geoforge_core::seed::range(s.child(b"share"), 0.3, 0.9) });
+    }
+    // Scale shares to the target (capped at 95% of any plate).
+    let want = target * total;
+    for _ in 0..20 {
+        let got: f64 = share.iter().map(|(k, s)| s * plate_area[k]).sum();
+        if got <= 0.0 || (got - want).abs() / want < 0.005 {
+            break;
+        }
+        let f = want / got;
+        for s in share.values_mut() {
+            *s = (*s * f).min(0.95);
+        }
+    }
+    // Within each plate the continent is a noisy blob around a centre offset from the plate's
+    // middle, so ocean floor sits on some sides and the continent reaches the edge on others.
+    let noise = crate::noise::TerrainNoise::new(seed.child(b"continent-shape").value());
+    let mut out = vec![CrustType::Oceanic; n];
+    for (&k, cs) in &cells {
+        let sh = share[&k];
+        if sh <= 0.0 {
+            continue;
+        }
+        let pts: Vec<UnitVec3> = cs.iter().map(|&c| grid.center(c)).collect();
+        let Some(mid) = UnitVec3::centroid(pts.iter().copied()) else { continue };
+        let radius = pts.iter().map(|p| p.angle_to(mid)).fold(0.0, f64::max).max(1e-6);
+        let s = seed.child_u64(b"continent", u64::from(k));
+        let bearing = geoforge_core::seed::range(s.child(b"bearing"), 0.0, 360.0);
+        let off = geoforge_core::seed::range(s.child(b"offset"), 0.15, 0.5) * radius;
+        let centre = mid.travel(bearing, off);
+        let mut scored: Vec<(f64, Cell)> = cs
+            .iter()
+            .zip(&pts)
+            .map(|(&c, p)| (p.angle_to(centre) / radius + 0.45 * noise.fbm(*p, 2.5, 4), c))
+            .collect();
+        scored.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let goal = sh * plate_area[&k];
+        let mut acc = 0.0;
+        for (_, c) in scored {
+            if acc >= goal {
+                break;
+            }
+            out[c as usize] = CrustType::Continental;
+            acc += area[c as usize];
+        }
+    }
+    out
 }
 
 /// Dominant crust per plate.
 #[must_use]
 pub fn plate_kinds(areas: &BTreeMap<u32, f64>, mode: CrustMode, seed: Seed) -> BTreeMap<u32, CrustType> {
     let n = areas.len();
+    let mode = match mode {
+        CrustMode::Embedded { target_fraction, .. } => CrustMode::TargetFraction { target_fraction },
+        m => m,
+    };
     match mode {
+        CrustMode::Embedded { .. } => unreachable!("mapped above"),
         CrustMode::PlateSize { continental_percentile } => areas
             .iter()
             .map(|(&id, &a)| {

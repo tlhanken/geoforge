@@ -62,7 +62,7 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
         fr.sort_by(|a, b| b.total_cmp(a));
         s.insert("count".into(), st(fr.len() as f64, None));
         s.insert("largest_fraction".into(), st(fr.first().copied().unwrap_or(0.0), Some(0.203)));
-        s.insert("seven_largest_fraction".into(), st(fr.iter().take(7).sum(), Some(0.84)));
+        s.insert("seven_largest_fraction".into(), st(fr.iter().take(7).sum(), Some(0.81)));
         out.insert("plates".into(), s);
     }
 

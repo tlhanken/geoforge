@@ -47,6 +47,34 @@ pub fn voronoi(grid: &dyn Grid, seeds: &[UnitVec3]) -> Vec<u32> {
         .collect()
 }
 
+/// Charge-weighted Voronoi: each cell goes to the seed minimising `angle / charge^alpha`,
+/// so a larger charge claims a proportionally larger plate (a multiplicatively weighted, or
+/// Apollonius, diagram on the sphere). `alpha = 0` is the plain nearest-seed partition.
+/// Ties and enclaves are left to the island-removal pass.
+#[must_use]
+pub fn weighted_voronoi(grid: &dyn Grid, seeds: &[UnitVec3], charges: &[f64], alpha: f64) -> Vec<u32> {
+    if alpha == 0.0 {
+        return voronoi(grid, seeds);
+    }
+    let w: Vec<f64> = charges.iter().map(|q| q.max(1e-9).powf(-alpha)).collect();
+    (0..grid.len() as Cell)
+        .into_par_iter()
+        .map(|c| {
+            let p = grid.center(c);
+            let mut best = 1u32;
+            let mut min = f64::INFINITY;
+            for (i, s) in seeds.iter().enumerate() {
+                let d = p.angle_to(*s) * w[i];
+                if d < min {
+                    min = d;
+                    best = i as u32 + 1;
+                }
+            }
+            best
+        })
+        .collect()
+}
+
 /// 3D spherical domain warping: each cell takes the plate found at a noise-displaced point.
 #[must_use]
 pub fn domain_warp(grid: &dyn Grid, owner: &[u32], seed: u64, p: &RefineParams) -> Vec<u32> {

@@ -27,6 +27,10 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct TectonicsParams {
     pub plate_count: usize,
+    /// How strongly a seed's electrostatic charge sets its plate's size: cells go to the seed
+    /// minimising `distance / charge^size_weighting`. 0 reproduces v1 exactly (charge only
+    /// affects where seeds settle); the default is tuned so plate sizes follow Earth's.
+    pub size_weighting: f64,
     pub refine: RefineParams,
     pub min_speed_cm_yr: f64,
     pub max_speed_cm_yr: f64,
@@ -38,6 +42,7 @@ impl Default for TectonicsParams {
     fn default() -> Self {
         Self {
             plate_count: 20,
+            size_weighting: SIZE_WEIGHTING,
             refine: RefineParams::default(),
             min_speed_cm_yr: 1.0,
             max_speed_cm_yr: 10.0,
@@ -64,10 +69,35 @@ pub fn v1_plate_partition(grid: &dyn Grid, plate_count: usize, seed: u64, refine
     (owner, seeds, stats)
 }
 
+/// Default charge weighting (see [`TectonicsParams::size_weighting`]).
+pub const SIZE_WEIGHTING: f64 = 0.22;
+
+/// v1's plate pipeline with the partition weighted by charge; `alpha = 0` is
+/// [`v1_plate_partition`].
+#[must_use]
+pub fn weighted_plate_partition(grid: &dyn Grid, plate_count: usize, seed: u64, refine: &RefineParams, alpha: f64) -> (Vec<u32>, Vec<UnitVec3>, IslandStats) {
+    if alpha == 0.0 {
+        return v1_plate_partition(grid, plate_count, seed, refine);
+    }
+    let cfg = electrostatic::ElectrostaticConfig::default();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut charges = electrostatic::random_charges(plate_count, &mut rng, &cfg);
+    electrostatic::simulate_equilibrium(&mut charges, &cfg);
+    let seeds = electrostatic::seed_points(&charges);
+    let q: Vec<f64> = charges.iter().map(|c| c.charge).collect();
+    let owner = partition::weighted_voronoi(grid, &seeds, &q, alpha);
+    let mut owner = partition::domain_warp(grid, &owner, seed, refine);
+    if refine.smoothing_iterations > 0 {
+        partition::smooth(grid, &mut owner, refine.smoothing_iterations);
+    }
+    let stats = partition::remove_islands(grid, &mut owner);
+    (owner, seeds, stats)
+}
+
 /// Generate the plates partition (geometry + Euler poles) for a seed.
 #[must_use]
 pub fn generate_plates(grid: &dyn Grid, seed: u64, radius_km: f64, p: &TectonicsParams) -> Partition<Plate> {
-    let (owner, seeds, _) = v1_plate_partition(grid, p.plate_count, seed, &p.refine);
+    let (owner, seeds, _) = weighted_plate_partition(grid, p.plate_count, seed, &p.refine, p.size_weighting);
     let motion = motion::v1_random_motion(seeds.len(), seed, p.min_speed_cm_yr, p.max_speed_cm_yr);
     let mut table = Table::new();
     for (i, (pt, (dir, speed))) in seeds.iter().zip(motion).enumerate() {
@@ -119,9 +149,7 @@ impl Generator for Tectonics {
         let crust: Vec<CrustType> = match inputs.crust_type() {
             Some(f) => f.values.clone(),
             None => {
-                let areas = partition::areas_km2(grid, owner, r);
-                let kinds = crust::plate_kinds(&areas, p.crust, ctx.seed(ProductId::CrustType));
-                let v: Vec<CrustType> = owner.iter().map(|o| kinds.get(o).copied().unwrap_or(CrustType::Oceanic)).collect();
+                let v = crust::assign(grid, owner, p.crust, ctx.seed(ProductId::CrustType), r);
                 out.insert(ProductData::CrustType(Field::from_values(grid.spec(), v.clone())));
                 v
             }
