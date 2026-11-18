@@ -2,11 +2,22 @@
 lto = "fat"
 codegen-units = 1
 
+# Fast-building optimized profile for iterating on generators: cargo build --profile iter
+[profile.iter]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 [workspace]
 members = [
     "crates/bins/geoforge",
     "crates/libs/geoforge-core",
     "crates/libs/geoforge-surface",
+    "crates/libs/geoforge-cosmos",
+    "crates/libs/geoforge-store",
+    "crates/libs/geoforge-pipeline",
+    "crates/bins/geoforge-cli",
 ]
 resolver = "2"
 

@@ -183,7 +183,7 @@ impl Composition {
     /// # Errors
     /// Fractions must be non-negative, species unique, and sum to 1 within 1e-6.
     pub fn new(mut parts: Vec<(Species, f64)>) -> Result<Self, crate::Error> {
-        parts.sort_by(|a, b| a.0.cmp(&b.0));
+        parts.sort_by_key(|a| a.0);
         if parts.windows(2).any(|w| w[0].0 == w[1].0) {
             return Err(crate::Error::Invalid("composition lists a species twice".into()));
         }
@@ -201,7 +201,7 @@ impl Composition {
     pub fn from_weights(parts: &[(Species, f64)]) -> Self {
         let sum: f64 = parts.iter().map(|p| p.1).sum();
         let mut v: Vec<_> = parts.iter().map(|&(s, w)| (s, w / sum)).collect();
-        v.sort_by(|a, b| a.0.cmp(&b.0));
+        v.sort_by_key(|a| a.0);
         Self(v)
     }
     #[must_use]

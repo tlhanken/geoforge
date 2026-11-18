@@ -30,12 +30,16 @@ pub struct ElevationParams {
     pub roughness_scale: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
+    /// Depth of sediment and erosion that has smoothed closed land depressions, m. Basins
+    /// shallower than this become alluvial plains that rivers cross; deeper ones (and
+    /// active rifts) stay closed and can hold lakes. 0 = raw tectonic relief.
+    pub sediment_fill_m: f64,
     pub boundaries: BoundaryParams,
 }
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, slope_width_km: 130.0, boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, slope_width_km: 130.0, sediment_fill_m: 80.0, boundaries: BoundaryParams::default() }
     }
 }
 
@@ -106,7 +110,7 @@ impl Generator for Elevation {
         let segments = inputs.plates().map(|pl| boundaries::analyze(grid, pl, r, &p.boundaries)).unwrap_or_default();
         let by_owner = provinces.cells_by_owner();
         let mut need: std::collections::BTreeMap<usize, f64> = std::collections::BTreeMap::new();
-        for (key, _) in &by_owner {
+        for key in by_owner.keys() {
             let Some(prov) = provinces.table.get(*key) else { continue };
             let Some(si) = prov.boundary else { continue };
             let reach_km = match prov.kind {
@@ -335,7 +339,27 @@ impl Generator for Elevation {
                 break;
             }
         }
-        let field: Vec<f32> = e.iter().map(|z| (z - sea) as f32).collect();
+        let mut field: Vec<f32> = e.iter().map(|z| (z - sea) as f32).collect();
+
+        // 5. Long-term sediment fill and erosion: closed land basins fill up (or their sills
+        //    are cut) by up to `sediment_fill_m`, except in active rifts.
+        if p.sediment_fill_m > 0.0 {
+            let d = crate::hydrology::drainage(grid, &field);
+            let fill = p.sediment_fill_m;
+            for i in 0..n {
+                if field[i] < 0.0 {
+                    continue;
+                }
+                let depth = d.filled[i] - f64::from(field[i]);
+                if depth <= 0.0 {
+                    continue;
+                }
+                let rift = provinces.owner_of(i as Cell).and_then(|k| provinces.table.get(k)).is_some_and(|pr| pr.kind == G::ContinentalRift);
+                if !rift {
+                    field[i] = (f64::from(field[i]) + depth.min(fill)) as f32;
+                }
+            }
+        }
         out.insert(ProductData::Elevation(Field::from_values(grid.spec(), field)));
         Ok(out)
     }

@@ -1,0 +1,19 @@
+[package]
+name = "geoforge-store"
+description = "Geoforge v2 world store: manifest, products on disk, edit views, patches, renders"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-core = { path = "../geoforge-core" }
+blake3 = "1"
+image = { version = "0.24", default-features = false, features = ["png"] }
+serde = { workspace = true }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = { workspace = true }
+toml = "0.8"
+
+[dev-dependencies]
+image = { version = "0.24", default-features = false, features = ["png"] }
