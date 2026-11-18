@@ -8,7 +8,7 @@ use crate::{hash_parts, Result, StoreError};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{Envelope, Hash, ProductData, ProductId, Shape, ValueType};
 use geoforge_core::shapes::{Field, Partition, Table};
-use geoforge_core::surface::{Biome, Category, CrustType};
+use geoforge_core::surface::{Biome, Category, CrustType, Lithology};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::Path;
 
@@ -47,22 +47,29 @@ fn cat_bytes<C: Category>(v: &[C]) -> Vec<u8> {
     v.iter().map(|c| c.to_u8()).collect()
 }
 
+fn v2_bytes(v: &[[f32; 2]]) -> Vec<u8> {
+    v.iter().flat_map(|x| x[0].to_le_bytes().into_iter().chain(x[1].to_le_bytes())).collect()
+}
+
 /// Cell bytes and document body of a product (shared by storage and hashing).
 pub(crate) fn encode(data: &ProductData) -> Result<(Option<Vec<u8>>, Option<serde_json::Value>)> {
+    if let Some(f) = data.scalar() {
+        return Ok((Some(f32_bytes(&f.values)), None));
+    }
+    if let Some(f) = data.vector() {
+        return Ok((Some(v2_bytes(&f.values)), None));
+    }
     Ok(match data {
         ProductData::CrustType(f) => (Some(cat_bytes(&f.values)), None),
+        ProductData::Lithology(f) => (Some(cat_bytes(&f.values)), None),
         ProductData::Biome(f) => (Some(cat_bytes(&f.values)), None),
-        ProductData::CrustAge(f)
-        | ProductData::Elevation(f)
-        | ProductData::Temperature(f)
-        | ProductData::TemperatureRange(f)
-        | ProductData::Precipitation(f) => (Some(f32_bytes(&f.values)), None),
         ProductData::Plates(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Provinces(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Lakes(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Watersheds(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::TectonicEvents(t) | ProductData::GeologyEvents(t) => (None, Some(serde_json::to_value(t)?)),
         ProductData::Rivers(n) => (None, Some(serde_json::to_value(n)?)),
+        _ => unreachable!("fields handled above"),
     })
 }
 
@@ -96,20 +103,8 @@ pub fn write_canonical(dir: &Path, data: &ProductData, provenance: Hash) -> Resu
     let id = data.id();
     let (bin, doc) = encode(data)?;
     let content = content_hash(data)?;
-    let grid = match data {
-        ProductData::CrustType(f) => Some(f.grid),
-        ProductData::Biome(f) => Some(f.grid),
-        ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f) => Some(f.grid),
-        ProductData::Plates(p) => Some(p.owner.grid),
-        ProductData::Provinces(p) => Some(p.owner.grid),
-        ProductData::Lakes(p) => Some(p.owner.grid),
-        ProductData::Watersheds(p) => Some(p.owner.grid),
-        _ => None,
-    };
-    let stats = match data {
-        ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f) => Some(stats_f32(&f.values)),
-        _ => None,
-    };
+    let grid = data.grid();
+    let stats = data.scalar().map(|f| stats_f32(&f.values));
     let meta = StoredMeta { content, grid, value_type: id.value_type(), unit: id.unit().into(), stats, data: doc };
     let env = Envelope { schema_version: geoforge_core::SCHEMA_VERSION, kind: id, provenance, body: meta };
     if let Some(b) = bin {
@@ -169,12 +164,8 @@ pub fn decode(p: ProductId, grid: GridSpec, bin: Option<&[u8]>, doc: Option<serd
     let part = |b: &[u8]| Field::from_values(grid, decode_u32(b));
     let data = match p {
         ProductId::CrustType => ProductData::CrustType(Field::from_values(grid, decode_cat::<CrustType>(need_bin(1)?)?)),
+        ProductId::Lithology => ProductData::Lithology(Field::from_values(grid, decode_cat::<Lithology>(need_bin(1)?)?)),
         ProductId::Biome => ProductData::Biome(Field::from_values(grid, decode_cat::<Biome>(need_bin(1)?)?)),
-        ProductId::CrustAge => ProductData::CrustAge(Field::from_values(grid, decode_f32(need_bin(4)?))),
-        ProductId::Elevation => ProductData::Elevation(Field::from_values(grid, decode_f32(need_bin(4)?))),
-        ProductId::Temperature => ProductData::Temperature(Field::from_values(grid, decode_f32(need_bin(4)?))),
-        ProductId::TemperatureRange => ProductData::TemperatureRange(Field::from_values(grid, decode_f32(need_bin(4)?))),
-        ProductId::Precipitation => ProductData::Precipitation(Field::from_values(grid, decode_f32(need_bin(4)?))),
         ProductId::Plates => ProductData::Plates(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
         ProductId::Provinces => ProductData::Provinces(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
         ProductId::Lakes => ProductData::Lakes(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
@@ -182,6 +173,11 @@ pub fn decode(p: ProductId, grid: GridSpec, bin: Option<&[u8]>, doc: Option<serd
         ProductId::TectonicEvents => ProductData::TectonicEvents(serde_json::from_value(doc.unwrap_or_default())?),
         ProductId::GeologyEvents => ProductData::GeologyEvents(serde_json::from_value(doc.unwrap_or_default())?),
         ProductId::Rivers => ProductData::Rivers(serde_json::from_value(doc.unwrap_or_default())?),
+        _ if p.value_type() == Some(ValueType::V2F32) => {
+            let v = decode_f32(need_bin(8)?).chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+            ProductData::from_vector(p, Field::from_values(grid, v)).expect("vector product")
+        }
+        _ => ProductData::from_scalar(p, Field::from_values(grid, decode_f32(need_bin(4)?))).expect("scalar product"),
     };
     validate(&data)?;
     Ok(data)
@@ -192,15 +188,21 @@ pub fn decode(p: ProductId, grid: GridSpec, bin: Option<&[u8]>, doc: Option<serd
 /// # Errors
 /// Describes the first broken invariant.
 pub fn validate(data: &ProductData) -> Result<()> {
+    if let Some(f) = data.scalar() {
+        if f.values.iter().any(|v| !v.is_finite()) {
+            return Err(StoreError::Invalid("field contains non-finite values".into()));
+        }
+    }
+    if let Some(f) = data.vector() {
+        if f.values.iter().any(|v| !v[0].is_finite() || !v[1].is_finite()) {
+            return Err(StoreError::Invalid("vector field contains non-finite values".into()));
+        }
+    }
     match data {
         ProductData::Plates(p) => p.validate()?,
         ProductData::Provinces(p) => p.validate()?,
         ProductData::Lakes(p) => p.validate()?,
         ProductData::Watersheds(p) => p.validate()?,
-        ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f)
-            if f.values.iter().any(|v| !v.is_finite()) => {
-                return Err(StoreError::Invalid("field contains non-finite values".into()));
-            }
         _ => {}
     }
     Ok(())

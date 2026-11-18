@@ -430,6 +430,9 @@ pub struct Coarse {
     pub swing: Vec<f64>,
     pub maritime: Vec<f64>,
     pub precip: Vec<f64>,
+    /// Precipitation of the northern-summer (July) and northern-winter (January) seasons.
+    pub precip_jul: Vec<f64>,
+    pub precip_jan: Vec<f64>,
     pub elev: Vec<f64>,
     pub global_mean_t: f64,
 }
@@ -515,16 +518,16 @@ impl Climate {
         }
 
         // 5. Moisture, two solstice seasons.
-        let mut precip = vec![0.0; g.len()];
+        let mut seasons = Vec::new();
         for (k, season) in [1.0, -1.0].into_iter().enumerate() {
             let circ = Circulation::for_body(body.exterior.rotation_h, obl, season);
             let w = winds(&atmo, &circ, season, p.monsoon);
-            let ps = moisture(&atmo, &w, &circ, &t_season[k], &t_mean_here, p.rainout);
-            for i in 0..g.len() {
-                precip[i] += 0.5 * ps[i];
-            }
+            seasons.push(moisture(&atmo, &w, &circ, &t_season[k], &t_mean_here, p.rainout));
         }
-        Coarse { grid: g, t_sl, swing, maritime: mar, precip, elev: atmo.elev, global_mean_t: tmean }
+        let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
+        let precip_jan = seasons.pop().expect("two seasons");
+        let precip_jul = seasons.pop().expect("two seasons");
+        Coarse { grid: g, t_sl, swing, maritime: mar, precip, precip_jul, precip_jan, elev: atmo.elev, global_mean_t: tmean }
     }
 }
 
@@ -547,7 +550,7 @@ impl Generator for Climate {
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &ClimateParams) -> Result<Products, Error> {
         let mut out = Products::new();
-        if inputs.temperature().is_some() && inputs.temperature_range().is_some() && inputs.precipitation().is_some() {
+        if inputs.temperature().is_some() && inputs.temperature_range().is_some() && inputs.precipitation().is_some() && inputs.precipitation_warm_share().is_some() {
             return Ok(out);
         }
         let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
@@ -621,6 +624,19 @@ impl Generator for Climate {
         }
         if inputs.temperature_range().is_none() {
             out.insert(ProductData::TemperatureRange(Field::from_values(spec, (0..n).map(|i| fine[i].1 + dry_warm(i).1).collect())));
+        }
+        if inputs.precipitation_warm_share().is_none() {
+            let share: Vec<f32> = (0..n)
+                .into_par_iter()
+                .map(|i| {
+                    let ll = grid.center(i as Cell).to_lat_lon();
+                    let jul = g.sample(&co.precip_jul, ll.lat_deg, ll.lon_deg).max(0.0);
+                    let jan = g.sample(&co.precip_jan, ll.lat_deg, ll.lon_deg).max(0.0);
+                    let warm = if ll.lat_deg >= 0.0 { jul } else { jan };
+                    if jul + jan > 0.0 { (warm / (jul + jan)) as f32 } else { 0.5 }
+                })
+                .collect();
+            out.insert(ProductData::PrecipitationWarmShare(Field::from_values(spec, share)));
         }
         if inputs.precipitation().is_none() {
             out.insert(ProductData::Precipitation(Field::from_values(spec, fine.iter().map(|f| (f64::from(f.2) * k) as f32).collect())));

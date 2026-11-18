@@ -134,6 +134,37 @@ pub struct Province {
     pub anchor: Option<UnitVec3>,
 }
 
+category!(Lithology {
+    OceanicBasalt = 0, "Oceanic basalt", [70, 80, 110],
+    PelagicSediment = 1, "Pelagic sediment", [120, 140, 170],
+    CratonicBasement = 2, "Cratonic basement", [205, 120, 120],
+    Greenstone = 3, "Greenstone belt", [70, 140, 90],
+    Granitoid = 4, "Granitoid", [235, 150, 180],
+    Metamorphic = 5, "Metamorphic", [170, 110, 170],
+    ArcVolcanic = 6, "Arc volcanic", [220, 70, 60],
+    FloodBasalt = 7, "Flood basalt", [110, 60, 60],
+    ClasticSedimentary = 8, "Clastic sedimentary", [225, 200, 130],
+    Carbonate = 9, "Carbonate", [150, 200, 230],
+    Evaporite = 10, "Evaporite", [245, 240, 225],
+    Ophiolite = 11, "Ophiolite", [40, 110, 100],
+    AccretionaryMelange = 12, "Accretionary melange", [150, 150, 110],
+    RiftFill = 13, "Rift fill", [235, 165, 80],
+});
+
+impl Lithology {
+    /// Resistance to erosion relative to unconsolidated sediment (1 = soft, ~0.1 = very hard).
+    #[must_use]
+    pub fn erodibility(self) -> f64 {
+        match self {
+            Lithology::CratonicBasement | Lithology::Granitoid | Lithology::Greenstone => 0.25,
+            Lithology::Metamorphic | Lithology::Ophiolite | Lithology::FloodBasalt | Lithology::OceanicBasalt => 0.35,
+            Lithology::ArcVolcanic | Lithology::Carbonate => 0.5,
+            Lithology::AccretionaryMelange | Lithology::ClasticSedimentary => 0.8,
+            Lithology::RiftFill | Lithology::PelagicSediment | Lithology::Evaporite => 1.0,
+        }
+    }
+}
+
 category!(Biome {
     Ocean = 0, "Ocean", [28, 62, 120],
     Lake = 1, "Lake", [60, 110, 190],

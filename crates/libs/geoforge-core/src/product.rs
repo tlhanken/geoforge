@@ -7,7 +7,7 @@ use crate::body::BodyContext;
 use crate::grid::Grid;
 use crate::seed::Seed;
 use crate::shapes::{Field, Network, Partition, Timeline};
-use crate::surface::{Biome, CrustType, Lake, Plate, Province, RiverNode, RiverReach, Watershed};
+use crate::surface::{Biome, CrustType, Lake, Lithology, Plate, Province, RiverNode, RiverReach, Watershed};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,16 +19,18 @@ pub enum LayerId {
     Tectonics,
     Geology,
     Elevation,
+    Circulation,
     Climate,
     Hydrology,
     Biomes,
 }
 
 impl LayerId {
-    pub const ALL: [LayerId; 6] = [
+    pub const ALL: [LayerId; 7] = [
         LayerId::Tectonics,
         LayerId::Geology,
         LayerId::Elevation,
+        LayerId::Circulation,
         LayerId::Climate,
         LayerId::Hydrology,
         LayerId::Biomes,
@@ -39,6 +41,7 @@ impl LayerId {
             LayerId::Tectonics => "tectonics",
             LayerId::Geology => "geology",
             LayerId::Elevation => "elevation",
+            LayerId::Circulation => "circulation",
             LayerId::Climate => "climate",
             LayerId::Hydrology => "hydrology",
             LayerId::Biomes => "biomes",
@@ -72,6 +75,8 @@ pub enum ValueType {
     F32,
     U8,
     U32,
+    /// Two f32 per cell: an (east, north) vector.
+    V2F32,
 }
 
 /// Every primary product. Derived values (boundaries, slope, sea level, flow) are not here.
@@ -84,10 +89,17 @@ pub enum ProductId {
     TectonicEvents,
     Provinces,
     GeologyEvents,
+    Lithology,
+    RockAge,
     Elevation,
+    WindJan,
+    WindJul,
+    OceanCurrents,
+    SstAnomaly,
     Temperature,
     TemperatureRange,
     Precipitation,
+    PrecipitationWarmShare,
     Rivers,
     Lakes,
     Watersheds,
@@ -95,17 +107,24 @@ pub enum ProductId {
 }
 
 impl ProductId {
-    pub const ALL: [ProductId; 14] = [
+    pub const ALL: [ProductId; 21] = [
         ProductId::Plates,
         ProductId::CrustType,
         ProductId::CrustAge,
         ProductId::TectonicEvents,
         ProductId::Provinces,
         ProductId::GeologyEvents,
+        ProductId::Lithology,
+        ProductId::RockAge,
         ProductId::Elevation,
+        ProductId::WindJan,
+        ProductId::WindJul,
+        ProductId::OceanCurrents,
+        ProductId::SstAnomaly,
         ProductId::Temperature,
         ProductId::TemperatureRange,
         ProductId::Precipitation,
+        ProductId::PrecipitationWarmShare,
         ProductId::Rivers,
         ProductId::Lakes,
         ProductId::Watersheds,
@@ -122,10 +141,17 @@ impl ProductId {
             ProductId::TectonicEvents => "tectonic_events",
             ProductId::Provinces => "provinces",
             ProductId::GeologyEvents => "geology_events",
+            ProductId::Lithology => "lithology",
+            ProductId::RockAge => "rock_age",
             ProductId::Elevation => "elevation",
+            ProductId::WindJan => "wind_jan",
+            ProductId::WindJul => "wind_jul",
+            ProductId::OceanCurrents => "ocean_currents",
+            ProductId::SstAnomaly => "sst_anomaly",
             ProductId::Temperature => "temperature",
             ProductId::TemperatureRange => "temperature_range",
             ProductId::Precipitation => "precipitation",
+            ProductId::PrecipitationWarmShare => "precipitation_warm_share",
             ProductId::Rivers => "rivers",
             ProductId::Lakes => "lakes",
             ProductId::Watersheds => "watersheds",
@@ -142,9 +168,10 @@ impl ProductId {
     pub fn layer(self) -> LayerId {
         match self {
             ProductId::Plates | ProductId::CrustType | ProductId::CrustAge | ProductId::TectonicEvents => LayerId::Tectonics,
-            ProductId::Provinces | ProductId::GeologyEvents => LayerId::Geology,
+            ProductId::Provinces | ProductId::GeologyEvents | ProductId::Lithology | ProductId::RockAge => LayerId::Geology,
             ProductId::Elevation => LayerId::Elevation,
-            ProductId::Temperature | ProductId::TemperatureRange | ProductId::Precipitation => LayerId::Climate,
+            ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents | ProductId::SstAnomaly => LayerId::Circulation,
+            ProductId::Temperature | ProductId::TemperatureRange | ProductId::Precipitation | ProductId::PrecipitationWarmShare => LayerId::Climate,
             ProductId::Rivers | ProductId::Lakes | ProductId::Watersheds => LayerId::Hydrology,
             ProductId::Biome => LayerId::Biomes,
         }
@@ -156,10 +183,17 @@ impl ProductId {
             ProductId::Plates | ProductId::Provinces | ProductId::Lakes | ProductId::Watersheds => Shape::Partition,
             ProductId::CrustType
             | ProductId::CrustAge
+            | ProductId::Lithology
+            | ProductId::RockAge
             | ProductId::Elevation
+            | ProductId::WindJan
+            | ProductId::WindJul
+            | ProductId::OceanCurrents
+            | ProductId::SstAnomaly
             | ProductId::Temperature
             | ProductId::TemperatureRange
             | ProductId::Precipitation
+            | ProductId::PrecipitationWarmShare
             | ProductId::Biome => Shape::Field,
             ProductId::TectonicEvents | ProductId::GeologyEvents => Shape::Timeline,
             ProductId::Rivers => Shape::Network,
@@ -172,7 +206,8 @@ impl ProductId {
         match self.shape() {
             Shape::Partition => Some(ValueType::U32),
             Shape::Field => Some(match self {
-                ProductId::CrustType | ProductId::Biome => ValueType::U8,
+                ProductId::CrustType | ProductId::Biome | ProductId::Lithology => ValueType::U8,
+                ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents => ValueType::V2F32,
                 _ => ValueType::F32,
             }),
             _ => None,
@@ -183,10 +218,12 @@ impl ProductId {
     #[must_use]
     pub fn unit(self) -> &'static str {
         match self {
-            ProductId::CrustAge => "Ma",
+            ProductId::CrustAge | ProductId::RockAge => "Ma",
             ProductId::Elevation => "m",
-            ProductId::Temperature | ProductId::TemperatureRange => "degC",
+            ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents => "m/s",
+            ProductId::Temperature | ProductId::TemperatureRange | ProductId::SstAnomaly => "degC",
             ProductId::Precipitation => "mm/yr",
+            ProductId::PrecipitationWarmShare => "fraction",
             _ => "",
         }
     }
@@ -329,10 +366,17 @@ pub enum ProductData {
     TectonicEvents(Timeline),
     Provinces(Partition<Province>),
     GeologyEvents(Timeline),
+    Lithology(Field<Lithology>),
+    RockAge(Field<f32>),
     Elevation(Field<f32>),
+    WindJan(Field<[f32; 2]>),
+    WindJul(Field<[f32; 2]>),
+    OceanCurrents(Field<[f32; 2]>),
+    SstAnomaly(Field<f32>),
     Temperature(Field<f32>),
     TemperatureRange(Field<f32>),
     Precipitation(Field<f32>),
+    PrecipitationWarmShare(Field<f32>),
     Rivers(Network<RiverNode, RiverReach>),
     Lakes(Partition<Lake>),
     Watersheds(Partition<Watershed>),
@@ -349,14 +393,117 @@ impl ProductData {
             ProductData::TectonicEvents(_) => ProductId::TectonicEvents,
             ProductData::Provinces(_) => ProductId::Provinces,
             ProductData::GeologyEvents(_) => ProductId::GeologyEvents,
+            ProductData::Lithology(_) => ProductId::Lithology,
+            ProductData::RockAge(_) => ProductId::RockAge,
             ProductData::Elevation(_) => ProductId::Elevation,
+            ProductData::WindJan(_) => ProductId::WindJan,
+            ProductData::WindJul(_) => ProductId::WindJul,
+            ProductData::OceanCurrents(_) => ProductId::OceanCurrents,
+            ProductData::SstAnomaly(_) => ProductId::SstAnomaly,
             ProductData::Temperature(_) => ProductId::Temperature,
             ProductData::TemperatureRange(_) => ProductId::TemperatureRange,
             ProductData::Precipitation(_) => ProductId::Precipitation,
+            ProductData::PrecipitationWarmShare(_) => ProductId::PrecipitationWarmShare,
             ProductData::Rivers(_) => ProductId::Rivers,
             ProductData::Lakes(_) => ProductId::Lakes,
             ProductData::Watersheds(_) => ProductId::Watersheds,
             ProductData::Biome(_) => ProductId::Biome,
+        }
+    }
+
+    /// The values of a continuous (f32) field product.
+    #[must_use]
+    pub fn scalar(&self) -> Option<&Field<f32>> {
+        match self {
+            ProductData::CrustAge(f)
+            | ProductData::RockAge(f)
+            | ProductData::Elevation(f)
+            | ProductData::SstAnomaly(f)
+            | ProductData::Temperature(f)
+            | ProductData::TemperatureRange(f)
+            | ProductData::Precipitation(f)
+            | ProductData::PrecipitationWarmShare(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn scalar_mut(&mut self) -> Option<&mut Field<f32>> {
+        match self {
+            ProductData::CrustAge(f)
+            | ProductData::RockAge(f)
+            | ProductData::Elevation(f)
+            | ProductData::SstAnomaly(f)
+            | ProductData::Temperature(f)
+            | ProductData::TemperatureRange(f)
+            | ProductData::Precipitation(f)
+            | ProductData::PrecipitationWarmShare(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Build a continuous field product from its id.
+    #[must_use]
+    pub fn from_scalar(id: ProductId, f: Field<f32>) -> Option<Self> {
+        Some(match id {
+            ProductId::CrustAge => ProductData::CrustAge(f),
+            ProductId::RockAge => ProductData::RockAge(f),
+            ProductId::Elevation => ProductData::Elevation(f),
+            ProductId::SstAnomaly => ProductData::SstAnomaly(f),
+            ProductId::Temperature => ProductData::Temperature(f),
+            ProductId::TemperatureRange => ProductData::TemperatureRange(f),
+            ProductId::Precipitation => ProductData::Precipitation(f),
+            ProductId::PrecipitationWarmShare => ProductData::PrecipitationWarmShare(f),
+            _ => return None,
+        })
+    }
+
+    /// The values of a vector field product.
+    #[must_use]
+    pub fn vector(&self) -> Option<&Field<[f32; 2]>> {
+        match self {
+            ProductData::WindJan(f) | ProductData::WindJul(f) | ProductData::OceanCurrents(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn vector_mut(&mut self) -> Option<&mut Field<[f32; 2]>> {
+        match self {
+            ProductData::WindJan(f) | ProductData::WindJul(f) | ProductData::OceanCurrents(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Build a vector field product from its id.
+    #[must_use]
+    pub fn from_vector(id: ProductId, f: Field<[f32; 2]>) -> Option<Self> {
+        Some(match id {
+            ProductId::WindJan => ProductData::WindJan(f),
+            ProductId::WindJul => ProductData::WindJul(f),
+            ProductId::OceanCurrents => ProductData::OceanCurrents(f),
+            _ => return None,
+        })
+    }
+
+    /// Grid of a field or partition product.
+    #[must_use]
+    pub fn grid(&self) -> Option<crate::grid::GridSpec> {
+        if let Some(f) = self.scalar() {
+            return Some(f.grid);
+        }
+        if let Some(f) = self.vector() {
+            return Some(f.grid);
+        }
+        match self {
+            ProductData::CrustType(f) => Some(f.grid),
+            ProductData::Lithology(f) => Some(f.grid),
+            ProductData::Biome(f) => Some(f.grid),
+            ProductData::Plates(p) => Some(p.owner.grid),
+            ProductData::Provinces(p) => Some(p.owner.grid),
+            ProductData::Lakes(p) => Some(p.owner.grid),
+            ProductData::Watersheds(p) => Some(p.owner.grid),
+            _ => None,
         }
     }
 }
@@ -387,10 +534,17 @@ getters! {
     tectonic_events => TectonicEvents: Timeline,
     provinces => Provinces: Partition<Province>,
     geology_events => GeologyEvents: Timeline,
+    lithology => Lithology: Field<Lithology>,
+    rock_age => RockAge: Field<f32>,
     elevation => Elevation: Field<f32>,
+    wind_jan => WindJan: Field<[f32; 2]>,
+    wind_jul => WindJul: Field<[f32; 2]>,
+    ocean_currents => OceanCurrents: Field<[f32; 2]>,
+    sst_anomaly => SstAnomaly: Field<f32>,
     temperature => Temperature: Field<f32>,
     temperature_range => TemperatureRange: Field<f32>,
     precipitation => Precipitation: Field<f32>,
+    precipitation_warm_share => PrecipitationWarmShare: Field<f32>,
     rivers => Rivers: Network<RiverNode, RiverReach>,
     lakes => Lakes: Partition<Lake>,
     watersheds => Watersheds: Partition<Watershed>,

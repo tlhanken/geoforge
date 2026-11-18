@@ -2,7 +2,7 @@
 
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductId, Products, RunContext};
 use geoforge_core::BodyContext;
-use geoforge_surface::{Biomes, Climate, Elevation, Geology, Hydrology, Tectonics};
+use geoforge_surface::{Biomes, Circulation, Climate, Elevation, Geology, Hydrology, Tectonics};
 
 macro_rules! dispatch {
     ($l:expr, $g:ident => $body:expr) => {
@@ -17,6 +17,10 @@ macro_rules! dispatch {
             }
             LayerId::Elevation => {
                 type $g = Elevation;
+                $body
+            }
+            LayerId::Circulation => {
+                type $g = Circulation;
                 $body
             }
             LayerId::Climate => {
@@ -43,6 +47,7 @@ pub fn version(l: LayerId) -> u32 {
         LayerId::Tectonics => 1,
         LayerId::Geology => 1,
         LayerId::Elevation => 1,
+        LayerId::Circulation => 1,
         LayerId::Climate => 1,
         LayerId::Hydrology => 1,
         LayerId::Biomes => 1,

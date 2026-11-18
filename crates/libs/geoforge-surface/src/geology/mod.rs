@@ -14,6 +14,7 @@
 //!   pixel" filter excluded every pixel, since the base layers cover the whole map).
 //! - In ocean–ocean subduction the older crust subducts (v1 used the lower plate id).
 
+pub mod lithology;
 pub mod provinces;
 
 use crate::tectonics::boundaries::{self, BoundaryParams};
@@ -74,25 +75,47 @@ impl Generator for Geology {
         let plates = inputs.plates().ok_or(Error::MissingInput(ProductId::Plates))?;
         let crust = inputs.crust_type().ok_or(Error::MissingInput(ProductId::CrustType))?;
         let mut out = Products::new();
-        if inputs.provinces().is_some() && inputs.geology_events().is_some() {
-            return Ok(out);
-        }
-        let segments = boundaries::analyze(ctx.grid, plates, ctx.radius_km(), &p.boundaries);
-        let (provinces, timeline) = build(
-            ctx.grid,
-            plates,
-            &crust.values,
-            inputs.crust_age().map(|f| f.values.as_slice()),
-            &segments,
-            ctx.radius_km(),
-            ctx.seed(ProductId::Provinces).value(),
-            p,
-        );
-        if inputs.provinces().is_none() {
-            out.insert(ProductData::Provinces(provinces));
-        }
-        if inputs.geology_events().is_none() {
-            out.insert(ProductData::GeologyEvents(timeline));
+        let provinces = if inputs.provinces().is_some() && inputs.geology_events().is_some() {
+            None
+        } else {
+            let segments = boundaries::analyze(ctx.grid, plates, ctx.radius_km(), &p.boundaries);
+            let (provinces, timeline) = build(
+                ctx.grid,
+                plates,
+                &crust.values,
+                inputs.crust_age().map(|f| f.values.as_slice()),
+                &segments,
+                ctx.radius_km(),
+                ctx.seed(ProductId::Provinces).value(),
+                p,
+            );
+            if inputs.geology_events().is_none() {
+                out.insert(ProductData::GeologyEvents(timeline));
+            }
+            Some(provinces)
+        };
+        let provinces = match (inputs.provinces(), provinces) {
+            (Some(pv), _) => pv.clone(),
+            (None, Some(pv)) => {
+                out.insert(ProductData::Provinces(pv.clone()));
+                pv
+            }
+            (None, None) => unreachable!("built above when provinces are missing"),
+        };
+        if inputs.lithology().is_none() || inputs.rock_age().is_none() {
+            let (lith, age) = lithology::build(
+                ctx.grid,
+                &provinces,
+                &crust.values,
+                inputs.crust_age().map(|f| f.values.as_slice()),
+                ctx.seed(ProductId::Lithology).value(),
+            );
+            if inputs.lithology().is_none() {
+                out.insert(ProductData::Lithology(Field::from_values(ctx.grid.spec(), lith)));
+            }
+            if inputs.rock_age().is_none() {
+                out.insert(ProductData::RockAge(Field::from_values(ctx.grid.spec(), age)));
+            }
         }
         Ok(out)
     }

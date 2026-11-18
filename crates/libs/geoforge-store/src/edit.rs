@@ -21,7 +21,7 @@ use geoforge_core::grid::{Cell, GridSpec};
 use geoforge_core::key::Key;
 use geoforge_core::product::{Hash, ProductData, ProductId, Shape};
 use geoforge_core::shapes::Field;
-use geoforge_core::surface::{Biome, Category, CrustType};
+use geoforge_core::surface::{Biome, Category, CrustType, Lithology};
 use image::{ImageBuffer, Luma, Rgb};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +33,8 @@ use std::path::Path;
 pub enum Encoding {
     /// `value = offset + scale * pixel` (16-bit).
     Gray16 { offset: f64, scale: f64, unit: String },
+    /// Vector field: red = east, green = north, each `offset + scale * channel` (16-bit RGB).
+    Vector16 { offset: f64, scale: f64, unit: String },
     /// Exact colours for each value (category u8 or partition key).
     Palette { entries: Vec<PaletteEntry> },
     /// The product document as JSON.
@@ -74,6 +76,11 @@ pub fn gray_range(p: ProductId) -> Option<(f64, f64)> {
         ProductId::Temperature => (-90.0, 70.0),
         ProductId::TemperatureRange => (0.0, 80.0),
         ProductId::Precipitation => (0.0, 12_000.0),
+        ProductId::RockAge => (0.0, 4_500.0),
+        ProductId::SstAnomaly => (-20.0, 20.0),
+        ProductId::PrecipitationWarmShare => (0.0, 1.0),
+        ProductId::WindJan | ProductId::WindJul => (-40.0, 40.0),
+        ProductId::OceanCurrents => (-3.0, 3.0),
         _ => return None,
     })
 }
@@ -176,7 +183,22 @@ pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef) -> Result<Vec
     let name = p.name();
     let png = dir.join(format!("{name}.png"));
     let (encoding, grid, note) = match data {
-        ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f) => {
+        _ if data.vector().is_some() => {
+            let f = data.vector().expect("vector");
+            let (w, h) = equirect(f.grid)?;
+            let (lo, hi) = gray_range(p).expect("vector field");
+            let scale = (hi - lo) / 65535.0;
+            let img: ImageBuffer<Rgb<u16>, Vec<u16>> =
+                ImageBuffer::from_raw(w, h, f.values.iter().flat_map(|v| [to_u16(f64::from(v[0]), lo, scale), to_u16(f64::from(v[1]), lo, scale), 0]).collect()).expect("size");
+            img.save(&png)?;
+            (
+                Encoding::Vector16 { offset: lo, scale, unit: p.unit().into() },
+                f.grid,
+                format!("16-bit RGB: red = eastward, green = northward [{}], each offset + scale * channel; blue unused.", p.unit()),
+            )
+        }
+        _ if data.scalar().is_some() => {
+            let f = data.scalar().expect("scalar");
             let (w, h) = equirect(f.grid)?;
             let (lo, hi) = gray_range(p).expect("continuous field");
             let scale = (hi - lo) / 65535.0;
@@ -187,11 +209,12 @@ pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef) -> Result<Vec
         }
         ProductData::CrustType(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
         ProductData::Biome(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
+        ProductData::Lithology(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
         ProductData::Plates(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
         ProductData::Provinces(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
         ProductData::Lakes(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
         ProductData::Watersheds(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
-        ProductData::TectonicEvents(_) | ProductData::GeologyEvents(_) | ProductData::Rivers(_) => {
+        _ => {
             let (_, doc) = codec::encode(data)?;
             std::fs::write(dir.join(format!("{name}.json")), serde_json::to_string_pretty(&doc)?)?;
             files.push(format!("{name}.json"));
@@ -250,6 +273,7 @@ fn write_partition<E: Serialize>(dir: &Path, p: ProductId, owner: &Field<u32>, r
 #[derive(Debug, Clone)]
 pub enum ViewValues {
     F32(Vec<f32>),
+    V2(Vec<[f32; 2]>),
     U8(Vec<u8>),
     U32(Vec<u32>),
     Doc(serde_json::Value),
@@ -273,6 +297,11 @@ pub fn default_encoding(p: ProductId) -> Result<Encoding> {
     match p {
         ProductId::CrustType => Ok(Encoding::Palette { entries: category_palette::<CrustType>() }),
         ProductId::Biome => Ok(Encoding::Palette { entries: category_palette::<Biome>() }),
+        ProductId::Lithology => Ok(Encoding::Palette { entries: category_palette::<Lithology>() }),
+        _ if p.value_type() == Some(geoforge_core::product::ValueType::V2F32) => {
+            let (lo, hi) = gray_range(p).expect("vector field");
+            Ok(Encoding::Vector16 { offset: lo, scale: (hi - lo) / 65535.0, unit: p.unit().into() })
+        }
         _ if p.shape() == Shape::Field => {
             let (lo, hi) = gray_range(p).expect("continuous field");
             Ok(Encoding::Gray16 { offset: lo, scale: (hi - lo) / 65535.0, unit: p.unit().into() })
@@ -316,6 +345,10 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
         Encoding::Gray16 { offset, scale, .. } => {
             let g = img.into_luma16();
             (ViewValues::F32(g.into_raw().into_iter().map(|v| (offset + scale * f64::from(v)) as f32).collect()), 0)
+        }
+        Encoding::Vector16 { offset, scale, .. } => {
+            let g = img.into_rgb16();
+            (ViewValues::V2(g.pixels().map(|px| [(offset + scale * f64::from(px.0[0])) as f32, (offset + scale * f64::from(px.0[1])) as f32]).collect()), 0)
         }
         Encoding::Palette { mut entries } => {
             if p.shape() == Shape::Partition {
@@ -376,8 +409,13 @@ pub fn view_to_product(view: &View, grid: GridSpec, fill: &dyn Fn(ProductId, Key
             let b: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
             codec::decode(p, grid, Some(&b), None)
         }
+        ViewValues::V2(v) => {
+            let b: Vec<u8> = v.iter().flat_map(|x| x[0].to_le_bytes().into_iter().chain(x[1].to_le_bytes())).collect();
+            codec::decode(p, grid, Some(&b), None)
+        }
         ViewValues::U8(v) => {
             match p {
+                ProductId::Lithology => decode_cat::<Lithology>(v).map(|_| ())?,
                 ProductId::CrustType => decode_cat::<CrustType>(v).map(|_| ())?,
                 ProductId::Biome => decode_cat::<Biome>(v).map(|_| ())?,
                 _ => {}
@@ -438,6 +476,8 @@ pub struct Patch {
 pub enum PatchValues {
     /// Added to the base value (continuous fields).
     Delta(Vec<f32>),
+    /// Added to the base vector (vector fields).
+    Delta2(Vec<[f32; 2]>),
     /// Replaces the base value (categories, partition owners).
     Set(Vec<u32>),
 }
@@ -482,7 +522,22 @@ pub fn diff(baseline: &ProductData, view: &View) -> Result<Patch> {
     let base = codec::content_hash(baseline)?;
     let mut cells = Vec::new();
     let values = match (baseline, &view.values) {
-        (ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f), ViewValues::F32(v)) => {
+        (d, ViewValues::V2(v)) if d.vector().is_some() => {
+            let f = d.vector().expect("vector");
+            let (lo, hi) = gray_range(p).expect("vector field");
+            let scale = (hi - lo) / 65535.0;
+            let mut out = Vec::new();
+            for (c, (b, e)) in f.values.iter().zip(v).enumerate() {
+                let same = (0..2).all(|k| to_u16(f64::from(b[k]), lo, scale) == to_u16(f64::from(e[k]), lo, scale));
+                if !same {
+                    cells.push(c as u32);
+                    out.push([e[0] - b[0], e[1] - b[1]]);
+                }
+            }
+            PatchValues::Delta2(out)
+        }
+        (d, ViewValues::F32(v)) if d.scalar().is_some() => {
+            let f = d.scalar().expect("scalar");
             let (lo, hi) = gray_range(p).expect("continuous field");
             let scale = (hi - lo) / 65535.0;
             let mut d = Vec::new();
@@ -497,6 +552,7 @@ pub fn diff(baseline: &ProductData, view: &View) -> Result<Patch> {
         }
         (ProductData::CrustType(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
         (ProductData::Biome(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
+        (ProductData::Lithology(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
         (ProductData::Plates(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
         (ProductData::Provinces(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
         (ProductData::Lakes(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
@@ -551,7 +607,20 @@ pub fn apply(data: &mut ProductData, patch: &Patch, fill: &dyn Fn(ProductId, Key
     let rebased = codec::content_hash(data)? != patch.base;
     let mut orphaned = 0;
     match (data, &patch.values) {
-        (ProductData::CrustAge(f) | ProductData::Elevation(f) | ProductData::Temperature(f) | ProductData::TemperatureRange(f) | ProductData::Precipitation(f), PatchValues::Delta(d)) => {
+        (data, PatchValues::Delta2(d)) if data.vector().is_some() => {
+            let f = data.vector_mut().expect("vector");
+            for (c, dv) in patch.cells().zip(d) {
+                match f.values.get_mut(c as usize) {
+                    Some(v) => {
+                        v[0] += dv[0];
+                        v[1] += dv[1];
+                    }
+                    None => orphaned += 1,
+                }
+            }
+        }
+        (data, PatchValues::Delta(d)) if data.scalar().is_some() => {
+            let f = data.scalar_mut().expect("scalar");
             for (c, &dv) in patch.cells().zip(d) {
                 match f.values.get_mut(c as usize) {
                     Some(v) => *v += dv,
@@ -561,6 +630,7 @@ pub fn apply(data: &mut ProductData, patch: &Patch, fill: &dyn Fn(ProductId, Key
         }
         (ProductData::CrustType(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
         (ProductData::Biome(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
+        (ProductData::Lithology(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
         (ProductData::Plates(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
         (ProductData::Provinces(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
         (ProductData::Lakes(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
@@ -657,6 +727,16 @@ pub fn merge(older: &Patch, newer: &Patch) -> Result<Patch> {
             m.retain(|_, d| d.abs() > 0.0);
             let cells: Vec<u32> = m.keys().copied().collect();
             return Ok(Patch { product: older.product, base: older.base, runs: runs_of(&cells), values: PatchValues::Delta(m.into_values().collect()), rows: BTreeMap::new() });
+        }
+        (PatchValues::Delta2(a), PatchValues::Delta2(b)) => {
+            let mut m: BTreeMap<u32, [f32; 2]> = oc.iter().copied().zip(a.iter().copied()).collect();
+            for (c, d) in nc.iter().zip(b) {
+                let e = m.entry(*c).or_insert([0.0, 0.0]);
+                e[0] += d[0];
+                e[1] += d[1];
+            }
+            let cells: Vec<u32> = m.keys().copied().collect();
+            return Ok(Patch { product: older.product, base: older.base, runs: runs_of(&cells), values: PatchValues::Delta2(m.into_values().collect()), rows: BTreeMap::new() });
         }
         (PatchValues::Set(a), PatchValues::Set(b)) => {
             let mut m: BTreeMap<u32, u32> = oc.iter().copied().zip(a.iter().copied()).collect();

@@ -66,6 +66,24 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
         out.insert("plates".into(), s);
     }
 
+    if let Some(l) = pr.lithology().map(|f| &f.values) {
+        let mut s = BTreeMap::new();
+        for &kind in geoforge_core::surface::Lithology::ALL {
+            let a: f64 = (0..n).filter(|&c| land(c) && l[c] == kind).map(|c| area[c]).sum();
+            if a > 0.0 {
+                s.insert(kind.name().to_lowercase().replace(' ', "_") + "_of_land", st(a / land_area.max(1e-12), None));
+            }
+        }
+        if let Some(age) = pr.rock_age().map(|f| &f.values) {
+            let frac = |lo: f32, hi: f32| (0..n).filter(|&c| land(c) && age[c] >= lo && age[c] < hi).map(|c| area[c]).sum::<f64>() / land_area.max(1e-12);
+            s.insert("land_rock_cenozoic_fraction".into(), st(frac(0.0, 66.0), Some(0.28)));
+            s.insert("land_rock_mesozoic_fraction".into(), st(frac(66.0, 252.0), Some(0.22)));
+            s.insert("land_rock_paleozoic_fraction".into(), st(frac(252.0, 541.0), Some(0.18)));
+            s.insert("land_rock_precambrian_fraction".into(), st(frac(541.0, 5000.0), Some(0.32)));
+        }
+        out.insert("lithology".into(), s);
+    }
+
     if let Some(t) = pr.temperature().map(|f| &f.values) {
         let mut s = BTreeMap::new();
         s.insert("global_mean_c".into(), st(wmean(&|c| Some(f64::from(t[c]))), Some(14.5)));

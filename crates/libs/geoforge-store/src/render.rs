@@ -156,6 +156,34 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
             }
         })?,
         ProductData::CrustType(f) => image_of(spec, |i| f.values[i].color())?,
+        ProductData::Lithology(f) => image_of(spec, |i| lit(i, f.values[i].color()))?,
+        ProductData::RockAge(f) => image_of(spec, |i| {
+            let a = f64::from(f.values[i]);
+            ramp(&[(0.0, [230, 60, 50]), (66.0, [245, 170, 60]), (252.0, [240, 230, 90]), (541.0, [110, 190, 120]), (1000.0, [60, 150, 200]), (2500.0, [70, 70, 170]), (4000.0, [50, 30, 80])], a)
+        })?,
+        ProductData::SstAnomaly(f) => image_of(spec, |i| match elev {
+            Some(e) if e[i] >= 0.0 => [215, 210, 200],
+            _ => ramp(&[(-8.0, [30, 60, 160]), (-3.0, [120, 170, 225]), (0.0, [245, 245, 245]), (3.0, [245, 170, 120]), (8.0, [170, 30, 30])], f64::from(f.values[i])),
+        })?,
+        ProductData::PrecipitationWarmShare(f) => image_of(spec, |i| match elev {
+            Some(e) if e[i] < 0.0 => [40, 50, 75],
+            _ => lit(i, ramp(&[(0.15, [180, 90, 40]), (0.35, [235, 200, 120]), (0.5, [240, 240, 230]), (0.65, [140, 200, 150]), (0.85, [40, 110, 160])], f64::from(f.values[i]))),
+        })?,
+        ProductData::WindJan(f) | ProductData::WindJul(f) | ProductData::OceanCurrents(f) => {
+            let ocean = p == ProductId::OceanCurrents;
+            let top = if ocean { 1.0 } else { 15.0 };
+            let mut img = image_of(spec, |i| {
+                let v = f.values[i];
+                let sp = f64::from(v[0]).hypot(f64::from(v[1]));
+                let base = ramp(&[(0.0, [235, 238, 245]), (top * 0.3, [170, 200, 230]), (top * 0.7, [70, 120, 200]), (top, [40, 40, 140])], sp);
+                match elev {
+                    Some(e) if e[i] >= 0.0 => if ocean { [200, 195, 180] } else { blend(base, [180, 170, 150], 0.35) },
+                    _ => base,
+                }
+            })?;
+            arrows(&mut img, grid, &f.values, top);
+            img
+        }
         ProductData::Biome(f) => image_of(spec, |i| {
             let c = f.values[i].color();
             lit(i, c)
@@ -223,6 +251,45 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
         }
     }
     Ok(Some(img))
+}
+
+/// Sparse direction arrows over a vector field.
+fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
+    let Some(eq) = grid.as_equirect() else { return };
+    let (w, h) = (eq.width(), eq.height());
+    let step = (w / 64).max(8);
+    let mut y = step / 2;
+    while y < h {
+        let mut x = step / 2;
+        while x < w {
+            let c = eq.cell(x, y) as usize;
+            let (u, n) = (f64::from(v[c][0]), f64::from(v[c][1]));
+            let sp = u.hypot(n);
+            if sp > top * 0.03 {
+                let len = (f64::from(step) * 0.45) * (sp / top).clamp(0.3, 1.0);
+                let (dx, dy) = (u / sp * len, -n / sp * len);
+                let (x0, y0) = (f64::from(x) - dx / 2.0, f64::from(y) - dy / 2.0);
+                let steps = len.ceil() as i32 * 2;
+                for k in 0..=steps {
+                    let t = f64::from(k) / f64::from(steps);
+                    let (px, py) = (x0 + dx * t, y0 + dy * t);
+                    if px >= 0.0 && py >= 0.0 && (px as u32) < w && (py as u32) < h {
+                        img.put_pixel(px as u32, py as u32, Rgb([20, 20, 30]));
+                    }
+                }
+                // Head: a small dot at the downstream end.
+                let (hx, hy) = (x0 + dx, y0 + dy);
+                for (ox, oy) in [(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)] {
+                    let (px, py) = (hx as i64 + ox, hy as i64 + oy);
+                    if px >= 0 && py >= 0 && (px as u32) < w && (py as u32) < h {
+                        img.put_pixel(px as u32, py as u32, Rgb([200, 30, 30]));
+                    }
+                }
+            }
+            x += step;
+        }
+        y += step;
+    }
 }
 
 fn put(img: &mut RgbImage, grid: &AnyGrid, c: u32, col: [u8; 3]) {
