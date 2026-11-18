@@ -4,14 +4,8 @@ codegen-units = 1
 
 [workspace]
 members = [
-    "crates/bins/*",
-    "crates/libs/geoforge-types",
-    "crates/libs/geoforge-export",
-    "crates/libs/stage1_universe",
-    "crates/libs/stage2_supercluster",
-    "crates/libs/stage3_galaxy",
-    "crates/libs/stage4_solar_system",
-    "crates/libs/stage5_planetary_body",
+    "crates/bins/geoforge",
+    "crates/libs/geoforge-core",
 ]
 resolver = "2"
 
@@ -21,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 
 [workspace.package]
-rust-version = "1.75.0"
+rust-version = "1.85.0"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"

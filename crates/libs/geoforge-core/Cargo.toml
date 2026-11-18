@@ -1,0 +1,12 @@
+[package]
+name = "geoforge-core"
+description = "Geoforge v2 core: identity, seeds, grids, data shapes, body and product types (data only)"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
