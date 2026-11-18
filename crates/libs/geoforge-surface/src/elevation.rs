@@ -9,6 +9,8 @@
 //!   land is less than the continental-crust area, as on Earth.
 //! - Sea level is set so the oceans hold exactly the body's water (ocean global-equivalent
 //!   layer × surface area); the stored field is then shifted so sea level is 0.
+//! - Rivers then cut valleys (stream-power erosion, see `erosion`), while active mountain
+//!   belts keep rising, so ranges stay high and drainage networks branch and merge.
 
 use crate::noise::TerrainNoise;
 use crate::tectonics::boundaries::{self, BoundaryParams};
@@ -32,16 +34,17 @@ pub struct ElevationParams {
     pub plateau_m: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
-    /// Depth of sediment and erosion that has smoothed closed land depressions, m. Basins
-    /// shallower than this become alluvial plains that rivers cross; deeper ones (and
-    /// active rifts) stay closed and can hold lakes. 0 = raw tectonic relief.
+    /// Extra sediment fill of closed land depressions, m, after erosion (rifts excepted).
+    /// Erosion already breaches sills where rivers are big, so the default is 0.
     pub sediment_fill_m: f64,
+    /// Fluvial erosion (stream power), run before the sediment fill.
+    pub erosion: crate::erosion::ErosionParams,
     pub boundaries: BoundaryParams,
 }
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, sediment_fill_m: 80.0, boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, sediment_fill_m: 0.0, erosion: crate::erosion::ErosionParams::default(), boundaries: BoundaryParams::default() }
     }
 }
 
@@ -67,7 +70,7 @@ impl Generator for Elevation {
         &[ProductId::CrustType, ProductId::Provinces]
     }
     fn wants() -> &'static [ProductId] {
-        &[ProductId::CrustAge, ProductId::Plates]
+        &[ProductId::CrustAge, ProductId::Plates, ProductId::Lithology]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         if body.interior.has_solid_surface() { Ok(()) } else { Err(Precondition("elevation needs a solid surface".into())) }
@@ -347,7 +350,30 @@ impl Generator for Elevation {
         }
         let mut field: Vec<f32> = e.iter().map(|z| (z - sea) as f32).collect();
 
-        // 5. Long-term sediment fill and erosion: closed land basins fill up (or their sills
+        // 5. Rivers cut valleys (stream-power erosion; hard rock resists).
+        if p.erosion.k > 0.0 {
+            let erodibility: Vec<f64> = match inputs.lithology() {
+                Some(l) => l.values.iter().map(|x| x.erodibility()).collect(),
+                None => vec![0.6; n],
+            };
+            // Active belts keep rising while they erode.
+            let uplift: Vec<f64> = (0..n)
+                .map(|i| {
+                    let kind = provinces.owner_of(i as Cell).and_then(|k| provinces.table.get(k)).map(|pr| pr.kind);
+                    let active = match kind {
+                        Some(G::CollisionOrogen) => 1.0,
+                        Some(G::VolcanicArc) => 0.8,
+                        Some(G::ContinentalRift | G::ContinentalHotspotTrack) => 0.4,
+                        _ => 0.0,
+                    };
+                    active * p.erosion.orogen_uplift * f64::from(field[i]).max(0.0)
+                })
+                .collect();
+            let jitter = crate::hydrology::flat_jitter(grid, ctx.seed(ProductId::Elevation).value() ^ 0xE205);
+            crate::erosion::erode(grid, &mut field, &erodibility, &uplift, &jitter, r, &p.erosion);
+        }
+
+        // 6. Long-term sediment fill: closed land basins fill up (or their sills
         //    are cut) by up to `sediment_fill_m`, except in active rifts.
         if p.sediment_fill_m > 0.0 {
             let d = crate::hydrology::drainage(grid, &field);

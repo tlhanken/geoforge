@@ -5,6 +5,7 @@ pub mod biomes;
 pub mod circulation;
 pub mod climate;
 pub mod elevation;
+pub mod erosion;
 pub mod geology;
 pub mod hydrology;
 pub mod noise;
