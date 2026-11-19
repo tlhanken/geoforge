@@ -237,8 +237,10 @@ pub fn classify(c: &CellClimate, p: &BiomesParams) -> Earth {
     // for trees, so it is a mountain climate rather than a polar one.
     let warm_at_sea_level = c.t_mean + c.t_range / 2.0 + 6.5 * c.elevation_m.max(0.0) / 1000.0;
     let high = c.elevation_m >= p.alpine_min_m && warm_at_sea_level >= 10.0;
+    // Never thawing: ice, on a mountain as on a polar plateau (Antarctica's is high too, but
+    // no lapse rate would make it warm).
     if warm < 0.0 {
-        return if high { Earth::Alpine } else { Earth::IceSheet };
+        return Earth::IceSheet;
     }
     if warm < 10.0 {
         return if high { Earth::Alpine } else { Earth::Tundra };
@@ -290,7 +292,7 @@ pub struct Biomes;
 impl Generator for Biomes {
     type Params = BiomesParams;
     const NAME: &'static str = "biomes";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Biomes;
 
     fn needs() -> &'static [ProductId] {

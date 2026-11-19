@@ -2,14 +2,17 @@
 //! temperature anomaly they cause.
 //!
 //! - **Winds** (January and July): Hadley, Ferrel and polar cells scaled by rotation and
-//!   shifted with the ITCZ; monsoon flow toward heated continents in summer (and away in
-//!   winter); and the subtropical highs over each ocean basin, which turn the flow poleward
+//!   shifted with the ITCZ (further over large heated land, where the trades cross the
+//!   equator as monsoon westerlies); monsoon flow into the summer heat lows (and out of the
+//!   winter highs), turned by the Coriolis force and blocked by high ranges; and the
+//!   subtropical highs over each ocean basin, which turn the flow poleward
 //!   along the basin's western side (moist air onto east coasts) and equatorward along its
 //!   eastern side (dry west coasts).
 //! - **Currents**: wind-driven gyres from the Sverdrup balance (transport set by the curl of
 //!   the zonal wind stress, integrated westward from each basin's eastern shore) closed by a
-//!   narrow western boundary current (Stommel), plus equatorial currents and a circumpolar
-//!   current where an ocean band has no shores.
+//!   narrow western boundary current (Stommel), which crosses the basin where the gyres
+//!   meet and runs up the far shore (the North Atlantic Drift); plus equatorial currents and
+//!   a circumpolar current where an ocean band has no shores.
 //! - **SST anomaly**: currents carry water across the temperature gradient (poleward
 //!   western boundary currents run warm, equatorward eastern ones cold), and that heat is
 //!   carried downstream along the current; coastal upwelling under equatorward winds cools
@@ -20,7 +23,7 @@
 
 use crate::atmosphere::transport::{diffuse, semi_lagrangian};
 use crate::atmosphere::grid::is_sea;
-use crate::atmosphere::{winds, Atmo, AtmoGrid, Cells, Radiation};
+use crate::atmosphere::{winds, Atmo, AtmoGrid, Radiation, Season};
 use crate::climate::ClimateParams;
 use geoforge_core::grid::Cell;
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
@@ -48,6 +51,9 @@ pub struct CirculationParams {
     pub boundary_current_m_s: f64,
     /// Width of western boundary currents, km.
     pub boundary_current_km: f64,
+    /// Speed of the drift that carries a western boundary current across its basin and up
+    /// the far shore (the North Atlantic Drift), m/s.
+    pub drift_m_s: f64,
     /// How long current-carried water keeps its temperature, days (sets anomaly size).
     pub heat_memory_days: f64,
     /// Cooling where winds drive coastal upwelling, °C.
@@ -62,8 +68,9 @@ impl Default for CirculationParams {
             subtropical_highs: 0.5,
             boundary_current_m_s: 1.5,
             boundary_current_km: 150.0,
-            heat_memory_days: 30.0,
-            upwelling_c: 4.0,
+            drift_m_s: 0.3,
+            heat_memory_days: 60.0,
+            upwelling_c: 8.0,
         }
     }
 }
@@ -116,9 +123,10 @@ fn basins(a: &Atmo, radius_km: f64) -> Basins {
 
 /// Surface winds of one season on the atmosphere grid, in units of [`WIND_REF_M_S`].
 #[must_use]
-pub fn season_winds(a: &Atmo, cells: &Cells, season: f64, p: &CirculationParams) -> Vec<(f64, f64)> {
+pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f64, f64)> {
     let g = &a.g;
-    let mut w = winds(a, cells, season, p.monsoon);
+    let cells = &season.cells;
+    let mut w = winds(a, season, p.monsoon);
     if p.subtropical_highs > 0.0 {
         // Anticyclones over each basin: poleward on the western side, equatorward on the east.
         let b = basins(a, 6371.0);
@@ -228,6 +236,7 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             (0.0, (psi[y * g.w + xe] - psi[y * g.w + xw]) / (2.0 * dx))
         })
         .collect();
+    let fronts = gyre_fronts(g, &tau);
     // Scale so the strongest western boundary currents (meridional flow) reach the set speed.
     let mut speeds: Vec<f64> = cur.iter().map(|v| v.1.abs()).filter(|s| *s > 0.0).collect();
     speeds.sort_by(f64::total_cmp);
@@ -256,8 +265,40 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         if open_band[y] > 0.0 {
             v.0 += 0.6 * open_band[y] * annual[i].0.max(0.0);
         }
+        // Where the subtropical and subpolar gyres meet (under the strongest westerlies) the
+        // western boundary current leaves the coast and crosses the basin, turning poleward
+        // as it nears the far side and running on up the eastern shore (the Gulf Stream, North
+        // Atlantic Drift and Norwegian Current; the Kuroshio, North Pacific and Alaska
+        // Currents).
+        let hemi = lat.signum();
+        let front = if hemi > 0.0 { fronts.0 } else { fronts.1 };
+        if let Some(front) = front {
+            let basin = 1.0 - open_band[y];
+            let x_rel = b.west_km[i] / (b.west_km[i] + b.east_km[i]).max(1.0);
+            let jet = (-((lat.abs() - front) / 5.0).powi(2)).exp();
+            let beyond = ((lat.abs() - front) / 5.0).clamp(0.0, 1.0) * ((front + 28.0 - lat.abs()) / 6.0).clamp(0.0, 1.0);
+            let shore = (-b.east_km[i] / 700.0).exp();
+            v.0 += basin * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
+            v.1 += basin * p.drift_m_s * hemi * (0.6 * jet * x_rel + 0.8 * beyond * shore);
+        }
     }
     cur
+}
+
+/// Latitude of the strongest westerly stress in each hemisphere (north, south), between 25°
+/// and 65°: where the subtropical and subpolar gyres meet.
+fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<f64>, Option<f64>) {
+    let best = |north: bool| {
+        (0..g.h)
+            .filter(|&y| {
+                let lat = g.lat(y);
+                (lat > 0.0) == north && (25.0..65.0).contains(&lat.abs())
+            })
+            .filter(|&y| tau[y] > 0.0)
+            .max_by(|&a, &b| tau[a].total_cmp(&tau[b]))
+            .map(|y| g.lat(y).abs())
+    };
+    (best(true), best(false))
 }
 
 /// Sea-surface temperature anomaly (°C) from currents crossing the temperature gradient,
@@ -284,9 +325,10 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], winds_annual: &[(f64, f64)], tz: &[
             s
         })
         .collect();
-    // Carry the anomaly along the currents (one atmosphere cell per step at 0.5 m/s).
+    // Carry the anomaly along the currents (one atmosphere cell per step at 0.5 m/s): water
+    // keeps its warmth for months, so the Gulf Stream's reaches Norway.
     let flow: Vec<(f64, f64)> = cur.iter().map(|v| (v.0 / 0.5, v.1 / 0.5)).collect();
-    let mut anom = carry_along(g, &flow, &source, &a.land, 40, 0.85);
+    let mut anom = carry_along(g, &flow, &source, &a.land, 200, 0.97);
     diffuse(g, &mut anom, 0.3);
     anom.iter().map(|v| v.clamp(-8.0, 8.0)).collect()
 }
@@ -308,7 +350,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -332,8 +374,8 @@ impl Generator for Circulation {
         let g: AtmoGrid = atmo.g;
         let obl = body.irradiance.obliquity_deg;
         let rot = body.exterior.rotation_h;
-        let jul = season_winds(&atmo, &Cells::for_body(rot, obl, 1.0), 1.0, p);
-        let jan = season_winds(&atmo, &Cells::for_body(rot, obl, -1.0), -1.0, p);
+        let jul = season_winds(&atmo, &Season::new(&atmo, rot, obl, 1.0, p.monsoon), p);
+        let jan = season_winds(&atmo, &Season::new(&atmo, rot, obl, -1.0, p.monsoon), p);
         let annual: Vec<(f64, f64)> = jul.iter().zip(&jan).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let has_sea = atmo.land.iter().any(|l| *l < 0.5);
         let cur = if has_sea { currents(&atmo, &annual, r, p) } else { vec![(0.0, 0.0); g.len()] };
@@ -401,6 +443,7 @@ fn sample2(g: &AtmoGrid, f: &[(f64, f64)], lat: f64, lon: f64) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atmosphere::Cells;
 
     /// One ocean basin between two meridional continents, Earth-like body: a clockwise
     /// subtropical gyre in the north with a fast poleward western boundary current, an
@@ -412,7 +455,7 @@ mod tests {
         let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
-        let annual = season_winds(&a, &Cells::for_body(24.0, 23.0, 0.0), 0.0, &p);
+        let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 23.0, 0.0), 0.0, g.w), &p);
         let cur = currents(&a, &annual, 6371.0, &p);
         let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
         // Western boundary (x just east of 40) at 30°N: strong northward flow.

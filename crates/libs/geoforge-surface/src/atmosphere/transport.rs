@@ -36,6 +36,27 @@ pub fn diffuse(g: &AtmoGrid, f: &mut [f64], k: f64) {
     }
 }
 
+/// Diffusion with a coefficient per grid row (eddies mix more in the storm tracks), in as
+/// many stable sub-steps as the largest coefficient needs.
+pub fn diffuse_rows(g: &AtmoGrid, f: &mut [f64], k_row: &[f64]) {
+    let k_max = k_row.iter().copied().fold(0.0, f64::max);
+    let n = (k_max / 0.2).ceil().max(1.0) as usize;
+    for _ in 0..n {
+        let src = f.to_vec();
+        for y in 0..g.h {
+            let k = k_row[y] / n as f64;
+            for x in 0..g.w {
+                let i = y * g.w + x;
+                let l = src[y * g.w + (x + g.w - 1) % g.w];
+                let r = src[y * g.w + (x + 1) % g.w];
+                let u = src[y.saturating_sub(1) * g.w + x];
+                let d = src[(y + 1).min(g.h - 1) * g.w + x];
+                f[i] = (1.0 - k) * src[i] + k * 0.25 * (l + r + u + d);
+            }
+        }
+    }
+}
+
 /// A quantity carried by the winds: over sea it relaxes toward `sea` (25% per step), over
 /// land it decays with distance (`reach_km`). With `sea` = 1 this is the maritime-air
 /// fraction; with the sea-surface temperature anomaly it carries current-warmed or

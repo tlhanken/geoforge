@@ -9,18 +9,22 @@
 //! 2. **Seasons** from the body's obliquity, eccentricity and year: the annual harmonic of
 //!    insolation sets the seasonal swing, damped by the air column and the ocean.
 //! 3. **Circulation** from rotation: Hadley, Ferrel and polar cells (the Hadley cell widens
-//!    on slowly rotating bodies), shifted seasonally with the ITCZ, plus a monsoon flow
-//!    toward heated continents in summer.
+//!    on slowly rotating bodies), shifted seasonally with the ITCZ, which moves further over
+//!    large heated land; plus monsoon flow into the summer heat lows.
 //! 4. **Continentality**: a maritime-air tracer carried by the winds, so west coasts in the
 //!    westerlies are mild and continental interiors have large seasonal swings.
 //! 5. **Moisture**: water vapour carried along the winds on a coarse atmosphere grid;
 //!    evaporation over the sea relaxes it toward saturation, it rains out where air rises
 //!    (convergence zones, windward slopes) or cools, and not where it sinks or warms (the
-//!    subtropical highs, rain shadows, interiors). Land recycles part of its rain.
+//!    Hadley cells' sinking belts, the eastern flanks of the subtropical highs, the poleward
+//!    side of summer heat lows, air off cold water, rain shadows). Sinking air needs to be
+//!    more humid before it rains, and summer land under it bakes. Land recycles part of its
+//!    rain.
 //!    The global total is set by a water budget scaled with temperature and ocean area.
 //!    Worlds without surface water get none.
-//! 6. **Downscaling** to the world grid: lapse rate on the cell's own elevation, coast
-//!    distance on the fine grid, local orographic enhancement.
+//! 6. **Downscaling** to the world grid: lapse rate on the cell's own elevation (less on
+//!    broad plateaus, which heat the air above them), coast distance on the fine grid, local
+//!    orographic enhancement.
 //!
 //! Radiation, grids, transport and the circulation cells live in [`crate::atmosphere`],
 //! shared with the circulation layer.
@@ -31,7 +35,7 @@ pub use moisture::w_sat;
 
 use crate::atmosphere::transport::carry;
 use crate::atmosphere::grid::{ground_m, is_sea};
-use crate::atmosphere::{Atmo, AtmoGrid, Cells, Radiation};
+use crate::atmosphere::{Atmo, AtmoGrid, Radiation, Season};
 use geoforge_core::grid::{distance_field, Cell};
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
 use geoforge_core::shapes::Field;
@@ -68,7 +72,7 @@ impl Default for ClimateParams {
             greenhouse_offset_c: 0.0,
             heat_transport: 3.2,
             global_precip_mm: None,
-            maritime_reach_km: 1200.0,
+            maritime_reach_km: 2500.0,
             rainout: 0.06,
         }
     }
@@ -99,8 +103,23 @@ pub struct Coarse {
     pub precip_jul: Vec<f64>,
     pub precip_jan: Vec<f64>,
     pub elev: Vec<f64>,
+    /// Ground height smoothed over ~300 km (plateaus), m.
+    pub broad_elev: Vec<f64>,
     pub global_mean_t: f64,
 }
+
+/// Broad high ground heats the air above it: over a wide plateau the air is warmer than free
+/// air at the same height (~2 °C per km of plateau on Tibet and the Altiplano). Not over ice
+/// or snow, which absorb too little sunlight.
+const PLATEAU_WARMING_C_PER_KM: f64 = 2.0;
+
+fn plateau_warming(t_sea_level: f64, broad_elevation_m: f64) -> f64 {
+    PLATEAU_WARMING_C_PER_KM * ((t_sea_level + 5.0) / 15.0).clamp(0.0, 1.0) * broad_elevation_m.max(0.0) / 1000.0
+}
+
+/// Extra summer warmth of land under fully sinking air (the moisture model's view of a
+/// desert summer), °C.
+const DESERT_SUMMER_C: f64 = 8.0;
 
 fn continentality(is_land: bool, maritime: f64, coast_km: f64) -> f64 {
     if is_land {
@@ -123,6 +142,8 @@ impl Climate {
         let atmo = Atmo::from_world(grid, elev, p.resolution_deg, wet);
         let g = atmo.g;
         let obl_w = body.irradiance.obliquity_deg;
+        // The rain belt and monsoons follow the circulation layer's defaults.
+        let circulation = crate::circulation::CirculationParams::default();
         let season_winds: Vec<Vec<(f64, f64)>> = match (inputs.wind_jul(), inputs.wind_jan()) {
             (Some(jul), Some(jan)) => vec![
                 atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S),
@@ -130,7 +151,7 @@ impl Climate {
             ],
             _ => [1.0, -1.0]
                 .into_iter()
-                .map(|season| crate::circulation::season_winds(&atmo, &Cells::for_body(body.exterior.rotation_h, obl_w, season), season, &crate::circulation::CirculationParams::default()))
+                .map(|sign| crate::circulation::season_winds(&atmo, &Season::new(&atmo, body.exterior.rotation_h, obl_w, sign, circulation.monsoon), &circulation))
                 .collect(),
         };
         let sst: Vec<f64> = match inputs.sst_anomaly() {
@@ -149,8 +170,11 @@ impl Climate {
         let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let mar = carry(&atmo, &wind_annual, p.maritime_reach_km, r, &vec![1.0; g.len()]);
         let sst_air = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &sst);
+        let broad = g.blur(&atmo.elev, 3);
         let mut t_sl = vec![0.0; g.len()];
         let mut swing = vec![0.0; g.len()];
+        let monsoon = circulation.monsoon;
+        let seasons_def = [1.0, -1.0].map(|sign| Season::new(&atmo, body.exterior.rotation_h, obl, sign, monsoon));
         let mut t_season = [vec![0.0; g.len()], vec![0.0; g.len()]];
         let mut t_mean_here = vec![0.0; g.len()];
         for i in 0..g.len() {
@@ -165,29 +189,35 @@ impl Climate {
             swing[i] = swing_z[y];
             let range = swing[i].abs() * (0.13 + 0.87 * cont);
             let half = 0.5 * range * swing[i].signum();
-            let t_here = t - lapse * atmo.elev[i] / 1000.0;
+            let t_here = t - lapse * atmo.elev[i] / 1000.0 + plateau_warming(t, broad[i].min(atmo.elev[i]));
             t_mean_here[i] = t_here;
             t_season[0][i] = t_here + half; // northern summer
             t_season[1][i] = t_here - half; // northern winter
+            // Summer land under sinking air bakes: clear skies, dry ground, adiabatic warming.
+            for (k, season) in seasons_def.iter().enumerate() {
+                if lat * season.sign > 0.0 {
+                    let sink = ((1.0 - season.convergence(i % g.w, lat, atmo.land[i])) / 0.6).clamp(0.0, 1.0);
+                    t_season[k][i] += DESERT_SUMMER_C * atmo.land[i] * sink;
+                }
+            }
         }
 
         // 5. Moisture, two solstice seasons; nothing to rain without surface water.
         let mut seasons = Vec::new();
-        for (k, season) in [1.0, -1.0].into_iter().enumerate() {
-            let circ = Cells::for_body(body.exterior.rotation_h, obl, season);
-            seasons.push(if wet { moisture::moisture(&atmo, &season_winds[k], &circ, &t_season[k], &t_mean_here, p.rainout) } else { vec![0.0; g.len()] });
+        for (k, season) in seasons_def.iter().enumerate() {
+            seasons.push(if wet { moisture::moisture(&atmo, &season_winds[k], season, monsoon, &t_season[k], &t_mean_here, &sst_air, p.rainout, r) } else { vec![0.0; g.len()] });
         }
         let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
         let precip_jan = seasons.pop().expect("two seasons");
         let precip_jul = seasons.pop().expect("two seasons");
-        Coarse { grid: g, t_sl, swing, maritime: mar, precip, precip_jul, precip_jan, elev: atmo.elev, global_mean_t: tmean }
+        Coarse { grid: g, t_sl, swing, maritime: mar, precip, precip_jul, precip_jan, elev: atmo.elev, broad_elev: broad, global_mean_t: tmean }
     }
 }
 
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -240,7 +270,9 @@ impl Generator for Climate {
                 let mar = g.sample(&co.maritime, ll.lat_deg, ll.lon_deg);
                 let cont = continentality(is_land, mar, coast_km[i]);
                 let t_sl = g.sample(&co.t_sl, ll.lat_deg, ll.lon_deg) + 3.5 * wave_t.fbm(pt, 3.0, 3);
-                let t = t_sl - lapse * ground_m(wet, e) / 1000.0;
+                // Plateau warming needs the ground itself to be high, not just nearby ranges.
+                let broad = g.sample(&co.broad_elev, ll.lat_deg, ll.lon_deg).min(e);
+                let t = t_sl - lapse * ground_m(wet, e) / 1000.0 + if is_land { plateau_warming(t_sl, broad) } else { 0.0 };
                 let swing = g.sample(&co.swing, ll.lat_deg, ll.lon_deg).abs();
                 let range = swing * (0.13 + 0.87 * cont);
                 let mut pr = g.sample(&co.precip, ll.lat_deg, ll.lon_deg).max(0.0) * (0.8 * wave_p.fbm(pt, 4.0, 3)).exp();
@@ -272,7 +304,7 @@ impl Generator for Climate {
             let a = arid(f64::from(fine[i].2) * k);
             let lat = grid.center(i as Cell).to_lat_lon().lat_deg.abs();
             let sub = (1.0 - ((lat - 25.0) / 30.0).powi(2)).clamp(0.0, 1.0);
-            ((3.5 * a * sub) as f32, (5.0 * a * sub) as f32)
+            ((5.0 * a * sub) as f32, (7.0 * a * sub) as f32)
         };
         if inputs.temperature().is_none() {
             out.insert(ProductData::Temperature(Field::from_values(spec, (0..n).map(|i| fine[i].0 + dry_warm(i).0).collect())));

@@ -22,29 +22,32 @@ erosion 17 s, circulation 1 s, climate 5 s, hydrology 2 s, biomes <0.1 s).
 | Largest plate, of surface | 0.25 | 0.22 | 0.18 | 0.24 | 0.25 | 0.24 | 0.20 |
 | Seven largest plates | 0.81 | 0.81 | 0.82 | 0.85 | 0.83 | 0.81 | 0.81 |
 | Land fraction | 0.31 | 0.23 | 0.28 | 0.29 | 0.30 | 0.31 | 0.29 |
-| Mean land elevation, m | 804 | 1482 | 736 | 1137 | 774 | 940 | 840 |
+| Mean land elevation, m | 804 | 1482 | 754 | 1137 | 795 | 954 | 840 |
 | Land above 1000 m | 0.29 | 0.76 | 0.15 | 0.65 | 0.15 | 0.23 | 0.27 |
 | Highest point, m | 8171 | 10682 | 9549 | 9629 | 10472 | 10501 | 8849 |
 | Mean ocean depth, m | 3773 | 3465 | 3811 | 3357 | 3684 | 4010 | 3680 |
 | Surface rock: Cenozoic / Precambrian | 0.24 / 0.38 | 0.28 / 0.34 | 0.23 / 0.38 | 0.25 / 0.36 | 0.27 / 0.39 | 0.29 / 0.38 | 0.28 / 0.32 |
-| Global mean temperature, °C | 14.1 | 8.4 | 9.5 | 10.1 | 16.2 | 12.6 | 14.5 |
-| Equator (5°S–5°N), °C | 25.8 | 21.5 | 22.0 | 21.3 | 24.8 | 21.1 | 26.5 |
-| 40–50°N, °C | 8.4 | 6.1 | 4.7 | 6.1 | 12.0 | 9.4 | 10 |
-| 55–65°N, °C | −2.6 | −9.3 | −11.3 | −9.5 | 5.1 | 3.1 | 0.5 |
-| Annual range, land 40–60°, °C | 32.5 | 37.9 | 26.8 | 35.5 | 38.0 | 20.1 | ~28 |
-| Annual range, ocean 40–60°, °C | 5.9 | 5.7 | 5.1 | 7.1 | 6.7 | 3.6 | ~7 |
+| Global mean temperature, °C | 14.8 | 9.2 | 10.0 | 10.9 | 16.8 | 13.5 | 14.5 |
+| Equator (5°S–5°N), °C | 26.0 | 21.8 | 22.0 | 22.2 | 25.3 | 21.9 | 26.5 |
+| 40–50°N, °C | 10.2 | 6.7 | 5.8 | 7.5 | 12.4 | 10.5 | 10 |
+| 55–65°N, °C | −1.8 | −8.0 | −10.3 | −9.0 | 6.0 | 3.6 | 0.5 |
+| Annual range, land 40–60°, °C | 30.3 | 34.9 | 23.8 | 32.2 | 34.7 | 18.8 | ~28 |
+| Annual range, ocean 40–60°, °C | 5.8 | 5.6 | 5.0 | 6.9 | 6.6 | 3.5 | ~7 |
 | Global precipitation, mm/yr | 1024 | 927 | 897 | 929 | 1089 | 980 | 1000 |
-| Land precipitation, mm/yr | 837 | 740 | 592 | 974 | 1071 | 761 | 780 |
-| Land drier than 250 mm/yr | 0.28 | 0.46 | 0.41 | 0.25 | 0.14 | 0.24 | ~0.2 |
-| Precipitation 5°S–10°N, mm/yr | 2084 | 1865 | 2008 | 1690 | 1821 | 1321 | ~2000 |
-| Precipitation 40–55°N, mm/yr | 646 | 620 | 505 | 740 | 611 | 971 | ~1000 |
-| River discharge to the sea, km³/yr | 46 991 | 38 343 | 22 806 | 67 279 | 55 643 | 41 664 | 37 000 |
-| Rivers over 10 000 m³/s | 24 | 17 | 8 | 38 | 24 | 23 | 8 |
-| Lakes over 10 000 km² | 7 | 4 | 9 | 2 | 8 | 18 | 16 |
-| Endorheic land | 0.08 | 0.00 | 0.06 | 0.00 | 0.01 | 0.15 | 0.18 |
-| Mediterranean biome, of land | 0.011 | 0.007 | 0.010 | 0.015 | 0.008 | 0.014 | 0.02 |
-| Hot desert, of land | 0.06 | 0.01 | 0.05 | 0.04 | 0.07 | 0.04 | 0.14 |
-| Temperate grassland, of land | 0.27 | 0.22 | 0.24 | 0.24 | 0.28 | 0.36 | 0.08 |
+| Land precipitation, mm/yr | 851 | 743 | 628 | 896 | 1066 | 631 | 780 |
+| Land drier than 250 mm/yr | 0.39 | 0.49 | 0.50 | 0.36 | 0.33 | 0.45 | ~0.2 |
+| Precipitation 5°S–10°N, mm/yr | 2264 | 2321 | 2607 | 1749 | 2241 | 975 | ~2000 |
+| Precipitation 40–55°N, mm/yr | 1023 | 943 | 722 | 1181 | 670 | 1644 | ~1000 |
+| River discharge to the sea, km³/yr | 54 473 | 40 074 | 30 901 | 62 961 | 63 756 | 41 064 | 37 000 |
+| Rivers over 10 000 m³/s | 24 | 20 | 17 | 31 | 24 | 26 | 8 |
+| Lakes over 10 000 km² | 5 | 4 | 5 | 3 | 6 | 16 | 16 |
+| Endorheic land | 0.08 | 0.01 | 0.06 | 0.03 | 0.01 | 0.14 | 0.18 |
+| Mediterranean biome, of land | 0.046 | 0.022 | 0.041 | 0.039 | 0.028 | 0.055 | 0.02 |
+| Hot desert, of land | 0.20 | 0.05 | 0.17 | 0.16 | 0.20 | 0.34 | 0.14 |
+| Temperate grassland, of land | 0.14 | 0.15 | 0.11 | 0.12 | 0.11 | 0.13 | 0.08 |
+
+Figures are for the code as of the real-Earth check below (climate v3, circulation v3,
+biomes v3).
 
 The generated worlds are not Earth: most get 0.88–0.93× Earth's starlight and differ in
 size, air pressure, day length and tilt. The carbonate–silicate thermostat (set in the solar
@@ -64,12 +67,12 @@ relative to the mean radius.
 | Quantity | Mars | Venus | Moon | Mercury |
 |---|---|---|---|---|
 | Generators | lid ×3, circulation, climate | lid ×3, circulation, climate | lid ×3 | lid ×3 |
-| Lowest / highest, km | −10.4 / +19.2 | −3.4 / +11.1 | −8.8 / +5.0 | −8.1 / +5.0 |
+| Lowest / highest, km | −9.4 / +20.1 | −3.6 / +12.0 | −10.2 / +5.4 | −7.6 / +5.5 |
 | Real, km | −8.2 / +21.2 | about −3 / +11 | 19.9 km range | −5.4 / +4.5 |
-| Surface within 1 km of the mean | 0.30 | 0.82 (real: over 0.80) | 0.52 | 0.30 |
+| Surface within 1 km of the mean | 0.13 | 0.80 (real: over 0.80) | 0.27 | 0.17 |
 | Lowland (thin crust) share | 0.35 | 0.80 | 0.18 (maria ≈ 0.17) | 0.27 |
-| Global mean temperature, °C | −66 (real ≈ −63) | 465 (real 464) | — | — |
-| Equator / north pole, °C | −48 / −111 | 465 / 457 | — | — |
+| Global mean temperature, °C | −65 (real ≈ −63) | 466 (real 464) | — | — |
+| Equator / north pole, °C | −48 / −115 | 467 / 459 | — | — |
 | Seasonal range, 40–60°, °C | 71 | 2 | — | — |
 
 The climate model's greenhouse is fitted to Earth, Mars, Venus and Titan presets
@@ -79,6 +82,87 @@ The climate model's greenhouse is fitted to Earth, Mars, Venus and Titan presets
 Generated systems also give Venus-like inner worlds (runaway greenhouse, 35–360 bar CO₂),
 cold super-Earths with thin CO₂, ice-shell ocean moons around giants, frozen cratered moons
 and belt members; `geoforge-v2 show` lists each body with its regime, air and water.
+
+## Real Earth
+
+`scripts/real-earth/run.sh` puts Earth's actual topography (ETOPO1, as authored elevation)
+under an `--archetype earth` world. It generates circulation, climate, hydrology and biomes,
+then compares each layer with the observed Earth: ERA-Interim winds, ERSST v5 sea
+temperatures, the Köppen–Geiger map and 31 station normals (see the script's README). With
+the same land and sea as Earth, any difference comes from the model, not from the map.
+
+The first run answered the grassland question. On Earth's own map the model gave 2% hot
+desert and 20% temperate grassland. The cause was the climate, not where the land lay: the
+Sahara, Arabia, Australia and the US Southwest came out wet, and the Indian monsoon was
+missing. The changes since:
+
+- **The ITCZ moves with the continents.** It follows the sun over the oceans but moves into
+  the summer hemisphere over large heated land. The trades that cross the equator turn into
+  monsoon westerlies. Rain falls on the equatorward side of that trough.
+- **Monsoons flow into subtropical heat lows**, turned by the Coriolis force and stopped by
+  high ranges (the Andes keep the Amazon from pulling the Pacific ashore at Peru).
+- **Sinking air dries:**
+  - a broad Hadley sinking belt, strongest in the winter hemisphere;
+  - Sverdrup balance on the flanks of the subtropical highs: air turned equatorward sinks,
+    and that sinking reaches inland with the wind;
+  - northerlies on the poleward side of a heat low;
+  - stable air off cold water.
+- **Rain needs more humid air where it sinks** (30% to 70% of saturation).
+- **Summer land under sinking air is hotter** (up to 8 °C in the moisture model).
+- **Other moisture and heat fixes:**
+  - air over colder ground condenses gradually instead of all at once (this had dumped the
+    Pacific on Southern California);
+  - storm-track eddies carry vapour deeper inland;
+  - land recycling scales with the season's warmth;
+  - broad plateaus warm the air above them (about 2 °C per km);
+  - maritime air reaches about 2500 km inland instead of 1200;
+  - deserts get +5 °C mean and +7 °C range instead of +3.5 and +5.
+- **Ocean:** the western boundary current crosses its basin where the gyres meet and runs up
+  the far shore (a North Atlantic Drift). The SST anomaly remembers for months, and
+  upwelling is stronger.
+- **Biomes:** ground that never thaws is ice sheet, not alpine, even on a high plateau.
+
+| Real Earth, 2048×1024 | Before | After | Observed |
+|---|---|---|---|
+| Köppen major group, cell agreement | 0.49 | 0.58 | — |
+| Desert (BW), of land | 0.09 | 0.21 | 0.18 |
+| Hot desert (BWh), of land | 0.02 | 0.16 | 0.14 |
+| Steppe (BS), of land | 0.18 | 0.12 | 0.12 |
+| Temperate (C) / continental (D), of land | 0.25 / 0.13 | 0.17 / 0.14 | 0.15 / 0.22 |
+| Hot desert biome / temperate grassland | 0.02 / 0.20 | 0.16 / 0.09 | 0.14 / 0.08 |
+| Ice sheet / alpine biome | 0.04 / 0.07 | 0.10 / 0.01 | 0.10 / — |
+| Station RMSE: mean temperature, °C | 5.4 | 4.3 | — |
+| Station RMSE: log precipitation | 1.89 | 1.45 | — |
+| Wind direction vs ERA-Interim, Jan / Jul | 0.75 / 0.70 | 0.77 / 0.65 | — |
+| July wind, northern Indian Ocean (u, v), m/s | (−3.8, 3.3) | (4.2, 4.4) | (12.6, 2.9) |
+| SST departure from zonal mean, correlation | 0.27 | 0.38 | — |
+| NE Atlantic SST departure, °C | +0.1 | +1.2 | +4.4 |
+| Zonal temperature 25–35°N, °C | 17.1 | 18.4 | 20 |
+
+Stations now in the right Köppen group include:
+- deserts: Cairo, In Salah and Alice Springs;
+- the Mediterranean coasts: Los Angeles and Perth;
+- Mumbai, Manaus and Singapore (tropical).
+
+Known misses on Earth's map:
+
+1. **Peru's coast is wet** (1600 mm vs 15). The cold current is a third as cold as observed,
+   and the southern summer's rain belt still reaches it.
+2. **The East African highlands are drenched** (Nairobi 5100 mm vs 870). There is no Walker
+   circulation, and nothing makes the Somali coast's flow diverge.
+3. **The Indian monsoon is a third as strong as observed.** Mumbai gets 1040 mm vs 2200.
+4. **Eastern continental interiors at 35–45° are dry**: Chicago 430 mm vs 950, Buenos
+   Aires 375 vs 1200, Beijing 350 vs 570. Moist poleward flow from the Gulf of Mexico, the
+   South Atlantic and the South China Sea is too weak. Siberia is dry too (Yakutsk 51 mm vs
+   240).
+5. **The North Atlantic Drift brings a quarter of the observed warmth.** London is 7.7 °C
+   vs 11.3, Reykjavik −1.4 vs 4.7.
+6. **The Antarctic plateau is 15 °C too warm.** The zonal energy balance does not see the
+   ice sheet's albedo, and there is no winter inversion. Yakutsk's winters are too mild for
+   the same reason.
+7. **Subtropical oceans get half their rain** (20–30°: 360 mm vs ~700).
+8. **Rivers can't be checked here.** ETOPO1 at 20 km blocks narrow gorges, so the Congo ponds
+   behind its rapids, and the upper Mississippi and middle Yangtze end in closed basins.
 
 ## What matches
 
@@ -90,14 +174,19 @@ and belt members; `geoforge-v2 show` lists each body with its regime, air and wa
 - Western boundary currents run warm and eastern margins cold with upwelling; zonal
   temperatures within ~2 °C of Earth from the equator to 50° on the Earth preset; land/ocean
   seasonal ranges; global rainfall and the ITCZ; summer-dry west coasts in the subtropics
-  (Mediterranean ~1–2% of land).
+  (Mediterranean 2–6% of land).
+- On Earth's own map: the deserts of North Africa, Arabia, Australia and Central Asia; the
+  Mediterranean climates of California, Chile, the Cape and south-west Australia; the
+  tropical rainforest belt; the ice sheets.
 - Mars, Venus, the Moon and Mercury: relief ranges, Venus's narrow hypsometry, Mars's
   dichotomy and volcanic rises, mean temperatures of Mars and Venus.
 
 ## Known gaps
 
-1. **Mid-latitude interiors are dry and grassland is over-represented** (0.22–0.36 of land
-   vs 0.08); hot deserts under-represented (0.01–0.07 vs 0.14) as subtropics run ~2 °C cool.
+1. **Generated worlds now run dry.** Hot desert is 0.05–0.34 of land vs 0.14, land drier
+   than 250 mm is 0.33–0.50, and the 20–30° belt gets 250–630 mm vs ~800. Their continents
+   are larger and less broken up than Earth's, which leaves more interior. On Earth's own
+   map the desert share is close (0.16 vs 0.14). Grassland is 0.11–0.15 vs 0.08.
 2. **Too many large rivers** (8–38 over 10 000 m³/s vs 8): continents here are bigger and
    less broken up than Earth's, and runoff is somewhat high.
 3. **Drainage networks branch less than Earth's** (0.54 vs ~0.44); longer erosion flattens
@@ -108,7 +197,7 @@ and belt members; `geoforge-v2 show` lists each body with its regime, air and wa
 6. **Closed basins depend on terrain** (endorheic land 0–15% vs Earth's 18%).
 7. **The gray greenhouse warms the tropics more than the poles** for added CO₂ (real CO₂
    forcing is flatter), so dim, CO₂-rich worlds have cold high latitudes.
-8. **Mercury's basins come out deep** (−8 km vs −5.4 km), and the Moon's highest highlands
-   low (+5 vs +10.8 km): basin depth does not yet depend on the lithosphere's heat.
+8. **Mercury's basins come out deep** (−7.6 km vs −5.4 km), and the Moon's highest highlands
+   low (+5.4 vs +10.8 km): basin depth does not yet depend on the lithosphere's heat.
 9. **No generator yet for ice-shell surfaces** (Europa, Titan) or giants; their layers report
    why they are skipped. Titan's methane cycle is out of scope.
