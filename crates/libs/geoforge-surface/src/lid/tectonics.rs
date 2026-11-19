@@ -57,7 +57,8 @@ impl LidTectonicsParams {
         let (lowland, dichotomy, high, low) = match body.interior.regime {
             // Venus: tesserae up to ~1 Ga, plains renewed ~500 Ma ago.
             TectonicRegime::Episodic => (0.8, 0.1, 900.0, 450.0),
-            TectonicRegime::Inactive => (0.15, 0.5, oldest + 100.0, 0.85 * (oldest + 100.0)),
+            // Dead since it formed: no lava plains, all old ground.
+            TectonicRegime::Inactive => (0.0, 0.0, oldest + 100.0, oldest + 100.0),
             _ => (stagnant_lowland, 0.75, oldest, 0.82 * oldest),
         };
         LidStyle {

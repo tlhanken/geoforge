@@ -25,6 +25,30 @@ pub enum Species {
 }
 
 impl Species {
+    /// Chemical formula (rocks by name).
+    #[must_use]
+    pub fn formula(self) -> &'static str {
+        match self {
+            Self::Iron => "Fe",
+            Self::Nickel => "Ni",
+            Self::Sulfur => "S",
+            Self::Silicate => "MgSiO₃",
+            Self::Basalt => "basalt",
+            Self::Granite => "granite",
+            Self::Anorthosite => "anorthosite",
+            Self::Water => "H₂O",
+            Self::Ice => "H₂O ice",
+            Self::Hydrogen => "H₂",
+            Self::Helium => "He",
+            Self::Nitrogen => "N₂",
+            Self::Oxygen => "O₂",
+            Self::CarbonDioxide => "CO₂",
+            Self::Argon => "Ar",
+            Self::Methane => "CH₄",
+            Self::Ammonia => "NH₃",
+        }
+    }
+
     /// Molar mass, g/mol. Rocks use a representative mineral's formula unit; only ratios
     /// within one shell matter (mole fractions of an atmosphere).
     #[must_use]

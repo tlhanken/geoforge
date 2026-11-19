@@ -74,7 +74,7 @@ pub struct RockDef {
     pub occurs: Vec<Occurrence>,
 }
 
-/// The built-in rocks: Earth's, plus the impact and anorthosite crust of airless and
+/// The built-in rocks: Earth's, plus the impact, anorthosite and ice crusts of airless and
 /// rigid-lid worlds. Keys are the variant number + 1, so stored lithology stays stable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Earth {
@@ -94,10 +94,11 @@ enum Earth {
     RiftFill,
     ImpactBreccia,
     Anorthosite,
+    WaterIce,
 }
 
 impl Earth {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 17] = [
         Self::OceanicBasalt,
         Self::PelagicSediment,
         Self::CratonicBasement,
@@ -114,6 +115,7 @@ impl Earth {
         Self::RiftFill,
         Self::ImpactBreccia,
         Self::Anorthosite,
+        Self::WaterIce,
     ];
 
     fn key(self) -> Key {
@@ -139,6 +141,7 @@ impl Earth {
             Self::RiftFill => ("rift_fill", "Rift fill", [235, 165, 80], 1.0, A::Infill),
             Self::ImpactBreccia => ("impact_breccia", "Impact breccia", [140, 125, 115], 0.6, A::Crust),
             Self::Anorthosite => ("anorthosite", "Anorthosite", [225, 225, 215], 0.3, A::Basement),
+            Self::WaterIce => ("water_ice", "Water ice", [215, 230, 240], 0.4, A::Crust),
         };
         RockDef { rock: Rock { slug: slug.into(), name: name.into(), color, erodibility, tags: Vec::new() }, age, occurs: Vec::new() }
     }
@@ -170,6 +173,7 @@ impl Earth {
             (Some(G::OceanTrench | G::ForearcBasin | G::BackarcBasin), false) => &[(L::PelagicSediment, 0.85), (L::OceanicBasalt, 0.15)],
             // Rigid-lid worlds: battered old crust, lava plains, volcanic constructs.
             (Some(G::CrateredHighlands), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.25), (L::Anorthosite, 0.15)],
+            (Some(G::CrateredIce), _) => &[(L::WaterIce, 0.8), (L::ImpactBreccia, 0.2)],
             (Some(G::VolcanicPlains | G::VolcanicRise), _) => &[(L::FloodBasalt, 0.85), (L::ImpactBreccia, 0.15)],
             (Some(G::ImpactBasin), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.3), (L::Anorthosite, 0.1)],
             (Some(G::ShieldVolcano), _) => &[(L::FloodBasalt, 1.0)],

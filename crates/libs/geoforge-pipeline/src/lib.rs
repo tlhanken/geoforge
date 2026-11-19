@@ -56,6 +56,9 @@ pub struct NewWorld {
     pub grid: GridSpec,
     /// Use this body instead of generating a solar system.
     pub body: Option<BodyContext>,
+    /// Focus on this body of the generated system instead of its habitable world: a body's
+    /// name, or `"<belt name> #<n>"` for the n-th largest member of a belt.
+    pub focus: Option<String>,
 }
 
 /// Create a world: a generated solar system and its focus body, or a hand-written body.
@@ -68,7 +71,10 @@ pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
         Some(b) => (None, b.clone()),
         None => {
             let g = geoforge_cosmos::generate_system(opts.seed);
-            let body = geoforge_cosmos::body_context(&g.system, g.focus);
+            let body = match &opts.focus {
+                Some(name) => geoforge_cosmos::find_body(&g.system, name).ok_or_else(|| PipelineError::Invalid(format!("no body named '{name}' in the system")))?,
+                None => geoforge_cosmos::body_context(&g.system, g.focus).expect("the focus is a body"),
+            };
             (Some(g.system), body)
         }
     };

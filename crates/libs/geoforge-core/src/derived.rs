@@ -34,8 +34,14 @@ pub fn equilibrium_temperature_k(flux_w_m2: f64, albedo: f64) -> f64 {
 /// effective flux limits 1.107 and 0.356 S☉ scaled by luminosity.
 #[must_use]
 pub fn habitable_zone_au(luminosity_solar: f64) -> (f64, f64) {
-    ((luminosity_solar / 1.107).sqrt(), (luminosity_solar / 0.356).sqrt())
+    ((luminosity_solar / RUNAWAY_GREENHOUSE_FLUX).sqrt(), (luminosity_solar / MAXIMUM_GREENHOUSE_FLUX).sqrt())
 }
+
+/// Starlight (Earth = 1) past which a wet world's oceans boil away (Kopparapu et al. 2013):
+/// the habitable zone's inner edge.
+pub const RUNAWAY_GREENHOUSE_FLUX: f64 = 1.107;
+/// Starlight (Earth = 1) below which no CO₂ greenhouse keeps water liquid: the outer edge.
+pub const MAXIMUM_GREENHOUSE_FLUX: f64 = 0.356;
 
 /// Main-sequence luminosity (L☉) from mass (M☉), piecewise mass–luminosity relation.
 #[must_use]

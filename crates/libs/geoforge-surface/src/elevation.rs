@@ -241,7 +241,14 @@ impl Generator for Elevation {
                     }
                     G::AbyssalPlain | G::OceanicFractureZone | G::HotspotTrack => {}
                     // Rigid-lid kinds: drawn by `lid::LidElevation`.
-                    G::CrateredHighlands | G::VolcanicPlains | G::ImpactBasin | G::VolcanicRise | G::ShieldVolcano | G::Corona | G::Tessera => {}
+                    G::CrateredHighlands
+                    | G::CrateredIce
+                    | G::VolcanicPlains
+                    | G::ImpactBasin
+                    | G::VolcanicRise
+                    | G::ShieldVolcano
+                    | G::Corona
+                    | G::Tessera => {}
                 }
                 z
             })

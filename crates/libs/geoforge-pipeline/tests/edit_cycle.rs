@@ -20,7 +20,7 @@ fn ran(reports: &[pipe::LayerReport]) -> Vec<LayerId> {
 #[test]
 fn generate_edit_regenerate() {
     let dir = tmp("cycle");
-    let mut w = pipe::create_world(&dir, &NewWorld { seed: Seed(7), grid: GridSpec::Equirect { width: 256, height: 128 }, body: None }).unwrap();
+    let mut w = pipe::create_world(&dir, &NewWorld { seed: Seed(7), grid: GridSpec::Equirect { width: 256, height: 128 }, body: None, focus: None }).unwrap();
 
     // First run builds everything; a second run reuses everything.
     let (p1, r1) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();

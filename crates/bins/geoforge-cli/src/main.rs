@@ -33,6 +33,10 @@ enum Cmd {
         /// moon, titan, europa, gas_giant, ice_giant.
         #[arg(long, conflicts_with = "body")]
         archetype: Option<geoforge_core::Archetype>,
+        /// Focus on another body of the generated system: its name (see `show`), or
+        /// "<belt name> #<n>" for a belt's n-th largest member.
+        #[arg(long, conflicts_with_all = ["body", "archetype"])]
+        focus: Option<String>,
     },
     /// Generate (or update) every product that is missing or stale.
     Generate {
@@ -137,7 +141,7 @@ fn read_body(path: &Path) -> R<BodyContext> {
 
 fn run(cli: Cli) -> R<()> {
     match cli.cmd {
-        Cmd::New { dir, seed, width, body, archetype } => {
+        Cmd::New { dir, seed, width, body, archetype, focus } => {
             if seed > i64::MAX as u64 {
                 return Err("seed must be at most 9223372036854775807".into());
             }
@@ -145,7 +149,7 @@ fn run(cli: Cli) -> R<()> {
             if let Some(a) = archetype {
                 body = Some(a.context(geoforge_core::Key(1), a.name()));
             }
-            let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), grid: GridSpec::Equirect { width, height: width / 2 }, body })?;
+            let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), grid: GridSpec::Equirect { width, height: width / 2 }, body, focus })?;
             show(&w)?;
             println!("\ncreated {} — next: geoforge-v2 generate {}", dir.display(), dir.display());
         }
@@ -269,10 +273,13 @@ fn show(w: &World) -> R<()> {
     if let Some(sys) = w.load_system()? {
         println!("system {} (seed {})", sys.root.name, w.manifest.root_seed.0);
         for n in &sys.nodes {
-            let a = n.elements.map_or(String::new(), |e| format!("a={:.3} AU e={:.3}", e.a_au, e.e));
+            let a = n.elements.map_or(String::new(), |e| format!("  a={:.4} AU e={:.3}", e.a_au, e.e));
             let kind = match &n.node {
                 geoforge_core::body::NodeKind::Star(s) => format!("star {} {:.2} M☉ {:.0} K", s.spectral_class, s.mass_solar, s.temperature_k),
-                geoforge_core::body::NodeKind::Body(b) => format!("{:?} {:.2} M⊕ {:.0} km", b.class, b.mass_kg / geoforge_core::body::EARTH_MASS_KG, b.radius_km),
+                geoforge_core::body::NodeKind::Body(b) => {
+                    let what = geoforge_cosmos::body_context(&sys, n.key).map_or(String::new(), |c| geoforge_cosmos::describe(&c));
+                    format!("{:?} {:.3} M⊕ {:.0} km — {what}", b.class, b.mass_kg / geoforge_core::body::EARTH_MASS_KG, b.radius_km)
+                }
                 other => format!("{other:?}").split('(').next().unwrap_or("").split(' ').next().unwrap_or("").to_string(),
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };

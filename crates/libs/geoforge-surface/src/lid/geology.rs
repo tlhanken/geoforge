@@ -1,7 +1,7 @@
 //! Geologic provinces of a rigid lid.
 //!
 //! The base is the crust's split: cratered highlands and volcanic plains (tesserae instead of
-//! highlands on an episodic lid). On top, in order of age: impact basins (the largest
+//! highlands on an episodic lid, cratered ice on a frozen body). On top, in order of age: impact basins (the largest
 //! craters, more on older ground), volcanic rises with shield volcanoes, rifts radiating from
 //! the largest rise, and, on an episodic lid, coronae. Each feature is a province row with
 //! its centre (`anchor`), size (`width_km`) and strength (`intensity`), so the elevation
@@ -10,7 +10,7 @@
 use super::landforms::{craters, BASIN_MIN_KM};
 use crate::geology::lithology::{self, RockDef};
 use crate::preconditions;
-use geoforge_core::body::{TectonicRegime, EARTH_MASS_KG};
+use geoforge_core::body::{Species, TectonicRegime, EARTH_MASS_KG};
 use geoforge_core::grid::{cells_within, components, Cell, Grid};
 use geoforge_core::key::Key;
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
@@ -184,6 +184,7 @@ fn build(ctx: &RunContext<'_>, crust: &[CrustType], age: &[f32], p: &LidGeologyP
     let body = ctx.body;
     let r = ctx.radius_km();
     let episodic = body.interior.regime == TectonicRegime::Episodic;
+    let icy = body.interior.surface_shell().is_some_and(|s| s.composition.fraction(Species::Ice) > 0.5);
     let counts = p.counts(body);
     let mut rng = StdRng::seed_from_u64(ctx.seed(ProductId::Provinces).value());
     let mut paint = Painter { grid, radius_km: r, owner: vec![0; grid.len()], table: Table::new(), events: Table::new() };
@@ -194,10 +195,11 @@ fn build(ctx: &RunContext<'_>, crust: &[CrustType], age: &[f32], p: &LidGeologyP
     for high in [true, false] {
         let member = |c: Cell| (crust[c as usize] == CrustType::Continental) == high;
         for region in components(grid, &all, member) {
-            let kind = match (high, episodic) {
-                (true, true) => G::Tessera,
-                (true, false) => G::CrateredHighlands,
-                (false, _) => G::VolcanicPlains,
+            let kind = match (high, episodic, icy) {
+                (true, _, true) => G::CrateredIce,
+                (true, true, false) => G::Tessera,
+                (true, false, false) => G::CrateredHighlands,
+                (false, ..) => G::VolcanicPlains,
             };
             let a = mean_age(&region);
             let width = (region.iter().map(|&c| grid.area_sr(c)).sum::<f64>()).sqrt() * r;

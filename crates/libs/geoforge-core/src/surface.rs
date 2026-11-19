@@ -119,6 +119,7 @@ category!(GeologicProvince {
     ShieldVolcano = 24, "Shield Volcano", [230, 60, 30],
     Corona = 25, "Corona", [240, 160, 40],
     Tessera = 26, "Tessera", [150, 130, 160],
+    CrateredIce = 27, "Cratered Ice", [205, 220, 230],
 });
 
 /// A geologic province: one painted region of the provinces partition.

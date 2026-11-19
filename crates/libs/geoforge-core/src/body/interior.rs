@@ -107,7 +107,7 @@ impl BodyInterior {
     #[must_use]
     pub fn surface_ocean_gel_km(&self) -> f64 {
         let Some(surface) = self.surface_index() else { return 0.0 };
-        self.shells[surface + 1..].iter().filter(|s| s.kind == ShellKind::Ocean).map(|s| s.thickness_km).sum()
+        self.shells[surface + 1..].iter().filter(|s| s.kind == ShellKind::Ocean).fold(0.0, |a, s| a + s.thickness_km)
     }
     /// Liquid water stands on the surface, so rain, rivers and the water cycle apply.
     #[must_use]
