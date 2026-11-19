@@ -4,6 +4,7 @@
 use geoforge_core::grid::{AnyGrid, Cell, Grid};
 use geoforge_core::product::Products;
 use geoforge_core::shapes::Partition;
+use geoforge_core::surface::Category;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -41,6 +42,24 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
         }
         if w > 0.0 { s / w } else { f64::NAN }
     };
+    if let Some(pv) = pr.provinces() {
+        // Share of the surface and number of regions per province kind.
+        let mut area_by: BTreeMap<String, (f64, usize)> = BTreeMap::new();
+        for (k, cells) in pv.cells_by_owner() {
+            if let Some(row) = pv.table.get(k) {
+                let e = area_by.entry(row.kind.name().to_lowercase().replace(' ', "_")).or_default();
+                e.0 += cells.iter().map(|&c| area[c as usize]).sum::<f64>() / total;
+                e.1 += 1;
+            }
+        }
+        let mut s = BTreeMap::new();
+        for (kind, (share, count)) in area_by {
+            s.insert(format!("{kind}_of_surface"), st(share, None));
+            s.insert(format!("{kind}_count"), st(count as f64, None));
+        }
+        out.insert("provinces".into(), s);
+    }
+
     let Some(elev) = pr.elevation().map(|f| &f.values) else { return out };
     let land = |c: usize| !sea || elev[c] >= 0.0;
     let land_area: f64 = (0..n).filter(|&c| land(c)).map(|c| area[c]).sum();
