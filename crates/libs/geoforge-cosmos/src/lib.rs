@@ -10,7 +10,7 @@ use geoforge_core::body::{
     EARTH_MASS_KG, EARTH_RADIUS_KM,
 };
 use geoforge_core::derived::{
-    effective_temperature_k, flux_w_m2, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius,
+    effective_temperature_k, orbital_period_days, flux_w_m2, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius,
 };
 use geoforge_core::key::{Key, KeyAllocator};
 use geoforge_core::seed::{range, unit, Seed};
@@ -305,7 +305,13 @@ pub fn body_context(system: &SolarSystem, key: Key) -> BodyContext {
         exterior: ext,
         interior: interior_for(system.root.seed.child_u64(b"body", key.0), &ext, flux),
         orbit: el,
-        irradiance: Irradiance { flux_w_m2: flux, star_temperature_k: star.temperature_k, eccentricity: el.e, obliquity_deg: ext.obliquity_deg },
+        irradiance: Irradiance {
+            flux_w_m2: flux,
+            star_temperature_k: star.temperature_k,
+            eccentricity: el.e,
+            obliquity_deg: ext.obliquity_deg,
+            year_days: orbital_period_days(el.a_au, star.mass_solar * geoforge_core::body::SOLAR_MASS_KG),
+        },
         tides,
         epoch: system.root.epoch,
     }
@@ -314,7 +320,7 @@ pub fn body_context(system: &SolarSystem, key: Key) -> BodyContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoforge_core::derived::{orbital_period_days, solar_masses};
+    use geoforge_core::derived::solar_masses;
 
     #[test]
     fn systems_are_plausible_and_deterministic() {

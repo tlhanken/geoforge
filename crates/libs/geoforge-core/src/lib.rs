@@ -7,6 +7,7 @@ pub mod geom;
 pub mod grid;
 pub mod key;
 pub mod product;
+pub mod radiation;
 pub mod seed;
 pub mod shapes;
 pub mod surface;

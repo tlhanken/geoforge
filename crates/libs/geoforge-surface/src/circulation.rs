@@ -18,7 +18,10 @@
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
 
-use crate::climate::{diffuse, outgoing_a, semi_lagrangian, winds, zonal_temperature, Atmo, AtmoGrid, Cells, ClimateParams};
+use crate::atmosphere::transport::{diffuse, semi_lagrangian};
+use crate::atmosphere::grid::is_sea;
+use crate::atmosphere::{winds, Atmo, AtmoGrid, Cells, Radiation};
+use crate::climate::ClimateParams;
 use geoforge_core::grid::Cell;
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
 use geoforge_core::shapes::Field;
@@ -305,7 +308,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -324,7 +327,8 @@ impl Generator for Circulation {
         let grid = ctx.grid;
         let body = ctx.body;
         let r = ctx.radius_km();
-        let atmo = Atmo::from_world(grid, elev, p.resolution_deg);
+        let wet = body.interior.has_surface_liquid_water();
+        let atmo = Atmo::from_world(grid, elev, p.resolution_deg, wet);
         let g: AtmoGrid = atmo.g;
         let obl = body.irradiance.obliquity_deg;
         let rot = body.exterior.rotation_h;
@@ -335,8 +339,7 @@ impl Generator for Circulation {
         let cur = if has_sea { currents(&atmo, &annual, r, p) } else { vec![(0.0, 0.0); g.len()] };
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
-        let olr = outgoing_a(body.irradiance.flux_w_m2, body.interior.surface_pressure_bar(), &cp);
-        let (tz, _) = zonal_temperature(&lats, body.irradiance.flux_w_m2, obl, body.irradiance.eccentricity, olr, cp.heat_transport);
+        let (tz, _) = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c).zonal_temperature(&lats);
         let sst = if has_sea { sst_anomaly(&atmo, &cur, &annual, &tz, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
@@ -355,7 +358,7 @@ impl Generator for Circulation {
                     let (x, y) = sample2(&g, f, ll.lat_deg, ll.lon_deg);
                     [(x * k) as f32, (y * k) as f32]
                 };
-                let sea = elev[i] < 0.0;
+                let sea = is_sea(wet, f64::from(elev[i]));
                 let cu = if sea { s2(&cur, 1.0) } else { [0.0, 0.0] };
                 let sa = if sea { g.sample(&sst, ll.lat_deg, ll.lon_deg) as f32 } else { 0.0 };
                 Flow { jan: s2(&jan, WIND_REF_M_S), jul: s2(&jul, WIND_REF_M_S), current: cu, sst: sa }
@@ -407,7 +410,7 @@ mod tests {
     fn gyre_has_western_intensification() {
         let g = AtmoGrid::new(1.0);
         let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
-        let a = Atmo { g, land, elev: vec![0.0; g.len()] };
+        let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
         let annual = season_winds(&a, &Cells::for_body(24.0, 23.0, 0.0), 0.0, &p);
         let cur = currents(&a, &annual, 6371.0, &p);
@@ -421,8 +424,8 @@ mod tests {
         // Southern hemisphere western boundary current runs south.
         assert!(at(-31.0, 41).1 < -0.8);
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
-        let cp = ClimateParams::default();
-        let (tz, _) = zonal_temperature(&lats, 1361.0, 23.4, 0.0167, outgoing_a(1361.0, 1.013, &cp), cp.heat_transport);
+        let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
+        let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
         let sst = sst_anomaly(&a, &cur, &annual, &tz, 6371.0, &p);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
         assert!(s(38.0, 43) > 1.0, "warm western boundary {}", s(38.0, 43));

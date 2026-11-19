@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 
 /// Starlight reaching the body and how it changes through the year.
 ///
-/// For a moon the year is its parent's orbit around the star, so `eccentricity` is the
-/// parent's and `obliquity_deg` is the moon's spin axis against that orbit's plane.
+/// For a moon the year is its parent's orbit around the star, so `eccentricity` and
+/// `year_days` are the parent's and `obliquity_deg` is the moon's spin axis against that
+/// orbit's plane.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Irradiance {
     /// Mean flux over the year, W/m².
@@ -18,6 +19,8 @@ pub struct Irradiance {
     pub eccentricity: f64,
     /// Tilt of the spin axis against the path around the star, degrees.
     pub obliquity_deg: f64,
+    /// Length of the year (one trip around the star), Earth days.
+    pub year_days: f64,
 }
 
 /// A body raising tides on this one.

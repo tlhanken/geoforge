@@ -1,6 +1,7 @@
 //! Geoforge v2 surface pipeline. Each layer is a [`geoforge_core::Generator`]; the input
 //! is a [`geoforge_core::BodyContext`] and products of earlier layers, never cosmology.
 
+pub mod atmosphere;
 pub mod biomes;
 pub mod circulation;
 pub mod climate;
