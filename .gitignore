@@ -23,3 +23,7 @@ Thumbs.db
 
 # Node (openspec dev dependency)
 node_modules/
+
+# Real-Earth check data (scripts/real-earth/fetch.sh)
+real-earth-data/
+__pycache__/
