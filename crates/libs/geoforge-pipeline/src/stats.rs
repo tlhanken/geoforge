@@ -55,7 +55,17 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
     let above = |h: f32| (0..n).filter(|&c| elev[c] >= h).map(|c| area[c]).sum::<f64>() / land_area.max(1e-12);
     s.insert("land_above_1000m_fraction".into(), st(above(1000.0), Some(0.27)));
     s.insert("land_above_3000m_fraction".into(), st(above(3000.0), Some(0.05)));
+    // Hypsometry about the mean radius: plains-dominated worlds (Venus) are narrow.
+    let mean = wmean(&|c| Some(f64::from(elev[c])));
+    let near = (0..n).filter(|&c| (f64::from(elev[c]) - mean).abs() <= 1000.0).map(|c| area[c]).sum::<f64>() / total;
+    s.insert("within_1km_of_mean_fraction".into(), st(near, None));
     out.insert("elevation".into(), s);
+
+    if let Some(crust) = pr.crust_type() {
+        // Oceanic on plate worlds; the lowlands (thin crust) on rigid-lid worlds.
+        let thin = (0..n).filter(|&c| crust.values[c] == geoforge_core::surface::CrustType::Oceanic).map(|c| area[c]).sum::<f64>() / total;
+        out.insert("crust".into(), BTreeMap::from([("thin_crust_fraction".to_string(), st(thin, Some(0.6)))]));
+    }
 
     if let Some(pl) = pr.plates() {
         let mut s = BTreeMap::new();

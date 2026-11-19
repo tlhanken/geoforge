@@ -9,6 +9,10 @@ cosmology (thin: one solar system)  →  BodyContext  →  surface layers  →  
                                   tectonics → geology → elevation → circulation → climate → hydrology → biomes
 ```
 
+Any solid body can be a world: Earth-like planets, Mars-, Venus- and Mercury-like worlds,
+moons, frozen ice bodies, asteroids. Each layer is a *slot*: the body's tectonic regime and
+what it has (air, surface water) decide which generator fills it, or that it does not apply.
+
 ## Quick start
 
 ```bash
@@ -19,23 +23,30 @@ geoforge-v2 generate worlds/demo --render      # ~40 s at 2048×1024; previews i
 geoforge-v2 stats worlds/demo                  # summary numbers next to Earth's
 ```
 
-`new --earth-like` uses an Earth-like reference body instead of a generated system (useful
-for calibration). `new --body my_world.toml` uses a body you wrote (a `BodyContext` in TOML
-or JSON; `bodies/<name>/body.json` of any world is a template).
+Other starting points:
+
+- `new --archetype mars` starts from a real body instead of a generated system: `earth`,
+  `mars`, `venus`, `mercury`, `moon`, `titan`, `europa`, `gas_giant`, `ice_giant` (real
+  sizes, orbits, shells and air).
+- `new --seed 42 --focus "Kibedo VII b"` generates the system and focuses on another of its
+  bodies: a planet or moon by name (`show` lists them with what each is), or
+  `"<belt name> #<n>"` for the n-th largest member of a belt (generated on demand).
+- `new --body my_world.toml` uses a body you wrote (a `BodyContext` in TOML or JSON;
+  `bodies/<name>/body.json` of any world is a template).
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `new <dir> --seed N [--width 2048] [--earth-like \| --body file]` | Create a world |
+| `new <dir> --seed N [--width 2048] [--archetype NAME \| --focus BODY \| --body file]` | Create a world |
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
-| `plan <dir>` | What `generate` would run, and why |
+| `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |
 | `export <dir> [products\|layers\|all] [--to DIR]` | Write edit views (default `<dir>/edit`) |
 | `import <dir> <product> [--from DIR] [--authored]` | Bring an edit back as a patch, or as authored data |
 | `reset <dir> <product>` | Drop a product's edits |
 | `render <dir> [products] [--to DIR]` | Preview PNGs |
-| `show <dir>` | The solar system and the focus body |
+| `show <dir>` | The solar system (each body with its regime, air and water) and the focus |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
 
@@ -53,20 +64,38 @@ edit/                            default edit-view folder
 renders/                         preview images
 ```
 
-Layer parameters are written out in `world.toml` with their defaults, so they can be edited.
-Changing one makes exactly that layer and everything after it stale.
+Parameters of the generators this body uses are written out in `world.toml`
+(`[params.<generator>]`) with their defaults, so they can be edited. Changing one makes
+exactly that layer and everything after it stale.
+
+## Layers and generators
+
+| Layer | Plate-tectonic worlds | Rigid-lid worlds (stagnant, episodic, inactive) | Needs |
+|---|---|---|---|
+| tectonics | `tectonics` | `lid_tectonics` | rocky crust |
+| geology | `geology` | `lid_geology` | rocky crust |
+| elevation | `elevation` | `lid_elevation` | rocky crust |
+| circulation | `circulation` | `circulation` | solid surface, atmosphere |
+| climate | `climate` | `climate` | solid surface, atmosphere |
+| hydrology | `hydrology` | `hydrology` | liquid water on the surface |
+| biomes | `biomes` | `biomes` | liquid water on the surface |
+
+So Earth runs everything; Mars and Venus get a surface, winds and a climate but no rivers
+or biomes; the Moon, Mercury, frozen moons and asteroids get a surface only. Ice-shell
+worlds (Europa) and giants have no generator yet: every layer reports why. A generator for a
+new kind of body is a new `Generator` registered in `geoforge-pipeline/src/registry.rs`.
 
 ## Products
 
 | Layer | Products | Shape |
 |---|---|---|
 | tectonics | `plates`, `crust_type`, `crust_age`, `tectonic_events` | partition, field, field, timeline |
-| geology | `provinces`, `geology_events`, `lithology` (14 rock classes), `rock_age` (Ma) | partition, timeline, field, field |
-| elevation | `elevation` (m above sea level) | field |
+| geology | `provinces`, `geology_events`, `lithology` (rock catalog), `rock_age` (Ma) | partition, timeline, catalog partition, field |
+| elevation | `elevation` (m above sea level; above the mean radius on dry worlds) | field |
 | circulation | `wind_jan`, `wind_jul` (m/s), `ocean_currents` (m/s), `sst_anomaly` (°C) | vector fields, field |
 | climate | `temperature` (°C), `temperature_range` (warmest − coldest month, °C), `precipitation` (mm/yr), `precipitation_warm_share` (share in the warm half-year) | fields |
 | hydrology | `rivers`, `lakes`, `watersheds` | network, partition, partition |
-| biomes | `biome` | field |
+| biomes | `biome` (biome catalog) | catalog partition |
 
 Derived values (plate boundaries, slope, sea level, flow directions) are recomputed, not stored.
 
@@ -85,8 +114,9 @@ Edit views:
 |---|---|
 | Continuous field | 16-bit greyscale PNG; `value = offset + scale × pixel` (range in the sidecar; elevation −12 000 … 12 000 m) |
 | Vector field (winds, currents) | 16-bit RGB PNG: red = eastward, green = northward, each `offset + scale × channel` |
-| Category field (crust type, lithology, biome) | RGB PNG in the category palette; off-palette pixels (anti-aliasing) snap to the nearest colour |
+| Category field (crust type) | RGB PNG in the category palette; off-palette pixels (anti-aliasing) snap to the nearest colour |
 | Partition (plates, provinces, lakes, watersheds) | RGB PNG, one colour per key, black = none, plus `<p>.table.json` (key, colour, row). Add a region by adding a row with a new key and colour |
+| Catalog (lithology, biome) | As a partition, but each row is a kind (rock, biome) painted in its own colour, and every row is kept even if unused. Add a kind by adding a row (key, colour, slug, name, …) and painting with its colour |
 | Timeline, network | The JSON document |
 
 Every raster has a `.pgw` world file and a `.prj` sphere definition (the body's radius), so GIS
@@ -102,15 +132,43 @@ outright: draw a whole map and the generator for that product is skipped. A new 
 without a row gets a seed point at its centroid and a seeded motion; a new lake gets its
 surface at the highest cell.
 
+## Rocks and biomes are catalogs
+
+Rock types and biomes are data, not code: Earth's are built in, and a world adds its own
+(fantasy or otherwise) in `world.toml`:
+
+```toml
+[[params.geology.extra_rocks]]
+slug = "starmetal"
+name = "Starmetal"
+color = "#c8d2ff"
+erodibility = 0.1            # 1 = soft sediment, ~0.1 = very hard
+tags = ["ore", "magical"]    # free-form, for later layers
+age = "volcanic"             # crust | basement | archean | plutonic | volcanic | flood | ophiolite | infill | cover
+occurs = [{ province = "volcanic_arc", crust = "continental", weight = 0.08 }]
+
+[[params.biomes.extra_biomes]]
+slug = "glowcap_forest"
+name = "Glowcap Forest"
+color = "#5a3a8a"
+within = ["boreal_forest", "temperate_rainforest"]   # Earth biomes it may replace; empty = any land
+temperature_c = [-5.0, 12.0]                          # optional bounds: temperature_c, precipitation_mm, elevation_m
+cover = 0.3                                           # share of that ground it takes, in patches
+```
+
+A rock's `weight` is added to the mix of each matching province (built-in mixes sum to 1).
+Extra biomes are checked before Earth's classification, in order. On a rigid-lid world use
+`[[params.lid_geology.extra_rocks]]`. Painted edits can use any row of the catalog.
+
 ## Provenance
 
-Each stored product records a hash of everything it was built from: the layer's version, the
-root seed, the body, the grid, the layer's parameters, its products' sources and edit files,
-and the provenance of every product the layer reads. `generate` reuses a product whose recorded
-hash matches and rebuilds the rest, so an edit to elevation reruns elevation, climate,
-hydrology and biomes, and nothing else. Bump a layer's version in
-`geoforge-pipeline/src/layers.rs` when its algorithm changes output; until then use
-`generate --from <layer>` while iterating on code.
+Each stored product records a hash of everything it was built from: the generator and its
+version, the root seed, the body, the grid, the generator's parameters, its products'
+sources and edit files, and the provenance of every product the layer reads. `generate`
+reuses a product whose recorded hash matches and rebuilds the rest, so an edit to elevation
+reruns elevation, climate, hydrology and biomes, and nothing else. Bump a generator's
+`VERSION` when its algorithm changes output; until then use `generate --from <layer>` while
+iterating on code.
 
 ## Seeds
 
@@ -120,6 +178,14 @@ product's randomness. `seed <dir> <product>` prints it.
 
 ## Models (short)
 
+- **Solar system**: an F8–K5 star; planets on a geometric ladder through the habitable zone
+  with the focus world in it; belts in the gaps; 2–5 large moons per gas giant, 0–2 per ice
+  giant, sometimes a large moon for the focus. What each body is follows from its mass,
+  starlight and where it formed: airless rock (Mercury, the Moon), runaway greenhouse (Venus:
+  ~90 bar CO₂, episodic lid), ocean and plate tectonics (Earth), thin CO₂ (Mars); icy bodies
+  with an ice shell over an ocean when tidally heated (Europa), sometimes N₂–CH₄ air (Titan),
+  else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂ so
+  ~75% of a starlight difference from Earth is compensated.
 - **Tectonics**: v1's electrostatic plate seeding (power-law charges), now with each cell
   assigned by distance ÷ charge^0.22 so a seed's charge sets its plate's size
   (`size_weighting = 0` gives v1's plates exactly); domain warp and island removal;
@@ -135,13 +201,23 @@ product's randomness. `seed <dir> <product>` prints it.
   province relief, shelves and slopes planed to sea level, sea level from the ocean's volume,
   then stream-power erosion (Braun & Willett implicit scheme) with erodibility from
   lithology and uplift in active belts: rivers cut dendritic valleys while ranges stay high.
+- **Rigid lids** (`lid_*`): one plate; crust split into old highlands and younger lowlands
+  (one hemisphere on stagnant lids like Mars, scattered on Venus, none on dead bodies);
+  provinces for cratered highlands or ice, volcanic plains, tesserae, impact basins (the
+  large end of a Neukum crater population, denser on older ground), volcanic rises with
+  shield volcanoes (only on bodies big enough for long-lived plumes), rifts and coronae;
+  elevation from the step, each landform and smaller craters, with relief scaled by
+  gravity (Olympus Mons is 2.5× Mauna Loa at 0.38 g).
 - **Circulation**: January and July winds (Hadley/Ferrel/polar cells scaled by rotation,
   seasonal ITCZ, monsoon, subtropical highs over each ocean basin); wind-driven ocean gyres
   (Sverdrup interior, Stommel western boundary currents, Ekman drift, equatorial currents,
   circumpolar current); SST anomaly from currents crossing the temperature gradient, carried
   downstream, plus coastal upwelling.
-- **Climate**: zonal energy balance with ice–albedo feedback and a carbonate–silicate
-  thermostat; seasons from obliquity and eccentricity; continentality and current-warmed air
+- **Climate**: zonal energy balance on the body's own atmosphere: a gray greenhouse
+  (OLR = σT⁴/(1 + ¾τ), τ from CO₂, collision-induced absorption and water vapour; fitted to
+  Earth, Mars, Venus and Titan), heat transport and seasonal damping from the air column's
+  mass, frost albedo from water snow or CO₂ frost; seasons from obliquity, eccentricity and
+  the year's length; continentality and current-warmed air
   carried by the winds; water vapour carried by each season's winds, raining out where air
   rises or cools (storm tracks follow the seasons), recycled over land; global
   precipitation from a water budget; lapse rate and relief on the fine grid.

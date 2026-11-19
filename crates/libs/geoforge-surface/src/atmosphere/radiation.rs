@@ -1,7 +1,8 @@
 //! Energy balance by latitude (Budyko–Sellers) on the body's own radiative properties.
 //!
 //! Absorbed starlight by latitude balances outgoing longwave from the gray atmosphere
-//! ([`Greenhouse`]) and poleward heat transport `C·(T − T̄)`. Frost brightens cold ground:
+//! ([`Greenhouse`]) and poleward heat transport `C·(T − T̄)`, carried by the ocean where
+//! there is one and by the air in proportion to its mass. Frost brightens cold ground:
 //! water ice and snow on wet worlds, seasonal CO₂ frost under thin CO₂ air (Mars). Heat transport and the damping of seasons grow with the mass of
 //! the air column, so thick atmospheres (Venus, Titan) are nearly uniform and thin ones (Mars)
 //! have strong gradients and large seasons.
@@ -17,6 +18,9 @@ const EARTH_OLR_SLOPE: f64 = 2.09;
 /// How much an ocean damps the seasons of the whole air mass, interiors included; fitted so
 /// Earth's continental interiors get 0.10 °C per W/m² of peak-to-peak insolation.
 const OCEAN_MODERATION: f64 = 0.42;
+/// Share of Earth's poleward heat transport carried by the ocean, which does not depend on
+/// the air's pressure; the rest scales with the air column.
+const OCEAN_TRANSPORT_SHARE: f64 = 0.4;
 /// Extra albedo of frost-covered ground.
 const FROST_ALBEDO: f64 = 0.32;
 /// Annual mean temperature at which half the ground is frosted, °C.
@@ -66,7 +70,7 @@ impl Radiation {
             } else {
                 None
             },
-            transport: heat_transport * (pressure / 1.013).sqrt(),
+            transport: heat_transport * (if wet { OCEAN_TRANSPORT_SHARE } else { 0.0 } + (1.0 - OCEAN_TRANSPORT_SHARE) * (pressure / 1.013).sqrt()),
             olr_offset: EARTH_OLR_SLOPE * greenhouse_offset_c,
             flux: body.irradiance.flux_w_m2,
             obliquity: body.irradiance.obliquity_deg,

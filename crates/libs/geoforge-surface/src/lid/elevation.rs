@@ -15,12 +15,15 @@ use geoforge_core::{BodyContext, Error};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-/// Heights are at Earth gravity and scale with the body's.
+/// Heights of loads the lithosphere holds up (volcanoes, rises, rifts) are at Earth gravity
+/// and scale with the body's; the highland–lowland step is isostatic and does not.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LidElevationParams {
-    /// Step from lowlands up to highlands, m.
-    pub dichotomy_m: f64,
+    /// Step from lowlands up to highlands, m. `None` = from the crust: thin lowland crust
+    /// floats lower by about a ninth of the crust's thickness (Mars ≈ 5.5 km).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dichotomy_m: Option<f64>,
     /// Width of the step, km.
     pub dichotomy_width_km: f64,
     /// Height of a full-strength volcanic rise, m.
@@ -38,7 +41,7 @@ pub struct LidElevationParams {
 impl Default for LidElevationParams {
     fn default() -> Self {
         Self {
-            dichotomy_m: 2200.0,
+            dichotomy_m: None,
             dichotomy_width_km: 400.0,
             rise_m: 3000.0,
             shield_m: 8500.0,
@@ -49,6 +52,10 @@ impl Default for LidElevationParams {
         }
     }
 }
+
+/// Highland–lowland step per metre of crust: a lowland crust ~60% thinner, floating on a
+/// mantle ~12% denser than the crust, plus the highlands' thicker cover.
+const ISOSTATIC_STEP: f64 = 0.11;
 
 /// No volcano taller than this, m, however weak the gravity.
 const MAX_SHIELD_M: f64 = 26_000.0;
@@ -91,7 +98,8 @@ impl Generator for LidElevation {
         let edge: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|nb| high(nb as usize) != high(c as usize))).collect();
         let w_rad = p.dichotomy_width_km / r;
         let d = distance_field(grid, edge, w_rad, |_| true);
-        let step = p.dichotomy_m * scale;
+        let crust_m = ctx.body.interior.surface_shell().map_or(30_000.0, |s| s.thickness_km * 1000.0);
+        let step = p.dichotomy_m.unwrap_or(ISOSTATIC_STEP * crust_m);
         let base: Vec<f64> = (0..n)
             .map(|c| {
                 let side = if high(c) { 1.0 } else { -1.0 };

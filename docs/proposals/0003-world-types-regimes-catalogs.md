@@ -2,7 +2,7 @@
 
 - Proposal #: 0003
 - Start Date: 2026-11-19
-- Status: accepted
+- Status: implemented
 - Origin: emerged in discussion (v2 cutover)
 
 ## Summary
@@ -53,30 +53,37 @@ implementation name, so switching regime rebuilds exactly what changes.
 
 All implementations of a slot produce the same products, so downstream layers do not care.
 
-### Climate (`geoforge-surface::climate`)
+### Climate
 
-Split into `radiation` (energy balance), `grid` (atmosphere grid and transport), `cells`
-(Hadley/Ferrel/polar winds), `moisture` (water vapour and rain) and the generator.
-Outgoing longwave is a gray atmosphere, `σT⁴ / (1 + ¾τ)`, with τ from partial pressures
-(CO₂, CH₄, N₂ collision-induced) plus water vapour feedback where there is surface water;
-calibrated so Earth matches the previous fit, Mars ≈ −60 °C and Venus ≈ 460 °C. Base albedo,
-ice-albedo strength, heat transport and seasonal damping follow the atmosphere. The
-carbonate–silicate thermostat applies only to plate-tectonic worlds with liquid water.
-Hydrology and biomes require surface liquid water.
+The column physics is the body's: `geoforge-core::radiation` holds the gray atmosphere,
+`σT⁴ / (1 + ¾τ)`, with τ from CO₂ (pressure-broadened), collision-induced absorption
+(∝ P²/g, strongest for cold bodies) and water vapour where there is surface water, fitted to
+Earth (OLR 231 W/m² and slope 2.09 W/m²/K at 15 °C), Mars, Venus and Titan; and the open
+albedo (clouds, thick cloud decks). The spatial model is `geoforge-surface::atmosphere`
+(`grid`, `transport`, `cells`, `radiation`), shared by circulation and climate; `climate`
+keeps the generator and `moisture`. Heat transport and seasonal damping follow the air
+column's mass and the year's length; frost albedo comes from water snow or, under thin CO₂
+air, CO₂ frost. The carbonate–silicate thermostat moved to the solar system step, which sets
+the CO₂ of plate-tectonic worlds with liquid water. Dry worlds have no sea and no rain;
+hydrology and biomes require surface liquid water.
 
 ### Catalogs
 
-`lithology` and `biome` become partitions whose tables are catalogs:
+`lithology` and `biome` become partitions whose tables are catalogs (`ProductId::is_catalog`):
+rows are kinds, each with its own colour, kept even when unused.
 
-- `Rock { id, name, color, erodibility, age_rule, occurs: {province kind → weight}, tags }`.
-  Built-in Earth rocks; extra rocks in `[params.geology] extra_rocks`. Geology picks rocks by
-  each province kind's weights, so a fantasy rock with weights appears on its own.
-- `BiomeDef { id, name, color, priority, rules: [Envelope] }`, where an envelope bounds mean,
-  warmest and coldest month temperature, range, precipitation, aridity, warm-season share,
-  elevation and setting (land, sea, lake, floodplain). The Köppen/Whittaker classification
-  is expressed as built-in rows; fantasy biomes add rows with a priority, or are painted.
+- Product rows: `Rock { slug, name, color, erodibility, tags }` and
+  `BiomeClass { slug, name, color, tags }` (core).
+- Rocks: built-in rocks keep stable keys with their per-province mixes; `RockDef` (a `Rock`
+  plus an `AgeRule` and `occurs` weights per province kind and crust) adds rocks through
+  `extra_rocks`. Weights add to each matching mix.
+- Biomes: the validated Köppen/Whittaker classifier stays code over built-in `Earth`
+  biomes; `BiomeDef` (a `BiomeClass` plus an `Envelope`: temperature, precipitation and
+  elevation bounds, `within` built-in biomes, patchy `cover`) adds biomes through
+  `extra_biomes`, checked before the classifier, in order.
 
-Both reuse the partition edit view (palette from the table; add a row to add a kind).
+Both reuse the partition edit view; the palette is each row's colour, and a new row is a new
+kind.
 
 ### Solar system (`geoforge-cosmos`)
 
