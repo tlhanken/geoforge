@@ -21,7 +21,7 @@ use geoforge_core::surface::{CrustType, GeologicProvince as G};
 use geoforge_core::{BodyContext, Error};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -65,7 +65,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -114,13 +114,15 @@ impl Generator for Elevation {
             })
             .collect();
 
-        // Distance from each boundary-built province's source boundary (km).
+        // Distance (km) from the nearest source boundary of the province's own kind. Measured
+        // per kind rather than per province so that where rifts or belts meet at a junction
+        // their valleys and crests merge, instead of one branch's flank crossing another's axis.
         let segments = inputs.plates().map(|pl| boundaries::analyze(grid, pl, r, &p.boundaries)).unwrap_or_default();
         let by_owner = provinces.cells_by_owner();
-        let mut need: std::collections::BTreeMap<usize, f64> = std::collections::BTreeMap::new();
+        let mut axes: BTreeMap<G, (Vec<Cell>, f64)> = BTreeMap::new();
         for key in by_owner.keys() {
             let Some(prov) = provinces.table.get(*key) else { continue };
-            let Some(si) = prov.boundary else { continue };
+            let Some(seg) = prov.boundary.and_then(|si| segments.get(si)) else { continue };
             let reach_km = match prov.kind {
                 G::CollisionOrogen => prov.width_km / 2.0 + 50.0,
                 G::ContinentalRift => 450.0,
@@ -128,23 +130,15 @@ impl Generator for Elevation {
                 G::OceanTrench => 80.0,
                 _ => continue,
             };
-            let e = need.entry(si).or_insert(0.0);
-            *e = e.max(reach_km);
+            let axis = axes.entry(prov.kind).or_default();
+            axis.0.extend_from_slice(&seg.cells);
+            axis.1 = axis.1.max(reach_km);
         }
-        let mut seg_dist: HashMap<usize, HashMap<Cell, f64>> = HashMap::new();
-        for (&si, &km) in &need {
-            if let Some(seg) = segments.get(si) {
-                seg_dist.insert(si, sparse_dist(grid, &seg.cells, km / r));
-            }
-        }
-        let mut bdist: HashMap<Cell, f64> = HashMap::new();
-        for (key, cells) in &by_owner {
-            let Some(prov) = provinces.table.get(*key) else { continue };
-            let Some(df) = prov.boundary.and_then(|si| seg_dist.get(&si)) else { continue };
-            for c in cells {
-                bdist.insert(*c, df.get(c).map_or(f64::INFINITY, |v| v * r));
-            }
-        }
+        let axis_km: BTreeMap<G, HashMap<Cell, f64>> = axes.into_iter().map(|(kind, (cells, reach_km))| (kind, sparse_dist(grid, &cells, reach_km / r))).collect();
+        let bdist = |c: Cell| -> Option<f64> {
+            let kind = provinces.row_at(c)?.kind;
+            Some(axis_km.get(&kind)?.get(&c).map_or(f64::INFINITY, |v| v * r))
+        };
 
         let spacing_km = grid.spacing_rad() * r;
         let rs = p.roughness_scale;
@@ -184,7 +178,7 @@ impl Generator for Elevation {
                 };
                 let Some(key) = provinces.owner_of(c) else { return z };
                 let Some(prov) = provinces.table.get(key) else { return z };
-                let d = bdist.get(&c).copied().unwrap_or(0.0);
+                let d = bdist(c).unwrap_or(0.0);
                 let half = (prov.width_km / 2.0).max(spacing_km);
                 let pa = prov.anchor.map(|a| a.angle_to(grid.center(c)) * r);
                 match prov.kind {
@@ -273,7 +267,7 @@ impl Generator for Elevation {
             }
             let depth = 7000.0 + 2500.0 * prov.intensity;
             for &c in cells {
-                let d = bdist.get(&c).copied().unwrap_or(0.0);
+                let d = bdist(c).unwrap_or(0.0);
                 let z = -depth * (-(d / 35.0).powi(2)).exp().max(0.55);
                 e[c as usize] = e[c as usize].min(z);
             }
