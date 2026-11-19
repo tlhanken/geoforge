@@ -601,9 +601,16 @@ impl RunContext<'_> {
     }
 }
 
-/// One per layer: declares inputs and applicability, and fills its products.
+/// One implementation of a layer: declares inputs and applicability, and fills the layer's
+/// products. A layer can have several implementations (plate tectonics, a rigid lid, …); the
+/// pipeline runs the first whose [`applies`](Self::applies) holds for the body.
 pub trait Generator {
     type Params: Default + Serialize + DeserializeOwned;
+    /// Unique name; keys the implementation's parameters (`[params.<name>]`) and provenance.
+    const NAME: &'static str;
+    /// Bump when the algorithm changes output for the same inputs: stored products of this
+    /// implementation, and everything downstream, then go stale.
+    const VERSION: u32;
     const LAYER: LayerId;
 
     /// Required inputs.

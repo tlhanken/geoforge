@@ -608,6 +608,8 @@ impl Climate {
 
 impl Generator for Climate {
     type Params = ClimateParams;
+    const NAME: &'static str = "climate";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -617,13 +619,7 @@ impl Generator for Climate {
         &[ProductId::WindJan, ProductId::WindJul, ProductId::SstAnomaly]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        if !body.interior.has_solid_surface() {
-            return Err(Precondition("climate (surface) needs a solid surface".into()));
-        }
-        if !body.interior.has_atmosphere() {
-            return Err(Precondition("climate needs an atmosphere".into()));
-        }
-        Ok(())
+        crate::preconditions::surface_air(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &ClimateParams) -> Result<Products, Error> {

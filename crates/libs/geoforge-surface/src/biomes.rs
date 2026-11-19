@@ -111,6 +111,8 @@ pub struct Biomes;
 
 impl Generator for Biomes {
     type Params = BiomesParams;
+    const NAME: &'static str = "biomes";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Biomes;
 
     fn needs() -> &'static [ProductId] {
@@ -120,7 +122,7 @@ impl Generator for Biomes {
         &[ProductId::Lakes, ProductId::Rivers, ProductId::PrecipitationWarmShare]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        crate::climate::Climate::applies(body)
+        crate::preconditions::surface_water(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &BiomesParams) -> Result<Products, Error> {

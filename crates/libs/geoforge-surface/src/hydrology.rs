@@ -179,6 +179,8 @@ struct Basin {
 
 impl Generator for Hydrology {
     type Params = HydrologyParams;
+    const NAME: &'static str = "hydrology";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Hydrology;
 
     fn needs() -> &'static [ProductId] {
@@ -188,10 +190,7 @@ impl Generator for Hydrology {
         &[ProductId::Provinces]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        if body.interior.surface_ocean_gel_km() <= 0.0 && body.interior.surface_pressure_bar() < 0.006 {
-            return Err(Precondition("hydrology needs surface water or an atmosphere that can carry it".into()));
-        }
-        Ok(())
+        crate::preconditions::surface_water(body)
     }
 
     #[allow(clippy::too_many_lines)]

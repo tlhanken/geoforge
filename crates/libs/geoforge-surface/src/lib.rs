@@ -9,6 +9,7 @@ pub mod erosion;
 pub mod geology;
 pub mod hydrology;
 pub mod noise;
+pub mod preconditions;
 pub mod tectonics;
 
 pub use biomes::Biomes;

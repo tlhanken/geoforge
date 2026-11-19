@@ -172,12 +172,13 @@ fn run(cli: Cli) -> R<()> {
             let w = World::open(&dir)?;
             let plan = pipe::plan(&w)?;
             for lp in &plan.layers {
+                let by = lp.implementation.map_or(String::new(), |i| format!(" ({})", i.name()));
                 let action = match (&lp.not_applicable, lp.needs_run()) {
                     (Some(r), _) => format!("skip — {r}"),
-                    (None, true) => "run".into(),
-                    (None, false) => "reuse".into(),
+                    (None, true) => format!("run{by}"),
+                    (None, false) => format!("reuse{by}"),
                 };
-                println!("{:<10} {action}", lp.layer.name());
+                println!("{:<11} {action}", lp.layer.name());
                 for p in &lp.products {
                     println!("  {:<18} {:<9} {:?}", p.product.name(), p.source, p.state);
                 }

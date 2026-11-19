@@ -116,6 +116,8 @@ pub struct Tectonics;
 
 impl Generator for Tectonics {
     type Params = TectonicsParams;
+    const NAME: &'static str = "tectonics";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Tectonics;
 
     fn needs() -> &'static [ProductId] {
@@ -123,11 +125,7 @@ impl Generator for Tectonics {
     }
 
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        if body.interior.has_lithosphere() {
-            Ok(())
-        } else {
-            Err(Precondition("tectonics needs a rocky crust (has_lithosphere)".into()))
-        }
+        crate::preconditions::plate_tectonics(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &TectonicsParams) -> Result<Products, Error> {

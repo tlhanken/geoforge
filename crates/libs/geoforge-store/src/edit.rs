@@ -395,12 +395,16 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
     Ok(View { product: p, values, table, snapped })
 }
 
+/// Attributes for a partition key an edit introduced without a table row: `(product, key,
+/// cells) -> row`, or `None` to leave the row empty.
+pub type Fill<'a> = dyn Fn(ProductId, Key, &[Cell]) -> Option<serde_json::Value> + 'a;
+
 /// Turn a complete view into a product. `fill` supplies rows for partition keys that have
 /// none (it gets the key and its cells); a key it cannot fill is an error.
 ///
 /// # Errors
 /// If the view does not form a valid product.
-pub fn view_to_product(view: &View, grid: GridSpec, fill: &dyn Fn(ProductId, Key, &[Cell]) -> Option<serde_json::Value>) -> Result<ProductData> {
+pub fn view_to_product(view: &View, grid: GridSpec, fill: &Fill) -> Result<ProductData> {
     let p = view.product;
     let n = grid.cell_count();
     match &view.values {
@@ -600,7 +604,7 @@ pub struct Applied {
 ///
 /// # Errors
 /// If the patch is for a different product or kind of value.
-pub fn apply(data: &mut ProductData, patch: &Patch, fill: &dyn Fn(ProductId, Key, &[Cell]) -> Option<serde_json::Value>) -> Result<Applied> {
+pub fn apply(data: &mut ProductData, patch: &Patch, fill: &Fill) -> Result<Applied> {
     let p = data.id();
     if patch.product != p {
         return Err(StoreError::Invalid(format!("patch is for {}, not {}", patch.product, p.name())));
@@ -658,7 +662,7 @@ fn set_part<E: serde::de::DeserializeOwned>(
     rows: &mut BTreeMap<Key, E>,
     patch: &Patch,
     s: &[u32],
-    fill: &dyn Fn(ProductId, Key, &[Cell]) -> Option<serde_json::Value>,
+    fill: &Fill,
 ) -> Result<usize> {
     let mut orphaned = 0;
     let mut prev: BTreeMap<Cell, u32> = BTreeMap::new();
@@ -703,7 +707,6 @@ fn set_part<E: serde::de::DeserializeOwned>(
 }
 
 /// A fill function that fills nothing.
-#[must_use]
 pub fn no_fill() -> impl Fn(ProductId, Key, &[Cell]) -> Option<serde_json::Value> {
     |_, _, _| None
 }

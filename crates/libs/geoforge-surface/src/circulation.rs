@@ -304,16 +304,15 @@ pub struct Circulation;
 
 impl Generator for Circulation {
     type Params = CirculationParams;
+    const NAME: &'static str = "circulation";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
         &[ProductId::Elevation]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        if !body.interior.has_atmosphere() {
-            return Err(Precondition("circulation needs an atmosphere".into()));
-        }
-        Ok(())
+        crate::preconditions::surface_air(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &CirculationParams) -> Result<Products, Error> {
@@ -342,7 +341,13 @@ impl Generator for Circulation {
 
         // To the world grid.
         let n = grid.len();
-        let fine: Vec<([f32; 2], [f32; 2], [f32; 2], f32)> = (0..n)
+        struct Flow {
+            jan: [f32; 2],
+            jul: [f32; 2],
+            current: [f32; 2],
+            sst: f32,
+        }
+        let fine: Vec<Flow> = (0..n)
             .into_par_iter()
             .map(|i| {
                 let ll = grid.center(i as Cell).to_lat_lon();
@@ -353,21 +358,21 @@ impl Generator for Circulation {
                 let sea = elev[i] < 0.0;
                 let cu = if sea { s2(&cur, 1.0) } else { [0.0, 0.0] };
                 let sa = if sea { g.sample(&sst, ll.lat_deg, ll.lon_deg) as f32 } else { 0.0 };
-                (s2(&jan, WIND_REF_M_S), s2(&jul, WIND_REF_M_S), cu, sa)
+                Flow { jan: s2(&jan, WIND_REF_M_S), jul: s2(&jul, WIND_REF_M_S), current: cu, sst: sa }
             })
             .collect();
         let spec = grid.spec();
         if !inputs.contains(ProductId::WindJan) {
-            out.insert(ProductData::WindJan(Field::from_values(spec, fine.iter().map(|f| f.0).collect())));
+            out.insert(ProductData::WindJan(Field::from_values(spec, fine.iter().map(|f| f.jan).collect())));
         }
         if !inputs.contains(ProductId::WindJul) {
-            out.insert(ProductData::WindJul(Field::from_values(spec, fine.iter().map(|f| f.1).collect())));
+            out.insert(ProductData::WindJul(Field::from_values(spec, fine.iter().map(|f| f.jul).collect())));
         }
         if !inputs.contains(ProductId::OceanCurrents) {
-            out.insert(ProductData::OceanCurrents(Field::from_values(spec, fine.iter().map(|f| f.2).collect())));
+            out.insert(ProductData::OceanCurrents(Field::from_values(spec, fine.iter().map(|f| f.current).collect())));
         }
         if !inputs.contains(ProductId::SstAnomaly) {
-            out.insert(ProductData::SstAnomaly(Field::from_values(spec, fine.iter().map(|f| f.3).collect())));
+            out.insert(ProductData::SstAnomaly(Field::from_values(spec, fine.iter().map(|f| f.sst).collect())));
         }
         Ok(out)
     }

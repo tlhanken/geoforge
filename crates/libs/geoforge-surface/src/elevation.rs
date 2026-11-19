@@ -64,6 +64,8 @@ pub struct Elevation;
 
 impl Generator for Elevation {
     type Params = ElevationParams;
+    const NAME: &'static str = "elevation";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -73,7 +75,7 @@ impl Generator for Elevation {
         &[ProductId::CrustAge, ProductId::Plates, ProductId::Lithology]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        if body.interior.has_solid_surface() { Ok(()) } else { Err(Precondition("elevation needs a solid surface".into())) }
+        crate::preconditions::plate_tectonics(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &ElevationParams) -> Result<Products, Error> {
@@ -99,7 +101,7 @@ impl Generator for Elevation {
         let edge_raw: Vec<f64> = distance_field(grid, coast, 1.0, |_| true).into_iter().map(|d| d * r).collect();
         // Coastlines are fractal: perturb distance-to-edge so margins form bays, capes and
         // offshore banks instead of following the smooth plate boundary.
-        let coast_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0xC0A5_7);
+        let coast_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0xC0A57);
         let edge_km: Vec<f64> = grid
             .cells()
             .map(|c| {

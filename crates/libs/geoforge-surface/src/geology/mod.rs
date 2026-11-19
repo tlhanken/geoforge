@@ -59,6 +59,8 @@ pub struct Geology;
 
 impl Generator for Geology {
     type Params = GeologyParams;
+    const NAME: &'static str = "geology";
+    const VERSION: u32 = 1;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -68,7 +70,7 @@ impl Generator for Geology {
         &[ProductId::CrustAge]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        crate::tectonics::Tectonics::applies(body)
+        crate::preconditions::plate_tectonics(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &GeologyParams) -> Result<Products, Error> {

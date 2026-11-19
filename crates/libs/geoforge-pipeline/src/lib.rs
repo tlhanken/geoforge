@@ -1,18 +1,21 @@
 //! Runs the surface pipeline over a world directory.
 //!
-//! - **Plan**: for each layer, whether it applies to the body and, for each product, its
-//!   source (generate / patched / authored) and state (fresh / stale / missing).
-//! - **Provenance**: a product's hash covers the layer's code version, the root seed, the
-//!   body, the grid, the layer's parameters, its products' sources and edit files, and the
-//!   provenance of every input it reads. A stored product whose recorded provenance matches
+//! - **Plan**: for each layer, which implementation fills it on this body (see [`registry`])
+//!   or why none applies, and for each product its source (generate / patched / authored)
+//!   and state (fresh / stale / missing).
+//! - **Provenance**: a product's hash covers the implementation and its version, the root
+//!   seed, the body, the grid, the implementation's parameters, its products' sources and
+//!   edit files, and the provenance of every input it reads. A stored product whose recorded provenance matches
 //!   is reused; anything else is rebuilt. Change one thing and exactly what depends on it
 //!   goes stale.
 //! - **Edits**: authored products replace the generator's output; patched products are
 //!   generated, patched, and then fed back so the rest of their layer is consistent with
 //!   the edit. Downstream layers always see the edited version.
 
-pub mod layers;
+pub mod registry;
 pub mod stats;
+
+pub use registry::Implementation;
 
 use geoforge_core::grid::{AnyGrid, Cell, Grid, GridSpec};
 use geoforge_core::key::Key;
@@ -69,10 +72,13 @@ pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
             (Some(g.system), body)
         }
     };
-    let mut params = BTreeMap::new();
-    for l in LayerId::ALL {
-        params.insert(l.name().to_string(), layers::default_params(l));
-    }
+    // Defaults for the implementations this body uses; others fall back to defaults if the
+    // body later changes.
+    let params = LayerId::ALL
+        .into_iter()
+        .filter_map(|l| registry::select(l, &body).ok())
+        .map(|i| (i.name().to_string(), i.default_params()))
+        .collect();
     let manifest = Manifest {
         schema_version: geoforge_core::SCHEMA_VERSION,
         code_version: CODE_VERSION.into(),
@@ -111,6 +117,9 @@ pub struct ProductPlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayerPlan {
     pub layer: LayerId,
+    /// The generator that fills the layer. `None` when none applies, or when every product
+    /// of the layer is authored and no generator is needed.
+    pub implementation: Option<Implementation>,
     /// `None` when the layer applies; otherwise the reason it does not.
     pub not_applicable: Option<String>,
     pub products: Vec<ProductPlan>,
@@ -148,12 +157,12 @@ fn edit_hash(world: &World, p: ProductId, src: &Source) -> Result<Option<Hash>> 
     })
 }
 
-/// Parameters of a layer, as the world sets them (defaults filled in).
+/// Parameters of an implementation, as the world sets them (defaults filled in).
 ///
 /// # Errors
 /// If the stored parameters do not parse.
-pub fn layer_params(world: &World, l: LayerId) -> Result<serde_json::Value> {
-    layers::resolve_params(l, world.manifest.params.get(l.name()))
+pub fn params_of(world: &World, i: Implementation) -> Result<serde_json::Value> {
+    i.resolve_params(world.manifest.params.get(i.name()))
 }
 
 /// Work out what is fresh, stale or missing.
@@ -169,14 +178,14 @@ pub fn plan(world: &World) -> Result<Plan> {
     for l in LayerId::ALL {
         let sources: Vec<(ProductId, Source)> = l.products().into_iter().map(|p| (p, world.manifest.source(p))).collect();
         let all_user = sources.iter().all(|(_, s)| matches!(s, Source::Authored { .. }));
-        let reason = if all_user {
-            None
-        } else if let Err(pre) = layers::applies(l, &body) {
-            Some(pre.0)
-        } else {
-            layers::needs(l).iter().find(|n| !available.contains_key(n)).map(|n| format!("needs {n}, which is not available"))
+        let selected = registry::select(l, &body);
+        let reason = match (&selected, all_user) {
+            (_, true) => None,
+            (Err(pre), false) => Some(pre.0.clone()),
+            (Ok(i), false) => i.needs().iter().find(|n| !available.contains_key(n)).map(|n| format!("needs {n}, which is not available")),
         };
-        let mut lp = LayerPlan { layer: l, not_applicable: reason.clone(), products: Vec::new() };
+        let implementation = selected.ok();
+        let mut lp = LayerPlan { layer: l, implementation, not_applicable: reason.clone(), products: Vec::new() };
         if reason.is_some() {
             for (p, s) in sources {
                 lp.products.push(ProductPlan { product: p, source: s.label().into(), state: State::NotApplicable, provenance: Hash([0; 32]) });
@@ -184,12 +193,17 @@ pub fn plan(world: &World) -> Result<Plan> {
             out.push(lp);
             continue;
         }
-        // Layer provenance.
-        let params = layer_params(world, l)?;
+        // Layer provenance. A fully authored layer with no applicable generator hashes only
+        // its edits.
+        let (name, version, params) = match implementation {
+            Some(i) => (i.name(), i.version(), params_of(world, i)?),
+            None => ("authored", 0, serde_json::Value::Null),
+        };
         let mut parts: Vec<Vec<u8>> = vec![
             b"layer".to_vec(),
             l.name().as_bytes().to_vec(),
-            layers::version(l).to_le_bytes().to_vec(),
+            name.as_bytes().to_vec(),
+            version.to_le_bytes().to_vec(),
             world.manifest.root_seed.0.to_le_bytes().to_vec(),
             body_hash.0.to_vec(),
             grid_bytes.clone(),
@@ -202,7 +216,7 @@ pub fn plan(world: &World) -> Result<Plan> {
                 parts.push(h.0.to_vec());
             }
         }
-        let mut inputs: Vec<ProductId> = layers::needs(l).iter().chain(layers::wants(l)).copied().collect();
+        let mut inputs: Vec<ProductId> = implementation.map_or(Vec::new(), |i| i.needs().iter().chain(i.wants()).copied().collect());
         inputs.sort();
         inputs.dedup();
         for i in inputs {
@@ -340,8 +354,10 @@ pub fn generate(world: &mut World, opts: &GenerateOptions, mut log: impl FnMut(&
             continue;
         }
         let t0 = Instant::now();
-        let params = layer_params(world, l)?;
-        let ctx = RunContext { root_seed: world.manifest.root_seed, body: &body, grid: &grid };
+        let run = |inputs: &Products| -> Result<Products> {
+            let i = lp.implementation.ok_or_else(|| PipelineError::Invalid(format!("no generator fills {}", l.name())))?;
+            i.run(&RunContext { root_seed: world.manifest.root_seed, body: &body, grid: &grid }, inputs, &params_of(world, i)?)
+        };
         let mut inputs = products.clone();
         let mut patched = Vec::new();
         for pp in &lp.products {
@@ -355,7 +371,7 @@ pub fn generate(world: &mut World, opts: &GenerateOptions, mut log: impl FnMut(&
             }
         }
         let all_user = lp.products.iter().all(|pp| inputs.contains(pp.product));
-        let mut out = if all_user { Products::new() } else { layers::run(l, &ctx, &inputs, &params)? };
+        let mut out = if all_user { Products::new() } else { run(&inputs)? };
         if !patched.is_empty() {
             for (p, rel) in &patched {
                 let mut d = out.remove(*p).ok_or_else(|| PipelineError::Invalid(format!("{p}: the layer did not produce a base to patch")))?;
@@ -376,7 +392,7 @@ pub fn generate(world: &mut World, opts: &GenerateOptions, mut log: impl FnMut(&
             }
             // Rebuild the rest of the layer so it agrees with the edited products.
             let siblings_generated = lp.products.iter().any(|pp| !inputs.contains(pp.product));
-            out = if siblings_generated { layers::run(l, &ctx, &inputs, &params)? } else { Products::new() };
+            out = if siblings_generated { run(&inputs)? } else { Products::new() };
         }
         for pp in &lp.products {
             if !out.contains(pp.product) {
