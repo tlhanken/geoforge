@@ -108,6 +108,12 @@ impl<E> Partition<E> {
         }
     }
 
+    /// The table row owning cell `c`.
+    #[must_use]
+    pub fn row_at(&self, c: Cell) -> Option<&E> {
+        self.owner_of(c).and_then(|k| self.table.get(k))
+    }
+
     /// Cells per owner, ascending.
     #[must_use]
     pub fn cells_by_owner(&self) -> BTreeMap<Key, Vec<Cell>> {

@@ -5,6 +5,7 @@
 //! | continuous field      | 16-bit greyscale PNG, value = offset + scale × pixel         |
 //! | categorical field     | RGB PNG in the category palette (legend in the sidecar)      |
 //! | partition             | RGB PNG, one colour per key, plus `<p>.table.json`           |
+//! | catalog (rock, biome) | as a partition; each row's own `color` is its palette colour |
 //! | timeline, network     | `<p>.json` (the document itself)                             |
 //!
 //! Every raster comes with `<p>.edit.json` (how pixels map to values), a `.pgw` world file
@@ -21,7 +22,7 @@ use geoforge_core::grid::{Cell, GridSpec};
 use geoforge_core::key::Key;
 use geoforge_core::product::{Hash, ProductData, ProductId, Shape};
 use geoforge_core::shapes::Field;
-use geoforge_core::surface::{Biome, Category, CrustType, Lithology};
+use geoforge_core::surface::{hex_color, Category, CrustType};
 use image::{ImageBuffer, Luma, Rgb};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -86,16 +87,11 @@ pub fn gray_range(p: ProductId) -> Option<(f64, f64)> {
 }
 
 fn hex(c: [u8; 3]) -> String {
-    format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
+    hex_color::format(c)
 }
 
 fn parse_hex(s: &str) -> Result<[u8; 3]> {
-    let t = s.trim_start_matches('#');
-    if t.len() != 6 {
-        return Err(StoreError::Invalid(format!("bad colour {s}")));
-    }
-    let b = |i: usize| u8::from_str_radix(&t[i..i + 2], 16).map_err(|_| StoreError::Invalid(format!("bad colour {s}")));
-    Ok([b(0)?, b(2)?, b(4)?])
+    hex_color::parse(s).map_err(StoreError::Invalid)
 }
 
 /// A stable, well-spread colour for partition key `k`.
@@ -126,12 +122,17 @@ fn category_palette<C: Category>() -> Vec<PaletteEntry> {
     C::ALL.iter().map(|c| PaletteEntry { value: u32::from(c.to_u8()), color: hex(c.color()), name: c.name().into() }).collect()
 }
 
-/// Colours for a partition's keys, unique (nudged on collision).
-fn partition_palette(keys: &BTreeSet<u32>) -> BTreeMap<u32, [u8; 3]> {
-    let mut used = BTreeSet::new();
+/// Colours for a partition's keys: a row's own colour where it has one, otherwise a stable
+/// generated colour, unique (nudged on collision).
+pub fn partition_palette(keys: &BTreeMap<u32, Option<[u8; 3]>>) -> BTreeMap<u32, [u8; 3]> {
+    let mut used: BTreeSet<[u8; 3]> = keys.values().flatten().copied().collect();
     used.insert([0u8, 0, 0]);
     let mut out = BTreeMap::new();
-    for &k in keys {
+    for (&k, own) in keys {
+        if let Some(c) = own {
+            out.insert(k, *c);
+            continue;
+        }
         let mut c = key_color(k);
         let mut n = 0u32;
         while used.contains(&c) {
@@ -208,12 +209,12 @@ pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef) -> Result<Vec
             (Encoding::Gray16 { offset: lo, scale, unit: p.unit().into() }, f.grid, format!("16-bit greyscale: value [{}] = offset + scale * pixel. Values outside [{lo}, {hi}] are clipped.", p.unit()))
         }
         ProductData::CrustType(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
-        ProductData::Biome(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
-        ProductData::Lithology(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
-        ProductData::Plates(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
-        ProductData::Provinces(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
-        ProductData::Lakes(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
-        ProductData::Watersheds(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows)?,
+        ProductData::Lithology(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |r| Some(r.color))?,
+        ProductData::Biome(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |r| Some(r.color))?,
+        ProductData::Plates(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
+        ProductData::Provinces(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
+        ProductData::Lakes(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
+        ProductData::Watersheds(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
         _ => {
             let (_, doc) = codec::encode(data)?;
             std::fs::write(dir.join(format!("{name}.json")), serde_json::to_string_pretty(&doc)?)?;
@@ -245,9 +246,15 @@ fn write_category<C: Category>(png: &Path, f: &Field<C>) -> Result<Encoding> {
     Ok(Encoding::Palette { entries: category_palette::<C>() })
 }
 
-fn write_partition<E: Serialize>(dir: &Path, p: ProductId, owner: &Field<u32>, rows: &BTreeMap<Key, E>) -> Result<(Encoding, GridSpec, String)> {
+fn write_partition<E: Serialize>(
+    dir: &Path,
+    p: ProductId,
+    owner: &Field<u32>,
+    rows: &BTreeMap<Key, E>,
+    own_color: impl Fn(&E) -> Option<[u8; 3]>,
+) -> Result<(Encoding, GridSpec, String)> {
     let (w, h) = equirect(owner.grid)?;
-    let keys: BTreeSet<u32> = rows.keys().map(|k| k.0 as u32).collect();
+    let keys: BTreeMap<u32, Option<[u8; 3]>> = rows.iter().map(|(k, r)| (k.0 as u32, own_color(r))).collect();
     let pal = partition_palette(&keys);
     let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
         w,
@@ -261,12 +268,14 @@ fn write_partition<E: Serialize>(dir: &Path, p: ProductId, owner: &Field<u32>, r
         .map(|(k, r)| Ok(TableRow { key: *k, color: hex(pal[&(k.0 as u32)]), row: Some(serde_json::to_value(r)?) }))
         .collect::<Result<_>>()?;
     std::fs::write(dir.join(format!("{}.table.json", p.name())), serde_json::to_string_pretty(&table)?)?;
-    let entries = table.iter().map(|t| PaletteEntry { value: t.key.0 as u32, color: t.color.clone(), name: format!("key {}", t.key) }).collect();
-    Ok((
-        Encoding::Palette { entries },
-        owner.grid,
-        "One colour per key; black = no owner. To add a region, add a row with a new key and colour to the table file and paint with that colour.".into(),
-    ))
+    let name = |t: &TableRow| t.row.as_ref().and_then(|r| r.get("name")).and_then(|n| n.as_str()).map_or_else(|| format!("key {}", t.key), str::to_string);
+    let entries = table.iter().map(|t| PaletteEntry { value: t.key.0 as u32, color: t.color.clone(), name: name(t) }).collect();
+    let note = if p.is_catalog() {
+        "One colour per kind (the row's own colour). To add a kind, add a row with a new key, its colour and its attributes to the table file, then paint with that colour."
+    } else {
+        "One colour per key; black = no owner. To add a region, add a row with a new key and colour to the table file and paint with that colour."
+    };
+    Ok((Encoding::Palette { entries }, owner.grid, note.into()))
 }
 
 /// The raw content of an edited view, before it becomes a product.
@@ -296,8 +305,6 @@ pub struct View {
 pub fn default_encoding(p: ProductId) -> Result<Encoding> {
     match p {
         ProductId::CrustType => Ok(Encoding::Palette { entries: category_palette::<CrustType>() }),
-        ProductId::Biome => Ok(Encoding::Palette { entries: category_palette::<Biome>() }),
-        ProductId::Lithology => Ok(Encoding::Palette { entries: category_palette::<Lithology>() }),
         _ if p.value_type() == Some(geoforge_core::product::ValueType::V2F32) => {
             let (lo, hi) = gray_range(p).expect("vector field");
             Ok(Encoding::Vector16 { offset: lo, scale: (hi - lo) / 65535.0, unit: p.unit().into() })
@@ -353,7 +360,12 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
         Encoding::Palette { mut entries } => {
             if p.shape() == Shape::Partition {
                 let rows: Vec<TableRow> = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{name}.table.json")))?)?;
-                entries = rows.iter().map(|r| PaletteEntry { value: r.key.0 as u32, color: r.color.clone(), name: String::new() }).collect();
+                // A catalog row's own colour is its palette colour.
+                let color = |r: &TableRow| {
+                    let own = r.row.as_ref().filter(|_| p.is_catalog()).and_then(|v| v.get("color")).and_then(|c| c.as_str());
+                    own.unwrap_or(&r.color).to_string()
+                };
+                entries = rows.iter().map(|r| PaletteEntry { value: r.key.0 as u32, color: color(r), name: String::new() }).collect();
                 for r in rows {
                     if r.key.0 == 0 || r.key.0 > u64::from(u32::MAX) {
                         return Err(StoreError::Invalid(format!("{name}: key {} is out of range (1..=4294967295)", r.key)));
@@ -418,11 +430,8 @@ pub fn view_to_product(view: &View, grid: GridSpec, fill: &Fill) -> Result<Produ
             codec::decode(p, grid, Some(&b), None)
         }
         ViewValues::U8(v) => {
-            match p {
-                ProductId::Lithology => decode_cat::<Lithology>(v).map(|_| ())?,
-                ProductId::CrustType => decode_cat::<CrustType>(v).map(|_| ())?,
-                ProductId::Biome => decode_cat::<Biome>(v).map(|_| ())?,
-                _ => {}
+            if p == ProductId::CrustType {
+                decode_cat::<CrustType>(v)?;
             }
             codec::decode(p, grid, Some(v), None)
         }
@@ -453,6 +462,13 @@ pub fn view_to_product(view: &View, grid: GridSpec, fill: &Fill) -> Result<Produ
             }
             if !unfilled.is_empty() {
                 return Err(StoreError::Invalid(format!("{}: keys {unfilled:?} own cells but have no row in the table file", p.name())));
+            }
+            if p.is_catalog() {
+                for (k, r) in &view.table {
+                    if let Some(r) = r {
+                        rows.entry(k.0.to_string()).or_insert_with(|| r.clone());
+                    }
+                }
             }
             let b: Vec<u8> = owner.iter().flat_map(|x| x.to_le_bytes()).collect();
             codec::decode(p, grid, Some(&b), Some(serde_json::Value::Object(rows)))
@@ -556,8 +572,8 @@ pub fn diff(baseline: &ProductData, view: &View) -> Result<Patch> {
             PatchValues::Delta(d)
         }
         (ProductData::CrustType(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
-        (ProductData::Biome(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
-        (ProductData::Lithology(f), ViewValues::U8(v)) => PatchValues::Set(set_diff(f.values.iter().map(|c| c.to_u8()), v.iter().copied(), &mut cells)),
+        (ProductData::Biome(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
+        (ProductData::Lithology(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
         (ProductData::Plates(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
         (ProductData::Provinces(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
         (ProductData::Lakes(pt), ViewValues::U32(v)) => PatchValues::Set(set_diff(pt.owner.values.iter().copied(), v.iter().copied(), &mut cells)),
@@ -634,8 +650,8 @@ pub fn apply(data: &mut ProductData, patch: &Patch, fill: &Fill) -> Result<Appli
             }
         }
         (ProductData::CrustType(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
-        (ProductData::Biome(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
-        (ProductData::Lithology(f), PatchValues::Set(s)) => orphaned += set_cat(&mut f.values, patch.cells(), s),
+        (ProductData::Biome(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
+        (ProductData::Lithology(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
         (ProductData::Plates(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
         (ProductData::Provinces(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
         (ProductData::Lakes(pt), PatchValues::Set(s)) => orphaned += set_part(p, &mut pt.owner, &mut pt.table.rows, patch, s, fill)?,
@@ -701,8 +717,10 @@ fn set_part<E: serde::de::DeserializeOwned>(
             }
         }
     }
-    let used: BTreeSet<u32> = owner.values.iter().copied().collect();
-    rows.retain(|k, _| used.contains(&(k.0 as u32)));
+    if !p.is_catalog() {
+        let used: BTreeSet<u32> = owner.values.iter().copied().collect();
+        rows.retain(|k, _| used.contains(&(k.0 as u32)));
+    }
     Ok(orphaned)
 }
 

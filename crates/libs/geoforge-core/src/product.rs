@@ -7,7 +7,7 @@ use crate::body::BodyContext;
 use crate::grid::Grid;
 use crate::seed::Seed;
 use crate::shapes::{Field, Network, Partition, Timeline};
-use crate::surface::{Biome, CrustType, Lake, Lithology, Plate, Province, RiverNode, RiverReach, Watershed};
+use crate::surface::{BiomeClass, CrustType, Lake, Plate, Province, RiverNode, RiverReach, Rock, Watershed};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -180,10 +180,11 @@ impl ProductId {
     #[must_use]
     pub fn shape(self) -> Shape {
         match self {
-            ProductId::Plates | ProductId::Provinces | ProductId::Lakes | ProductId::Watersheds => Shape::Partition,
+            ProductId::Plates | ProductId::Provinces | ProductId::Lithology | ProductId::Lakes | ProductId::Watersheds | ProductId::Biome => {
+                Shape::Partition
+            }
             ProductId::CrustType
             | ProductId::CrustAge
-            | ProductId::Lithology
             | ProductId::RockAge
             | ProductId::Elevation
             | ProductId::WindJan
@@ -193,11 +194,17 @@ impl ProductId {
             | ProductId::Temperature
             | ProductId::TemperatureRange
             | ProductId::Precipitation
-            | ProductId::PrecipitationWarmShare
-            | ProductId::Biome => Shape::Field,
+            | ProductId::PrecipitationWarmShare => Shape::Field,
             ProductId::TectonicEvents | ProductId::GeologyEvents => Shape::Timeline,
             ProductId::Rivers => Shape::Network,
         }
+    }
+
+    /// A partition whose table is a catalog of kinds (rocks, biomes) rather than of regions:
+    /// every row is kept even when no cell uses it, and each row carries its own colour.
+    #[must_use]
+    pub fn is_catalog(self) -> bool {
+        matches!(self, ProductId::Lithology | ProductId::Biome)
     }
 
     /// Element type for fields and partition owners.
@@ -206,7 +213,7 @@ impl ProductId {
         match self.shape() {
             Shape::Partition => Some(ValueType::U32),
             Shape::Field => Some(match self {
-                ProductId::CrustType | ProductId::Biome | ProductId::Lithology => ValueType::U8,
+                ProductId::CrustType => ValueType::U8,
                 ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents => ValueType::V2F32,
                 _ => ValueType::F32,
             }),
@@ -366,7 +373,7 @@ pub enum ProductData {
     TectonicEvents(Timeline),
     Provinces(Partition<Province>),
     GeologyEvents(Timeline),
-    Lithology(Field<Lithology>),
+    Lithology(Partition<Rock>),
     RockAge(Field<f32>),
     Elevation(Field<f32>),
     WindJan(Field<[f32; 2]>),
@@ -380,7 +387,7 @@ pub enum ProductData {
     Rivers(Network<RiverNode, RiverReach>),
     Lakes(Partition<Lake>),
     Watersheds(Partition<Watershed>),
-    Biome(Field<Biome>),
+    Biome(Partition<BiomeClass>),
 }
 
 impl ProductData {
@@ -497,9 +504,9 @@ impl ProductData {
         }
         match self {
             ProductData::CrustType(f) => Some(f.grid),
-            ProductData::Lithology(f) => Some(f.grid),
-            ProductData::Biome(f) => Some(f.grid),
             ProductData::Plates(p) => Some(p.owner.grid),
+            ProductData::Lithology(p) => Some(p.owner.grid),
+            ProductData::Biome(p) => Some(p.owner.grid),
             ProductData::Provinces(p) => Some(p.owner.grid),
             ProductData::Lakes(p) => Some(p.owner.grid),
             ProductData::Watersheds(p) => Some(p.owner.grid),
@@ -534,7 +541,7 @@ getters! {
     tectonic_events => TectonicEvents: Timeline,
     provinces => Provinces: Partition<Province>,
     geology_events => GeologyEvents: Timeline,
-    lithology => Lithology: Field<Lithology>,
+    lithology => Lithology: Partition<Rock>,
     rock_age => RockAge: Field<f32>,
     elevation => Elevation: Field<f32>,
     wind_jan => WindJan: Field<[f32; 2]>,
@@ -548,7 +555,7 @@ getters! {
     rivers => Rivers: Network<RiverNode, RiverReach>,
     lakes => Lakes: Partition<Lake>,
     watersheds => Watersheds: Partition<Watershed>,
-    biome => Biome: Field<Biome>,
+    biome => Biome: Partition<BiomeClass>,
 }
 
 impl Products {

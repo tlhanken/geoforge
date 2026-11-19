@@ -3,7 +3,7 @@
 
 use geoforge_core::grid::{AnyGrid, Cell, Grid};
 use geoforge_core::product::Products;
-use geoforge_core::surface::{Biome, Category};
+use geoforge_core::shapes::Partition;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -66,13 +66,10 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
         out.insert("plates".into(), s);
     }
 
-    if let Some(l) = pr.lithology().map(|f| &f.values) {
+    if let Some(l) = pr.lithology() {
         let mut s = BTreeMap::new();
-        for &kind in geoforge_core::surface::Lithology::ALL {
-            let a: f64 = (0..n).filter(|&c| land(c) && l[c] == kind).map(|c| area[c]).sum();
-            if a > 0.0 {
-                s.insert(kind.name().to_lowercase().replace(' ', "_") + "_of_land", st(a / land_area.max(1e-12), None));
-            }
+        for (slug, a) in area_by_kind(l, |r| &r.slug, &area, &land) {
+            s.insert(slug + "_of_land", st(a / land_area.max(1e-12), None));
         }
         if let Some(age) = pr.rock_age().map(|f| &f.values) {
             let frac = |lo: f32, hi: f32| (0..n).filter(|&c| land(c) && age[c] >= lo && age[c] < hi).map(|c| area[c]).sum::<f64>() / land_area.max(1e-12);
@@ -159,31 +156,43 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
         out.insert("hydrology".into(), s);
     }
 
-    if let Some(b) = pr.biome().map(|f| &f.values) {
+    if let Some(b) = pr.biome() {
         let mut s = BTreeMap::new();
-        let earth: BTreeMap<Biome, f64> = [
-            (Biome::IceSheet, 0.105),
-            (Biome::Tundra, 0.06),
-            (Biome::BorealForest, 0.11),
-            (Biome::TemperateForest, 0.08),
-            (Biome::TemperateGrassland, 0.08),
-            (Biome::Mediterranean, 0.02),
-            (Biome::HotDesert, 0.14),
-            (Biome::ColdDesert, 0.05),
-            (Biome::Savanna, 0.15),
-            (Biome::TropicalRainforest, 0.07),
-            (Biome::TropicalSeasonalForest, 0.05),
+        // Earth's land cover by biome (share of land).
+        let earth: BTreeMap<&str, f64> = [
+            ("ice_sheet", 0.105),
+            ("tundra", 0.06),
+            ("boreal_forest", 0.11),
+            ("temperate_deciduous_forest", 0.08),
+            ("temperate_grassland", 0.08),
+            ("mediterranean_woodland", 0.02),
+            ("hot_desert", 0.14),
+            ("cold_desert", 0.05),
+            ("savanna", 0.15),
+            ("tropical_rainforest", 0.07),
+            ("tropical_seasonal_forest", 0.05),
         ]
         .into_iter()
         .collect();
-        for &kind in Biome::ALL {
-            if matches!(kind, Biome::Ocean) {
-                continue;
+        for (slug, a) in area_by_kind(b, |r| &r.slug, &area, &|_| true) {
+            if slug != "ocean" {
+                let reference = earth.get(slug.as_str()).copied();
+                s.insert(slug + "_of_land", st(a / land_area.max(1e-12), reference));
             }
-            let a: f64 = (0..n).filter(|&c| b[c] == kind).map(|c| area[c]).sum();
-            s.insert(kind.name().to_lowercase().replace(' ', "_") + "_of_land", st(a / land_area.max(1e-12), earth.get(&kind).copied()));
         }
         out.insert("biomes".into(), s);
     }
     out
+}
+
+/// Area of each catalog kind (by slug) over the cells `keep` accepts; every row is listed,
+/// used or not.
+fn area_by_kind<E>(pt: &Partition<E>, slug: impl Fn(&E) -> &String, area: &[f64], keep: &dyn Fn(usize) -> bool) -> BTreeMap<String, f64> {
+    let mut by_key: BTreeMap<u32, f64> = BTreeMap::new();
+    for (c, &o) in pt.owner.values.iter().enumerate() {
+        if keep(c) {
+            *by_key.entry(o).or_default() += area[c];
+        }
+    }
+    pt.table.rows.iter().map(|(k, r)| (slug(r).clone(), by_key.get(&(k.0 as u32)).copied().unwrap_or(0.0))).collect()
 }

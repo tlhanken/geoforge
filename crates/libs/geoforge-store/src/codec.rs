@@ -8,7 +8,7 @@ use crate::{hash_parts, Result, StoreError};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{Envelope, Hash, ProductData, ProductId, Shape, ValueType};
 use geoforge_core::shapes::{Field, Partition, Table};
-use geoforge_core::surface::{Biome, Category, CrustType, Lithology};
+use geoforge_core::surface::{Category, CrustType};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::Path;
 
@@ -61,9 +61,9 @@ pub(crate) fn encode(data: &ProductData) -> Result<(Option<Vec<u8>>, Option<serd
     }
     Ok(match data {
         ProductData::CrustType(f) => (Some(cat_bytes(&f.values)), None),
-        ProductData::Lithology(f) => (Some(cat_bytes(&f.values)), None),
-        ProductData::Biome(f) => (Some(cat_bytes(&f.values)), None),
         ProductData::Plates(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
+        ProductData::Lithology(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
+        ProductData::Biome(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Provinces(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Lakes(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::Watersheds(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
@@ -164,8 +164,8 @@ pub fn decode(p: ProductId, grid: GridSpec, bin: Option<&[u8]>, doc: Option<serd
     let part = |b: &[u8]| Field::from_values(grid, decode_u32(b));
     let data = match p {
         ProductId::CrustType => ProductData::CrustType(Field::from_values(grid, decode_cat::<CrustType>(need_bin(1)?)?)),
-        ProductId::Lithology => ProductData::Lithology(Field::from_values(grid, decode_cat::<Lithology>(need_bin(1)?)?)),
-        ProductId::Biome => ProductData::Biome(Field::from_values(grid, decode_cat::<Biome>(need_bin(1)?)?)),
+        ProductId::Lithology => ProductData::Lithology(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
+        ProductId::Biome => ProductData::Biome(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
         ProductId::Plates => ProductData::Plates(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
         ProductId::Provinces => ProductData::Provinces(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
         ProductId::Lakes => ProductData::Lakes(Partition { owner: part(need_bin(4)?), table: table(doc)? }),
@@ -201,6 +201,8 @@ pub fn validate(data: &ProductData) -> Result<()> {
     match data {
         ProductData::Plates(p) => p.validate()?,
         ProductData::Provinces(p) => p.validate()?,
+        ProductData::Lithology(p) => p.validate()?,
+        ProductData::Biome(p) => p.validate()?,
         ProductData::Lakes(p) => p.validate()?,
         ProductData::Watersheds(p) => p.validate()?,
         _ => {}

@@ -2,7 +2,7 @@ use geoforge_core::grid::GridSpec;
 use geoforge_core::key::Key;
 use geoforge_core::product::{Hash, ProductData, ProductId};
 use geoforge_core::shapes::{Field, Partition, Table};
-use geoforge_core::surface::{Biome, Lake};
+use geoforge_core::surface::{BiomeClass, Lake};
 use geoforge_store::codec;
 use geoforge_store::edit::{self, BodyRef};
 
@@ -27,10 +27,21 @@ fn lakes() -> ProductData {
     ProductData::Lakes(Partition { owner: Field::from_values(G, owner), table: t })
 }
 
+/// A catalog: three kinds, the third unused.
+fn biomes() -> ProductData {
+    let class = |slug: &str, color| BiomeClass { slug: slug.into(), name: slug.into(), color, tags: Vec::new() };
+    let mut t = Table::new();
+    t.insert(Key(1), class("ocean", [28, 62, 120]));
+    t.insert(Key(2), class("savanna", [200, 180, 80]));
+    t.insert(Key(3), class("glowcap", [90, 58, 138]));
+    let owner = (0..G.cell_count() as u32).map(|i| if i % 3 == 0 { 1 } else { 2 }).collect();
+    ProductData::Biome(Partition { owner: Field::from_values(G, owner), table: t })
+}
+
 #[test]
 fn canonical_roundtrip_is_lossless() {
     let d = tmp("canon");
-    for data in [elevation(), lakes(), ProductData::Biome(Field::filled(G, Biome::Savanna))] {
+    for data in [elevation(), lakes(), biomes()] {
         let h = codec::write_canonical(&d, &data, Hash([7; 32])).unwrap();
         let back = codec::read_canonical(&d, data.id(), G).unwrap();
         assert_eq!(back, data);
@@ -45,7 +56,7 @@ fn canonical_roundtrip_is_lossless() {
 fn untouched_export_imports_as_empty_patch() {
     let d = tmp("noop");
     let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
-    for data in [elevation(), lakes()] {
+    for data in [elevation(), lakes(), biomes()] {
         edit::export_view(&d, &data, &body).unwrap();
         let v = edit::read_view(&d, data.id(), G).unwrap();
         let p = edit::diff(&data, &v).unwrap();
@@ -158,4 +169,44 @@ fn vector_field_views_round_trip() {
     let c = 5 * 64 + 5;
     assert!((a.values[c][0] + b.values[c][0]).abs() < 0.01, "{:?} {:?}", a.values[c], b.values[c]);
     assert_eq!(a.values[c][1], b.values[c][1]);
+}
+
+/// Catalog views paint in each row's own colour, keep unused rows, and take new kinds from
+/// added rows.
+#[test]
+fn catalog_views_keep_and_add_kinds() {
+    let d = tmp("catalog");
+    let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
+    let base = biomes();
+    edit::export_view(&d, &base, &body).unwrap();
+    let side: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.join("biome.edit.json")).unwrap()).unwrap();
+    let entries = side["encoding"]["entries"].as_array().unwrap();
+    assert!(entries.iter().any(|e| e["color"] == "#5a3a8a" && e["name"] == "glowcap"), "row colour is the palette colour");
+
+    // Add a kind and paint the first row with it.
+    let table_path = d.join("biome.table.json");
+    let mut rows: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(&table_path).unwrap()).unwrap();
+    rows.push(serde_json::json!({ "key": 101, "color": "#ff00aa", "row": { "slug": "ashlands", "name": "Ashlands", "color": "#ff00aa" } }));
+    std::fs::write(&table_path, serde_json::to_string(&rows).unwrap()).unwrap();
+    let png = d.join("biome.png");
+    let mut img = image::open(&png).unwrap().into_rgb8();
+    for x in 0..64 {
+        img.put_pixel(x, 0, image::Rgb([0xff, 0x00, 0xaa]));
+    }
+    img.save(&png).unwrap();
+
+    let v = edit::read_view(&d, ProductId::Biome, G).unwrap();
+    let edited = edit::view_to_product(&v, G, &edit::no_fill()).unwrap();
+    let ProductData::Biome(pt) = &edited else { panic!() };
+    assert_eq!(pt.table.rows.len(), 4, "unused glowcap kept, ashlands added");
+    assert_eq!(pt.owner.values[0], 101);
+    assert_eq!(pt.table.rows[&Key(101)].color, [0xff, 0x00, 0xaa]);
+
+    // As a patch on the original, the unused row survives too.
+    let patch = edit::diff(&base, &v).unwrap();
+    assert_eq!(patch.cell_count(), 64);
+    let mut again = base.clone();
+    edit::apply(&mut again, &patch, &edit::no_fill()).unwrap();
+    let ProductData::Biome(pt) = &again else { panic!() };
+    assert!(pt.table.rows.contains_key(&Key(3)) && pt.table.rows.contains_key(&Key(101)));
 }

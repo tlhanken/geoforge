@@ -40,6 +40,9 @@ pub struct GeologyParams {
     pub stable_regions: bool,
     pub arc_systems: bool,
     pub extensional: bool,
+    /// Rocks added to Earth's catalog (see [`lithology::RockDef`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub extra_rocks: Vec<lithology::RockDef>,
 }
 
 impl Default for GeologyParams {
@@ -51,6 +54,7 @@ impl Default for GeologyParams {
             stable_regions: true,
             arc_systems: true,
             extensional: true,
+            extra_rocks: Vec::new(),
         }
     }
 }
@@ -60,7 +64,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -105,15 +109,17 @@ impl Generator for Geology {
             (None, None) => unreachable!("built above when provinces are missing"),
         };
         if inputs.lithology().is_none() || inputs.rock_age().is_none() {
+            let catalog = lithology::Catalog::new(&p.extra_rocks)?;
             let (lith, age) = lithology::build(
                 ctx.grid,
                 &provinces,
                 &crust.values,
                 inputs.crust_age().map(|f| f.values.as_slice()),
                 ctx.seed(ProductId::Lithology).value(),
+                &catalog,
             );
             if inputs.lithology().is_none() {
-                out.insert(ProductData::Lithology(Field::from_values(ctx.grid.spec(), lith)));
+                out.insert(ProductData::Lithology(lith));
             }
             if inputs.rock_age().is_none() {
                 out.insert(ProductData::RockAge(Field::from_values(ctx.grid.spec(), age)));

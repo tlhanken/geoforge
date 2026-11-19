@@ -134,55 +134,66 @@ pub struct Province {
     pub anchor: Option<UnitVec3>,
 }
 
-category!(Lithology {
-    OceanicBasalt = 0, "Oceanic basalt", [70, 80, 110],
-    PelagicSediment = 1, "Pelagic sediment", [120, 140, 170],
-    CratonicBasement = 2, "Cratonic basement", [205, 120, 120],
-    Greenstone = 3, "Greenstone belt", [70, 140, 90],
-    Granitoid = 4, "Granitoid", [235, 150, 180],
-    Metamorphic = 5, "Metamorphic", [170, 110, 170],
-    ArcVolcanic = 6, "Arc volcanic", [220, 70, 60],
-    FloodBasalt = 7, "Flood basalt", [110, 60, 60],
-    ClasticSedimentary = 8, "Clastic sedimentary", [225, 200, 130],
-    Carbonate = 9, "Carbonate", [150, 200, 230],
-    Evaporite = 10, "Evaporite", [245, 240, 225],
-    Ophiolite = 11, "Ophiolite", [40, 110, 100],
-    AccretionaryMelange = 12, "Accretionary melange", [150, 150, 110],
-    RiftFill = 13, "Rift fill", [235, 165, 80],
-});
-
-impl Lithology {
+/// One rock type: a row of the lithology partition's table. Earth's rocks are built in; a
+/// world adds its own (fantasy or otherwise) as more rows (see the geology layer's catalog).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Rock {
+    /// Stable identifier, `snake_case`.
+    pub slug: String,
+    pub name: String,
+    #[serde(with = "hex_color")]
+    pub color: [u8; 3],
     /// Resistance to erosion relative to unconsolidated sediment (1 = soft, ~0.1 = very hard).
-    #[must_use]
-    pub fn erodibility(self) -> f64 {
-        match self {
-            Lithology::CratonicBasement | Lithology::Granitoid | Lithology::Greenstone => 0.25,
-            Lithology::Metamorphic | Lithology::Ophiolite | Lithology::FloodBasalt | Lithology::OceanicBasalt => 0.35,
-            Lithology::ArcVolcanic | Lithology::Carbonate => 0.5,
-            Lithology::AccretionaryMelange | Lithology::ClasticSedimentary => 0.8,
-            Lithology::RiftFill | Lithology::PelagicSediment | Lithology::Evaporite => 1.0,
-        }
-    }
+    pub erodibility: f64,
+    /// Free-form labels for later layers (resources, lore): `ore`, `magical`, …
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
-category!(Biome {
-    Ocean = 0, "Ocean", [28, 62, 120],
-    Lake = 1, "Lake", [60, 110, 190],
-    IceSheet = 2, "Ice Sheet", [240, 248, 255],
-    Tundra = 3, "Tundra", [176, 184, 160],
-    BorealForest = 4, "Boreal Forest", [58, 98, 72],
-    TemperateRainforest = 5, "Temperate Rainforest", [38, 120, 80],
-    TemperateForest = 6, "Temperate Deciduous Forest", [92, 148, 70],
-    TemperateGrassland = 7, "Temperate Grassland", [186, 196, 110],
-    Mediterranean = 8, "Mediterranean Woodland", [160, 150, 70],
-    ColdDesert = 9, "Cold Desert", [196, 182, 150],
-    HotDesert = 10, "Hot Desert", [234, 208, 140],
-    Savanna = 11, "Savanna", [200, 180, 80],
-    TropicalSeasonalForest = 12, "Tropical Seasonal Forest", [120, 160, 50],
-    TropicalRainforest = 13, "Tropical Rainforest", [20, 110, 30],
-    Alpine = 14, "Alpine", [150, 140, 130],
-    Wetland = 15, "Wetland", [70, 130, 120],
-});
+/// One biome: a row of the biome partition's table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BiomeClass {
+    /// Stable identifier, `snake_case`.
+    pub slug: String,
+    pub name: String,
+    #[serde(with = "hex_color")]
+    pub color: [u8; 3],
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
+/// `[r, g, b]` as `"#rrggbb"`.
+pub mod hex_color {
+    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+
+    #[must_use]
+    pub fn format(c: [u8; 3]) -> String {
+        format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
+    }
+
+    /// # Errors
+    /// If `s` is not `#rrggbb`.
+    pub fn parse(s: &str) -> Result<[u8; 3], String> {
+        let h = s.trim().trim_start_matches('#');
+        let byte = |i: usize| h.get(i..i + 2).and_then(|x| u8::from_str_radix(x, 16).ok());
+        match (h.len(), byte(0), byte(2), byte(4)) {
+            (6, Some(r), Some(g), Some(b)) => Ok([r, g, b]),
+            _ => Err(format!("'{s}' is not a #rrggbb colour")),
+        }
+    }
+
+    /// # Errors
+    /// Never; for serde.
+    pub fn serialize<S: Serializer>(c: &[u8; 3], s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&format(*c))
+    }
+
+    /// # Errors
+    /// If the string is not `#rrggbb`.
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 3], D::Error> {
+        parse(&String::deserialize(d)?).map_err(D::Error::custom)
+    }
+}
 
 /// A river node: a cell the network passes through.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

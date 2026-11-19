@@ -156,7 +156,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
             }
         })?,
         ProductData::CrustType(f) => image_of(spec, |i| f.values[i].color())?,
-        ProductData::Lithology(f) => image_of(spec, |i| lit(i, f.values[i].color()))?,
+        ProductData::Lithology(pt) => image_of(spec, |i| lit(i, pt.row_at(i as u32).map_or([30, 30, 30], |r| r.color)))?,
         ProductData::RockAge(f) => image_of(spec, |i| {
             let a = f64::from(f.values[i]);
             ramp(&[(0.0, [230, 60, 50]), (66.0, [245, 170, 60]), (252.0, [240, 230, 90]), (541.0, [110, 190, 120]), (1000.0, [60, 150, 200]), (2500.0, [70, 70, 170]), (4000.0, [50, 30, 80])], a)
@@ -184,12 +184,9 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
             arrows(&mut img, grid, &f.values, top);
             img
         }
-        ProductData::Biome(f) => image_of(spec, |i| {
-            let c = f.values[i].color();
-            lit(i, c)
-        })?,
+        ProductData::Biome(pt) => image_of(spec, |i| lit(i, pt.row_at(i as u32).map_or([30, 30, 30], |r| r.color)))?,
         ProductData::Plates(pt) => image_of(spec, |i| key_color(pt.owner.values[i]))?,
-        ProductData::Provinces(pt) => image_of(spec, |i| match pt.owner_of(i as u32).and_then(|k| pt.table.get(k)) {
+        ProductData::Provinces(pt) => image_of(spec, |i| match pt.row_at(i as u32) {
             Some(prov) => prov.kind.color(),
             None => [30, 30, 30],
         })?,

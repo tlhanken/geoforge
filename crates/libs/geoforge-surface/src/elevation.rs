@@ -354,14 +354,11 @@ impl Generator for Elevation {
 
         // 5. Rivers cut valleys (stream-power erosion; hard rock resists).
         if p.erosion.k > 0.0 {
-            let erodibility: Vec<f64> = match inputs.lithology() {
-                Some(l) => l.values.iter().map(|x| x.erodibility()).collect(),
-                None => vec![0.6; n],
-            };
+            let erodibility = inputs.lithology().map_or_else(|| vec![0.6; n], crate::geology::lithology::erodibility);
             // Active belts keep rising while they erode.
             let uplift: Vec<f64> = (0..n)
                 .map(|i| {
-                    let kind = provinces.owner_of(i as Cell).and_then(|k| provinces.table.get(k)).map(|pr| pr.kind);
+                    let kind = provinces.row_at(i as Cell).map(|pr| pr.kind);
                     let active = match kind {
                         Some(G::CollisionOrogen) => 1.0,
                         Some(G::VolcanicArc) => 0.8,

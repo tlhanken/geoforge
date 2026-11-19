@@ -157,3 +157,17 @@ impl TerrainNoise {
         sum / norm
     }
 }
+
+/// Values mapped to their rank in [0, 1): a uniform field with the input's spatial
+/// structure, so thresholds pick exact area shares.
+#[must_use]
+pub fn uniform_ranks(v: &[f64]) -> Vec<f64> {
+    let mut idx: Vec<usize> = (0..v.len()).collect();
+    idx.sort_by(|a, b| v[*a].total_cmp(&v[*b]).then(a.cmp(b)));
+    let mut out = vec![0.0; v.len()];
+    let n = v.len() as f64;
+    for (r, i) in idx.into_iter().enumerate() {
+        out[i] = (r as f64 + 0.5) / n;
+    }
+    out
+}
