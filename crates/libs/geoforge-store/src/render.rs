@@ -33,6 +33,23 @@ pub fn elevation_color(e: f64) -> [u8; 3] {
     ramp(if e < 0.0 { &SEA } else { &LAND }, e)
 }
 
+/// Elevation tint for a world without seas (relative to the mean radius), after the
+/// colouring of Mars laser-altimetry maps: blue lows to white highs.
+#[must_use]
+pub fn dry_elevation_color(e: f64) -> [u8; 3] {
+    const STOPS: [(f64, [u8; 3]); 8] = [
+        (-9000.0, [30, 20, 90]),
+        (-5000.0, [50, 90, 190]),
+        (-2000.0, [70, 170, 200]),
+        (0.0, [110, 190, 110]),
+        (2000.0, [220, 200, 90]),
+        (5000.0, [200, 120, 60]),
+        (9000.0, [150, 80, 60]),
+        (16000.0, [250, 245, 240]),
+    ];
+    ramp(&STOPS, e)
+}
+
 fn ramp(stops: &[(f64, [u8; 3])], x: f64) -> [u8; 3] {
     if x <= stops[0].0 {
         return stops[0].1;
@@ -125,17 +142,21 @@ fn image_of(grid: GridSpec, px: impl Fn(usize) -> [u8; 3]) -> Result<RgbImage> {
 ///
 /// # Errors
 /// For grids without a raster form.
-pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> Result<Option<RgbImage>> {
+/// Render a product. `sea`: the world has surface water, so ground below 0 m is sea; on a
+/// dry world elevation is relative to the mean radius and every cell is land.
+pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Result<Option<RgbImage>> {
     let spec = grid.spec();
     let elev = ctx.elevation().map(|f| f.values.as_slice());
     let shade_f = elev.map(|e| hillshade(grid, e, radius_km, 12.0));
-    let lit = |i: usize, c: [u8; 3]| match (&shade_f, elev) {
-        (Some(s), Some(e)) if e[i] >= 0.0 => shade(c, s[i]),
+    let is_sea = |i: usize| sea && elev.is_some_and(|e| e[i] < 0.0);
+    let lit = |i: usize, c: [u8; 3]| match &shade_f {
+        Some(s) if !is_sea(i) => shade(c, s[i]),
         _ => c,
     };
     let Some(data) = ctx.get(p) else { return Ok(None) };
     let mut img = match data {
-        ProductData::Elevation(f) => image_of(spec, |i| lit(i, elevation_color(f64::from(f.values[i]))))?,
+        ProductData::Elevation(f) if sea => image_of(spec, |i| lit(i, elevation_color(f64::from(f.values[i]))))?,
+        ProductData::Elevation(f) => image_of(spec, |i| lit(i, dry_elevation_color(f64::from(f.values[i]))))?,
         ProductData::CrustAge(f) => {
             let ct = ctx.crust_type();
             image_of(spec, |i| {
@@ -150,10 +171,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
         ProductData::TemperatureRange(f) => image_of(spec, |i| lit(i, ramp(&[(0.0, [240, 240, 250]), (10.0, [150, 200, 240]), (25.0, [240, 200, 90]), (45.0, [200, 60, 40]), (70.0, [90, 0, 40])], f64::from(f.values[i]))))?,
         ProductData::Precipitation(f) => image_of(spec, |i| {
             let c = precip_color(f64::from(f.values[i]));
-            match elev {
-                Some(e) if e[i] < 0.0 => blend(c, [30, 40, 70], 0.55),
-                _ => lit(i, c),
-            }
+            if is_sea(i) { blend(c, [30, 40, 70], 0.55) } else { lit(i, c) }
         })?,
         ProductData::CrustType(f) => image_of(spec, |i| f.values[i].color())?,
         ProductData::Lithology(pt) => image_of(spec, |i| lit(i, pt.row_at(i as u32).map_or([30, 30, 30], |r| r.color)))?,
@@ -161,13 +179,13 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
             let a = f64::from(f.values[i]);
             ramp(&[(0.0, [230, 60, 50]), (66.0, [245, 170, 60]), (252.0, [240, 230, 90]), (541.0, [110, 190, 120]), (1000.0, [60, 150, 200]), (2500.0, [70, 70, 170]), (4000.0, [50, 30, 80])], a)
         })?,
-        ProductData::SstAnomaly(f) => image_of(spec, |i| match elev {
-            Some(e) if e[i] >= 0.0 => [215, 210, 200],
-            _ => ramp(&[(-8.0, [30, 60, 160]), (-3.0, [120, 170, 225]), (0.0, [245, 245, 245]), (3.0, [245, 170, 120]), (8.0, [170, 30, 30])], f64::from(f.values[i])),
+        ProductData::SstAnomaly(f) => image_of(spec, |i| match is_sea(i) {
+            false => [215, 210, 200],
+            true => ramp(&[(-8.0, [30, 60, 160]), (-3.0, [120, 170, 225]), (0.0, [245, 245, 245]), (3.0, [245, 170, 120]), (8.0, [170, 30, 30])], f64::from(f.values[i])),
         })?,
-        ProductData::PrecipitationWarmShare(f) => image_of(spec, |i| match elev {
-            Some(e) if e[i] < 0.0 => [40, 50, 75],
-            _ => lit(i, ramp(&[(0.15, [180, 90, 40]), (0.35, [235, 200, 120]), (0.5, [240, 240, 230]), (0.65, [140, 200, 150]), (0.85, [40, 110, 160])], f64::from(f.values[i]))),
+        ProductData::PrecipitationWarmShare(f) => image_of(spec, |i| match is_sea(i) {
+            true => [40, 50, 75],
+            false => lit(i, ramp(&[(0.15, [180, 90, 40]), (0.35, [235, 200, 120]), (0.5, [240, 240, 230]), (0.65, [140, 200, 150]), (0.85, [40, 110, 160])], f64::from(f.values[i]))),
         })?,
         ProductData::WindJan(f) | ProductData::WindJul(f) | ProductData::OceanCurrents(f) => {
             let ocean = p == ProductId::OceanCurrents;
@@ -176,9 +194,9 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64) -> R
                 let v = f.values[i];
                 let sp = f64::from(v[0]).hypot(f64::from(v[1]));
                 let base = ramp(&[(0.0, [235, 238, 245]), (top * 0.3, [170, 200, 230]), (top * 0.7, [70, 120, 200]), (top, [40, 40, 140])], sp);
-                match elev {
-                    Some(e) if e[i] >= 0.0 => if ocean { [200, 195, 180] } else { blend(base, [180, 170, 150], 0.35) },
-                    _ => base,
+                match is_sea(i) {
+                    false => if ocean { [200, 195, 180] } else { blend(base, [180, 170, 150], 0.35) },
+                    true => base,
                 }
             })?;
             arrows(&mut img, grid, &f.values, top);

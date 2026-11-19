@@ -74,7 +74,8 @@ pub struct RockDef {
     pub occurs: Vec<Occurrence>,
 }
 
-/// Earth's rocks. Keys are the variant number + 1, so stored lithology stays stable.
+/// The built-in rocks: Earth's, plus the impact and anorthosite crust of airless and
+/// rigid-lid worlds. Keys are the variant number + 1, so stored lithology stays stable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Earth {
     OceanicBasalt,
@@ -91,10 +92,12 @@ enum Earth {
     Ophiolite,
     AccretionaryMelange,
     RiftFill,
+    ImpactBreccia,
+    Anorthosite,
 }
 
 impl Earth {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 16] = [
         Self::OceanicBasalt,
         Self::PelagicSediment,
         Self::CratonicBasement,
@@ -109,6 +112,8 @@ impl Earth {
         Self::Ophiolite,
         Self::AccretionaryMelange,
         Self::RiftFill,
+        Self::ImpactBreccia,
+        Self::Anorthosite,
     ];
 
     fn key(self) -> Key {
@@ -132,6 +137,8 @@ impl Earth {
             Self::Ophiolite => ("ophiolite", "Ophiolite", [40, 110, 100], 0.35, A::Ophiolite),
             Self::AccretionaryMelange => ("accretionary_melange", "Accretionary melange", [150, 150, 110], 0.8, A::Infill),
             Self::RiftFill => ("rift_fill", "Rift fill", [235, 165, 80], 1.0, A::Infill),
+            Self::ImpactBreccia => ("impact_breccia", "Impact breccia", [140, 125, 115], 0.6, A::Crust),
+            Self::Anorthosite => ("anorthosite", "Anorthosite", [225, 225, 215], 0.3, A::Basement),
         };
         RockDef { rock: Rock { slug: slug.into(), name: name.into(), color, erodibility, tags: Vec::new() }, age, occurs: Vec::new() }
     }
@@ -145,7 +152,7 @@ impl Earth {
                 &[(L::ClasticSedimentary, 0.48), (L::Carbonate, 0.32), (L::Evaporite, 0.04), (L::CratonicBasement, 0.10), (L::Granitoid, 0.06)]
             }
             (Some(G::IntracratonicBasin), true) => &[(L::ClasticSedimentary, 0.55), (L::Carbonate, 0.25), (L::Evaporite, 0.15), (L::FloodBasalt, 0.05)],
-            (Some(G::ContinentalRift), true) => &[(L::RiftFill, 0.65), (L::FloodBasalt, 0.20), (L::Granitoid, 0.05), (L::Evaporite, 0.10)],
+            (Some(G::ContinentalRift), _) => &[(L::RiftFill, 0.65), (L::FloodBasalt, 0.20), (L::Granitoid, 0.05), (L::Evaporite, 0.10)],
             (Some(G::ExtendedCrust), true) => &[(L::ClasticSedimentary, 0.35), (L::Metamorphic, 0.30), (L::RiftFill, 0.25), (L::Granitoid, 0.10)],
             (Some(G::CollisionOrogen), true) => {
                 &[(L::Metamorphic, 0.38), (L::Granitoid, 0.20), (L::ClasticSedimentary, 0.24), (L::Carbonate, 0.12), (L::Ophiolite, 0.06)]
@@ -161,6 +168,13 @@ impl Earth {
             (Some(G::OceanicPlateau | G::OceanicHotspotTrack | G::HotspotTrack), false) => &[(L::FloodBasalt, 0.80), (L::PelagicSediment, 0.20)],
             (Some(G::MidOceanRidge | G::OceanicFractureZone), false) => &[(L::OceanicBasalt, 1.0)],
             (Some(G::OceanTrench | G::ForearcBasin | G::BackarcBasin), false) => &[(L::PelagicSediment, 0.85), (L::OceanicBasalt, 0.15)],
+            // Rigid-lid worlds: battered old crust, lava plains, volcanic constructs.
+            (Some(G::CrateredHighlands), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.25), (L::Anorthosite, 0.15)],
+            (Some(G::VolcanicPlains | G::VolcanicRise), _) => &[(L::FloodBasalt, 0.85), (L::ImpactBreccia, 0.15)],
+            (Some(G::ImpactBasin), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.3), (L::Anorthosite, 0.1)],
+            (Some(G::ShieldVolcano), _) => &[(L::FloodBasalt, 1.0)],
+            (Some(G::Corona), _) => &[(L::FloodBasalt, 0.7), (L::Metamorphic, 0.3)],
+            (Some(G::Tessera), _) => &[(L::Metamorphic, 0.5), (L::FloodBasalt, 0.3), (L::Granitoid, 0.2)],
             // Remaining oceanic settings; young abyssal floor is bare basalt (see `build`).
             (_, false) => &[(L::PelagicSediment, 1.0)],
             // Remaining continental settings on unusual provinces.
@@ -197,7 +211,7 @@ impl Catalog {
             if !slugs.insert(d.rock.slug.as_str()) {
                 return Err(Error::Invalid(format!("rock '{}' is defined twice", d.rock.slug)));
             }
-            if d.occurs.iter().any(|o| !(o.weight > 0.0)) {
+            if d.occurs.iter().any(|o| o.weight.is_nan() || o.weight <= 0.0) {
                 return Err(Error::Invalid(format!("rock '{}': occurrence weights must be positive", d.rock.slug)));
             }
         }
@@ -338,7 +352,7 @@ mod tests {
             age: AgeRule::Volcanic,
             occurs: vec![Occurrence { province: Some(G::VolcanicArc), crust: Some(CrustType::Continental), weight: 0.1 }],
         };
-        let cat = Catalog::new(&[star.clone()]).unwrap();
+        let cat = Catalog::new(std::slice::from_ref(&star)).unwrap();
         let arc = cat.mix(Some(G::VolcanicArc), true);
         assert!(arc.iter().any(|p| p.key == Key(EXTRA_KEY_BASE) && (p.weight - 0.1).abs() < 1e-12 && p.age == AgeRule::Volcanic));
         assert!(!cat.mix(Some(G::VolcanicArc), false).iter().any(|p| p.key == Key(EXTRA_KEY_BASE)));

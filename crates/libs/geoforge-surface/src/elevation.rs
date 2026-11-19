@@ -240,6 +240,8 @@ impl Generator for Elevation {
                         z = base_cont + (250.0 + 1400.0 * (-prov.age_ma / 450.0).exp()) * s;
                     }
                     G::AbyssalPlain | G::OceanicFractureZone | G::HotspotTrack => {}
+                    // Rigid-lid kinds: drawn by `lid::LidElevation`.
+                    G::CrateredHighlands | G::VolcanicPlains | G::ImpactBasin | G::VolcanicRise | G::ShieldVolcano | G::Corona | G::Tessera => {}
                 }
                 z
             })

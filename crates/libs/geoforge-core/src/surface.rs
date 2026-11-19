@@ -111,6 +111,14 @@ category!(GeologicProvince {
     OceanicFractureZone = 17, "Oceanic Fracture Zone", [72, 209, 204],
     OceanicHotspotTrack = 18, "Oceanic Hotspot Track", [138, 43, 226],
     ContinentalHotspotTrack = 19, "Continental Hotspot Track", [153, 50, 204],
+    // Rigid-lid worlds (Mars, Mercury, the Moon, Venus).
+    CrateredHighlands = 20, "Cratered Highlands", [176, 140, 110],
+    VolcanicPlains = 21, "Volcanic Plains", [120, 110, 130],
+    ImpactBasin = 22, "Impact Basin", [70, 70, 90],
+    VolcanicRise = 23, "Volcanic Rise", [200, 100, 60],
+    ShieldVolcano = 24, "Shield Volcano", [230, 60, 30],
+    Corona = 25, "Corona", [240, 160, 40],
+    Tessera = 26, "Tessera", [150, 130, 160],
 });
 
 /// A geologic province: one painted region of the provinces partition.

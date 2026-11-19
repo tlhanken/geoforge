@@ -23,7 +23,9 @@ pub type Summary = BTreeMap<String, BTreeMap<String, Stat>>;
 
 #[allow(clippy::too_many_lines)]
 #[must_use]
-pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
+/// `sea`: the world has surface water, so ground below 0 m is sea; on a dry world every cell
+/// is land.
+pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Summary {
     let n = grid.len();
     let area: Vec<f64> = (0..n).map(|c| grid.area_sr(c as Cell)).collect();
     let total: f64 = area.iter().sum();
@@ -40,7 +42,7 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64) -> Summary {
         if w > 0.0 { s / w } else { f64::NAN }
     };
     let Some(elev) = pr.elevation().map(|f| &f.values) else { return out };
-    let land = |c: usize| elev[c] >= 0.0;
+    let land = |c: usize| !sea || elev[c] >= 0.0;
     let land_area: f64 = (0..n).filter(|&c| land(c)).map(|c| area[c]).sum();
     let km2 = |sr: f64| sr * radius_km * radius_km;
 

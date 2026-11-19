@@ -13,8 +13,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Implementation {
     Tectonics,
+    LidTectonics,
     Geology,
+    LidGeology,
     Elevation,
+    LidElevation,
     Circulation,
     Climate,
     Hydrology,
@@ -29,12 +32,24 @@ macro_rules! dispatch {
                 type $g = surface::Tectonics;
                 $body
             }
+            Implementation::LidTectonics => {
+                type $g = surface::LidTectonics;
+                $body
+            }
             Implementation::Geology => {
                 type $g = surface::Geology;
                 $body
             }
+            Implementation::LidGeology => {
+                type $g = surface::LidGeology;
+                $body
+            }
             Implementation::Elevation => {
                 type $g = surface::Elevation;
+                $body
+            }
+            Implementation::LidElevation => {
+                type $g = surface::LidElevation;
                 $body
             }
             Implementation::Circulation => {
@@ -59,7 +74,18 @@ macro_rules! dispatch {
 
 impl Implementation {
     /// In order of preference within each layer.
-    pub const ALL: [Self; 7] = [Self::Tectonics, Self::Geology, Self::Elevation, Self::Circulation, Self::Climate, Self::Hydrology, Self::Biomes];
+    pub const ALL: [Self; 10] = [
+        Self::Tectonics,
+        Self::LidTectonics,
+        Self::Geology,
+        Self::LidGeology,
+        Self::Elevation,
+        Self::LidElevation,
+        Self::Circulation,
+        Self::Climate,
+        Self::Hydrology,
+        Self::Biomes,
+    ];
 
     #[must_use]
     pub fn name(self) -> &'static str {
@@ -170,6 +196,11 @@ mod tests {
         for l in LayerId::ALL {
             assert!(select(l, &earth).is_ok(), "{} on Earth", l.name());
         }
+        let mars = Archetype::Mars.context(Key(1), "Mars");
+        assert_eq!(select(LayerId::Tectonics, &mars), Ok(Implementation::LidTectonics));
+        assert_eq!(select(LayerId::Elevation, &mars), Ok(Implementation::LidElevation));
+        assert_eq!(select(LayerId::Climate, &mars), Ok(Implementation::Climate));
+        assert!(select(LayerId::Hydrology, &mars).is_err(), "no surface water");
         let giant = Archetype::GasGiant.context(Key(1), "Jove");
         let why = select(LayerId::Tectonics, &giant).unwrap_err();
         assert!(why.0.contains("tectonics"), "{why}");

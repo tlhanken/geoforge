@@ -201,6 +201,12 @@ pub enum EventKind {
     LargeIgneousProvince,
     HotspotTrack,
     TransformInitiation,
+    /// A hemispheric split of the crust into highlands and lowlands.
+    CrustalDichotomy,
+    /// The planet's surface renewed at once (Venus).
+    GlobalResurfacing,
+    ImpactBasin,
+    VolcanicRise,
 }
 
 /// Where an event happened.

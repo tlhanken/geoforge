@@ -29,9 +29,10 @@ enum Cmd {
         /// A body file (TOML or JSON BodyContext) instead of a generated system.
         #[arg(long)]
         body: Option<PathBuf>,
-        /// Use an Earth-like reference body instead of a generated system (for calibration).
+        /// Start from a real body instead of a generated system: earth, mars, venus, mercury,
+        /// moon, titan, europa, gas_giant, ice_giant.
         #[arg(long, conflicts_with = "body")]
-        earth_like: bool,
+        archetype: Option<geoforge_core::Archetype>,
     },
     /// Generate (or update) every product that is missing or stale.
     Generate {
@@ -136,13 +137,13 @@ fn read_body(path: &Path) -> R<BodyContext> {
 
 fn run(cli: Cli) -> R<()> {
     match cli.cmd {
-        Cmd::New { dir, seed, width, body, earth_like } => {
+        Cmd::New { dir, seed, width, body, archetype } => {
             if seed > i64::MAX as u64 {
                 return Err("seed must be at most 9223372036854775807".into());
             }
             let mut body = body.as_deref().map(read_body).transpose()?;
-            if earth_like {
-                body = Some(geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Terra"));
+            if let Some(a) = archetype {
+                body = Some(a.context(geoforge_core::Key(1), a.name()));
             }
             let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), grid: GridSpec::Equirect { width, height: width / 2 }, body })?;
             show(&w)?;
@@ -256,7 +257,7 @@ fn run(cli: Cli) -> R<()> {
             let products = pipe::load_all(&w)?;
             let body = w.load_body()?;
             let grid = w.manifest.grid.build()?;
-            let s = geoforge_pipeline::stats::summarize(&products, &grid, body.exterior.radius_km);
+            let s = geoforge_pipeline::stats::summarize(&products, &grid, body.exterior.radius_km, body.interior.has_surface_liquid_water());
             println!("{}", serde_json::to_string_pretty(&s)?);
         }
     }

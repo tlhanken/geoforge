@@ -42,6 +42,22 @@ impl Archetype {
         }
     }
 
+    /// Display name.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Earth => "Earth",
+            Self::Mars => "Mars",
+            Self::Venus => "Venus",
+            Self::Mercury => "Mercury",
+            Self::Moon => "Moon",
+            Self::Titan => "Titan",
+            Self::Europa => "Europa",
+            Self::GasGiant => "Gas giant",
+            Self::IceGiant => "Ice giant",
+        }
+    }
+
     /// The body as a full context named `name`.
     #[must_use]
     pub fn context(self, key: Key, name: &str) -> BodyContext {
