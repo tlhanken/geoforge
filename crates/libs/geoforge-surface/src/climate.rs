@@ -542,7 +542,7 @@ impl Climate {
         let r = ctx.radius_km();
         let atmo = Atmo::from_world(grid, elev, p.resolution_deg);
         let g = atmo.g;
-        let obl_w = body.exterior.obliquity_deg;
+        let obl_w = body.irradiance.obliquity_deg;
         let season_winds: Vec<Vec<(f64, f64)>> = match (inputs.wind_jul(), inputs.wind_jan()) {
             (Some(jul), Some(jan)) => vec![
                 atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S),
@@ -561,8 +561,8 @@ impl Climate {
         // 1. Zonal energy balance.
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let flux = body.irradiance.flux_w_m2;
-        let obl = body.exterior.obliquity_deg;
-        let ecc = body.orbit.e;
+        let obl = body.irradiance.obliquity_deg;
+        let ecc = body.irradiance.eccentricity;
         let olr_a = outgoing_a(flux, body.interior.surface_pressure_bar(), p);
         let (tz, tmean) = zonal_temperature(&lats, flux, obl, ecc, olr_a, p.heat_transport);
         let swing_z: Vec<f64> = lats.iter().map(|&l| seasonal_swing(flux, l, obl, ecc)).collect();

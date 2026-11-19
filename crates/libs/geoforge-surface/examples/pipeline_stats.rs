@@ -2,14 +2,14 @@
 use geoforge_core::grid::{EquirectGrid, Grid};
 use geoforge_core::product::{Generator, Products, RunContext};
 use geoforge_core::surface::{Category, CrustType};
-use geoforge_core::{BodyContext, Key, Seed};
+use geoforge_core::{Archetype, Key, Seed};
 use geoforge_surface::{Elevation, Geology, Tectonics};
 use std::io::Write;
 
 fn main() {
     let w: u32 = std::env::var("W").ok().and_then(|v| v.parse().ok()).unwrap_or(1800);
     let grid = EquirectGrid::new(w, w / 2).unwrap();
-    let body = BodyContext::earth_like(Key(1), "Test");
+    let body = Archetype::Earth.context(Key(1), "Test");
     let seeds: Vec<u64> = std::env::args().skip(1).filter_map(|a| a.parse().ok()).collect();
     for seed in seeds {
         let ctx = RunContext { root_seed: Seed(seed), body: &body, grid: &grid };

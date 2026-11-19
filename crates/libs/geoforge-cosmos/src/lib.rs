@@ -5,8 +5,9 @@
 //! produce a [`BodyContext`] for the focus world; the surface pipeline never sees this crate.
 
 use geoforge_core::body::{
-    BodyClass, BodyContext, BodyExterior, BodyInterior, Composition, Elements, Epoch, Irradiance, NodeKind, OrbitalNode, Phase,
-    Population, PowerLaw, Shell, ShellKind, SolarSystem, Species, Star, SystemRoot, TidalPartner, EARTH_MASS_KG, EARTH_RADIUS_KM,
+    Archetype, BodyClass, BodyContext, BodyExterior, BodyInterior, Composition, Elements, Epoch, Irradiance, NodeKind, OrbitalNode,
+    Phase, Population, PowerLaw, Shell, ShellKind, SolarSystem, Species, Star, SystemRoot, TectonicRegime, TidalPartner,
+    EARTH_MASS_KG, EARTH_RADIUS_KM,
 };
 use geoforge_core::derived::{
     effective_temperature_k, flux_w_m2, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius,
@@ -240,14 +241,18 @@ pub fn generate_system(seed: Seed) -> Generated {
 /// The interior of a body (its own layer), from its exterior and orbit.
 #[must_use]
 pub fn interior_for(seed: Seed, ext: &BodyExterior, flux_w_m2: f64) -> BodyInterior {
+    use Phase::{Liquid, Solid};
+    use ShellKind::{Core, Crust, Mantle, Ocean};
     let mut d = Draw::new(seed.child(b"interior"));
     match ext.class {
-        BodyClass::GasGiant | BodyClass::IceGiant => BodyInterior::gas_giant(),
+        BodyClass::GasGiant => Archetype::GasGiant.interior(),
+        BodyClass::IceGiant => Archetype::IceGiant.interior(),
         BodyClass::SmallBody => BodyInterior {
             shells: vec![
-                Shell { kind: ShellKind::Mantle, phase: Phase::Solid, thickness_km: ext.radius_km * 0.8, composition: Composition::single(Species::Silicate), pressure_bar: None },
-                Shell { kind: ShellKind::Crust, phase: Phase::Solid, thickness_km: ext.radius_km * 0.2, composition: Composition::from_weights(&[(Species::Silicate, 0.6), (Species::Ice, 0.4)]), pressure_bar: None },
+                Shell::new(Mantle, Solid, ext.radius_km * 0.8, Composition::single(Species::Silicate)),
+                Shell::new(Crust, Solid, ext.radius_km * 0.2, Composition::from_weights(&[(Species::Silicate, 0.6), (Species::Ice, 0.4)])),
             ],
+            regime: TectonicRegime::Inactive,
         },
         BodyClass::Terrestrial => {
             let r = ext.radius_km;
@@ -255,21 +260,18 @@ pub fn interior_for(seed: Seed, ext: &BodyExterior, flux_w_m2: f64) -> BodyInter
             let crust = d.range(25.0, 45.0);
             let temperate = (80.0..2500.0).contains(&flux_w_m2);
             let mut shells = vec![
-                Shell { kind: ShellKind::Core, phase: Phase::Solid, thickness_km: core, composition: Composition::from_weights(&[(Species::Iron, 0.85), (Species::Nickel, 0.05), (Species::Sulfur, 0.10)]), pressure_bar: None },
-                Shell { kind: ShellKind::Mantle, phase: Phase::Solid, thickness_km: r - core - crust, composition: Composition::single(Species::Silicate), pressure_bar: None },
-                Shell { kind: ShellKind::Crust, phase: Phase::Solid, thickness_km: crust, composition: Composition::from_weights(&[(Species::Basalt, 0.6), (Species::Granite, 0.4)]), pressure_bar: None },
+                Shell::new(Core, Solid, core, Composition::from_weights(&[(Species::Iron, 0.85), (Species::Nickel, 0.05), (Species::Sulfur, 0.10)])),
+                Shell::new(Mantle, Solid, r - core - crust, Composition::single(Species::Silicate)),
+                Shell::new(Crust, Solid, crust, Composition::from_weights(&[(Species::Basalt, 0.6), (Species::Granite, 0.4)])),
             ];
-            if temperate && ext.mass_kg > 0.3 * EARTH_MASS_KG {
-                shells.push(Shell { kind: ShellKind::Ocean, phase: Phase::Liquid, thickness_km: d.range(2.35, 2.9), composition: Composition::single(Species::Water), pressure_bar: None });
-                shells.push(Shell {
-                    kind: ShellKind::Atmosphere,
-                    phase: Phase::Gas,
-                    thickness_km: 100.0,
-                    composition: Composition::from_weights(&[(Species::Nitrogen, 0.76), (Species::Oxygen, 0.22), (Species::Argon, 0.01), (Species::CarbonDioxide, 0.01)]),
-                    pressure_bar: Some(d.range(0.7, 1.6)),
-                });
+            let wet = temperate && ext.mass_kg > 0.3 * EARTH_MASS_KG;
+            if wet {
+                shells.push(Shell::new(Ocean, Liquid, d.range(2.35, 2.9), Composition::single(Species::Water)));
+                let air = Composition::from_moles(&[(Species::Nitrogen, 0.78), (Species::Oxygen, 0.21), (Species::Argon, 0.0093), (Species::CarbonDioxide, 0.0004)]);
+                shells.push(Shell::atmosphere(d.range(0.7, 1.6), 100.0, air));
             }
-            BodyInterior { shells }
+            let regime = if wet { TectonicRegime::Plates } else { TectonicRegime::StagnantLid };
+            BodyInterior { shells, regime }
         }
     }
 }
@@ -303,7 +305,7 @@ pub fn body_context(system: &SolarSystem, key: Key) -> BodyContext {
         exterior: ext,
         interior: interior_for(system.root.seed.child_u64(b"body", key.0), &ext, flux),
         orbit: el,
-        irradiance: Irradiance { flux_w_m2: flux, star_temperature_k: star.temperature_k },
+        irradiance: Irradiance { flux_w_m2: flux, star_temperature_k: star.temperature_k, eccentricity: el.e, obliquity_deg: ext.obliquity_deg },
         tides,
         epoch: system.root.epoch,
     }

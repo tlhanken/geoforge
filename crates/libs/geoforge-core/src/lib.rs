@@ -11,7 +11,7 @@ pub mod seed;
 pub mod shapes;
 pub mod surface;
 
-pub use body::{BodyContext, BodyExterior, BodyInterior, Elements, SolarSystem, SystemRoot};
+pub use body::{Archetype, BodyContext, BodyExterior, BodyInterior, Elements, SolarSystem, SystemRoot, TectonicRegime};
 pub use geom::{LatLon, UnitVec3, Vec3};
 pub use grid::{AnyGrid, Cell, EquirectGrid, Grid, GridSpec};
 pub use key::{Address, EntityKind, Key, KeyAllocator};

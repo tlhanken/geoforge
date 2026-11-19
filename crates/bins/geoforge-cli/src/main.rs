@@ -142,7 +142,7 @@ fn run(cli: Cli) -> R<()> {
             }
             let mut body = body.as_deref().map(read_body).transpose()?;
             if earth_like {
-                body = Some(BodyContext::earth_like(geoforge_core::Key(1), "Terra"));
+                body = Some(geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Terra"));
             }
             let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), grid: GridSpec::Equirect { width, height: width / 2 }, body })?;
             show(&w)?;

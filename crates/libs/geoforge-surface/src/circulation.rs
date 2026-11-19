@@ -327,7 +327,7 @@ impl Generator for Circulation {
         let r = ctx.radius_km();
         let atmo = Atmo::from_world(grid, elev, p.resolution_deg);
         let g: AtmoGrid = atmo.g;
-        let obl = body.exterior.obliquity_deg;
+        let obl = body.irradiance.obliquity_deg;
         let rot = body.exterior.rotation_h;
         let jul = season_winds(&atmo, &Cells::for_body(rot, obl, 1.0), 1.0, p);
         let jan = season_winds(&atmo, &Cells::for_body(rot, obl, -1.0), -1.0, p);
@@ -337,7 +337,7 @@ impl Generator for Circulation {
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
         let olr = outgoing_a(body.irradiance.flux_w_m2, body.interior.surface_pressure_bar(), &cp);
-        let (tz, _) = zonal_temperature(&lats, body.irradiance.flux_w_m2, obl, body.orbit.e, olr, cp.heat_transport);
+        let (tz, _) = zonal_temperature(&lats, body.irradiance.flux_w_m2, obl, body.irradiance.eccentricity, olr, cp.heat_transport);
         let sst = if has_sea { sst_anomaly(&atmo, &cur, &annual, &tz, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
