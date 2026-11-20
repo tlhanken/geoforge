@@ -13,6 +13,9 @@
 //! - Large igneous provinces are contiguous blobs (v1 never placed them: its "unassigned
 //!   pixel" filter excluded every pixel, since the base layers cover the whole map).
 //! - In ocean–ocean subduction the older crust subducts (v1 used the lower plate id).
+//! - Continental collisions are asymmetric (v1 drew a ridge centred on the boundary): the
+//!   smaller continent goes under, a front range and a plateau grow on the larger, and a
+//!   foreland basin bends down in front (see [`provinces::Collision`]).
 
 pub mod lithology;
 pub mod provinces;
@@ -64,7 +67,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 3;
+    const VERSION: u32 = 4;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -403,24 +406,50 @@ impl B<'_> {
 
     // ---------------------------------------------------------------- active features
 
+    /// Of two colliding continents, the one that goes under: the smaller, driven into the
+    /// larger, as India and Arabia are into Asia. Polarity is inherited: the small continent
+    /// rode in behind ocean floor that was already subducting beneath the big one, and once
+    /// its buoyant upper crust is scraped off, the rest is dense enough to follow.
+    fn lower_and_upper(&self, a: Side, b: Side) -> (Side, Side) {
+        let size = |side: Side| (self.info.get(&side.plate).map_or(0.0, |i| i.cont_area_km2), side.plate);
+        if size(a) < size(b) { (a, b) } else { (b, a) }
+    }
+
     fn collision_orogens(&mut self, segments: &[BoundarySegment]) {
         for (i, s) in segments.iter().enumerate() {
-            if s.kind != BoundaryKind::Convergent || s.rate_cm_yr < pc::MIN_CONVERGENCE_RATE_CM_PER_YEAR {
+            if s.kind != BoundaryKind::Convergent || s.rate_cm_yr < pc::COLLISION_MIN_RATE_CM_PER_YEAR {
                 continue;
             }
             let (a, b) = self.sides(s);
             if !(a.continental && b.continental) {
                 continue;
             }
-            let width = pc::rate_scaled(pc::COLLISION_BASE_WIDTH_KM, pc::COLLISION_WIDTH_FACTOR, pc::COLLISION_MAX_MULTIPLIER, s.rate_cm_yr);
-            // Belts swell and pinch along their length (half to one and a half times the
-            // nominal width), so their edges are not parallel to a straight boundary.
-            let m = self.reach(&s.cells, width * 0.75, |c| self.crust[c as usize] == CrustType::Continental);
+            let (lower, upper) = self.lower_and_upper(a, b);
+            let shape = pc::Collision::at_rate(s.rate_cm_yr);
+            let age = (1500.0 / (s.rate_cm_yr * 10.0).max(5.0)).clamp(5.0, 80.0);
+            let (owner, crust) = (self.owner, self.crust);
+            let continental_on = |plate: u32| move |c: Cell| owner[c as usize] == plate && crust[c as usize] == CrustType::Continental;
+            let edge = |plate: u32| -> Vec<Cell> { s.cells.iter().copied().filter(|&c| owner[c as usize] == plate).collect() };
+            // Belts swell and pinch along their length, so their edges are not parallel to a
+            // straight boundary.
             let wn = &self.width_noise;
             let grid = self.grid;
-            let cells = Self::cells_of(&m, |c, d| d <= width / 2.0 * (1.0 + 1.6 * wn.fbm(grid.center(c), 6.0, 3)).clamp(0.5, 1.5));
-            let age = (1500.0 / (s.rate_cm_yr * 10.0).max(5.0)).clamp(5.0, 80.0);
-            self.push(cells, pc::collision_orogen(s.rate_cm_yr, width), Some(i), age);
+            let swell = |c: Cell, lo: f64, hi: f64| (1.0 + 1.6 * wn.fbm(grid.center(c), 6.0, 3)).clamp(lo, hi);
+
+            // Upper plate: front range, then plateau.
+            let depth = shape.range_km + shape.plateau_km;
+            let m = self.reach(&edge(upper.plate), depth * 1.2, continental_on(upper.plate));
+            let range = Self::cells_of(&m, |c, d| d <= shape.range_km * swell(c, 0.8, 1.2));
+            let plateau = Self::cells_of(&m, |c, d| d > shape.range_km * swell(c, 0.8, 1.2) && d <= shape.range_km + shape.plateau_km * swell(c, 0.8, 1.2));
+            // Lower plate: foreland basin.
+            let f = self.reach(&edge(lower.plate), shape.foreland_km, continental_on(lower.plate));
+            let foreland = Self::cells_of(&f, |_, _| true);
+
+            self.push(foreland, pc::foreland_basin(s.rate_cm_yr, shape.foreland_km), Some(i), age * 0.5);
+            if shape.plateau_km > 0.0 {
+                self.push(plateau, pc::orogenic_plateau(s.rate_cm_yr, shape.plateau_km), Some(i), age);
+            }
+            self.push(range, pc::collision_orogen(s.rate_cm_yr, shape.range_km), Some(i), age);
         }
     }
 

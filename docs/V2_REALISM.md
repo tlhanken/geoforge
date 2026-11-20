@@ -183,7 +183,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
-| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 38 | 11 |
+| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 45 | 8 |
 | `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 52 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
@@ -192,9 +192,8 @@ Biggest open gaps, by layer:
 - **Elevation from plates:**
   - Andean margins are built like ocean–ocean ones: no Altiplano, and the arc–trench gap is
     ~340 km (Earth 150–300).
-  - Collision belts are symmetric and have no plateau: Tibet 1.2 km vs 5.0.
-  - No plume uplift (Ethiopia), foreland basins (the Amazon at 350 m) or intraplate ranges
-    (the Rockies).
+  - No plume uplift (Ethiopia), no foreland basin beside the Andes (the Amazon at 350 m),
+    no intraplate ranges (the Rockies).
   - Ridge–transform staircases are smoothed into ridges.
 - **Circulation:**
   - The Humboldt Current is a third as cold as observed.
@@ -215,6 +214,24 @@ Biggest open gaps, by layer:
   - Polar winters fall below the CO₂ frost point.
   - Mars's relief overshoots in two of three seeds.
   - The Moon has no far-side highland bulge and no basin the size of South Pole–Aitken.
+
+### Continental collisions
+
+Collisions are built asymmetrically (`geology::provinces::Collision`):
+- **Which plate goes under:** the smaller continent. India and Arabia went under Asia
+  because they rode in behind ocean floor that was already subducting beneath it. Once their
+  buoyant upper crust is scraped off, the rest is dense enough to follow.
+- **What forms:** a foreland basin on the lower plate, a steep front range across the
+  boundary, and a plateau behind it on the upper plate. Rivers do not cross the plateau's
+  interior to the sea, so it stays flat and dotted with lakes.
+- **Speed:** sets the range's height and the plateau's width and height. Collisions
+  slower than 0.5 cm/yr build nothing; a plateau needs 2 cm/yr or more.
+- **Gravity:** heights scale as 1/g (`relief::relief_scale`), the load a crust can bear.
+
+On PB2002's plates this gives Tibet 4.95 km (ETOPO1 4.95), the Himalaya 3.1 km (3.1), the
+Ganges plain 230 m (200), Mesopotamia 150 m (185), and the Iranian plateau 1.9 km (1.3).
+Iran is too high because rate is all the model knows: Arabia converges almost as fast as
+India but has collided half as long.
 
 ## What matches
 

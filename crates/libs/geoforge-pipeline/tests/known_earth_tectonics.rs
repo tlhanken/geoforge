@@ -325,8 +325,13 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         "",
     )
     .gap("arcs stand too far behind the trench (median below)");
-    s.range("provinces", "continental collisions with an orogen nearby", near_share("CCB", &[G::CollisionOrogen], 200.0), 0.6..=1.0, "")
-        .gap("orogens need ≥ 2 cm/yr convergence: Earth's slow collisions (Africa–Europe, the northern Andes) build none");
+    s.range(
+        "provinces",
+        "continental collisions with an orogen nearby",
+        near_share("CCB", &[G::CollisionOrogen], 200.0),
+        0.6..=1.0,
+        "",
+    );
     s.range(
         "provinces",
         "continental rifts with a rift nearby",
@@ -393,6 +398,14 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         &province_at(e, 32.0, 50.0),
         &["CollisionOrogen"],
     );
+    // India and Arabia go under Asia: the plateau grows on Asia, the foreland on them.
+    for (name, lat, lon, want) in [
+        ("Tibet (33°N 88°E)", 33.0, 88.0, "OrogenicPlateau"),
+        ("Ganges plain (26°N 82°E)", 26.0, 82.0, "ForelandBasin"),
+        ("Mesopotamia (32°N 45°E)", 32.0, 45.0, "ForelandBasin"),
+    ] {
+        s.one_of("provinces", name, &province_at(e, lat, lon), &[want]);
+    }
 }
 
 /// The heightmap against ETOPO1.
@@ -450,9 +463,6 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         corr(&land),
         0.4..=1.0,
         "",
-    )
-    .gap(
-        "relief away from boundaries is missing: plateaus, intraplate ranges, basins (cases below)",
     );
     s.range(
         "elevation",
@@ -535,23 +545,30 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         -9000.0..=-4500.0,
         "m",
     );
-    for (name, lat, lon0, lon1, want, why) in [
-        ("Tibet, 30–35°N 80–95°E", 30.0..=35.0, 80.0, 95.0, 3500.0..=5500.0, "collision belts are symmetric and ~500 km wide; no plateau grows on the overriding plate"),
+    for (name, lat, lon0, lon1, want, gap) in [
+        ("Tibet, 30–35°N 80–95°E", 30.0..=35.0, 80.0, 95.0, 3500.0..=5500.0, None),
+        ("Himalaya, 27.5–29.5°N 80–90°E", 27.5..=29.5, 80.0, 90.0, 2500.0..=5500.0, None),
+        ("Ganges plain, 24–27°N 78–88°E", 24.0..=27.0, 78.0, 88.0, 0.0..=500.0, None),
+        ("Iranian plateau, 30–35°N 52–60°E", 30.0..=35.0, 52.0, 60.0, 800.0..=2200.0, None),
+        ("Mesopotamia, 30–34°N 43–47°E", 30.0..=34.0, 43.0, 47.0, -100.0..=400.0, None),
         (
             "central Andes, 15–25°S 70–65°W",
             -25.0..=-15.0,
             -70.0,
             -65.0,
             2000.0..=4000.0,
-            "Andean margins are built like ocean–ocean ones: a wedge and forearc ~3 km deep on the continent, a 1–1.5 km arc, a backarc basin where the Altiplano stands",
+            Some("Andean margins are built like ocean–ocean ones: a wedge and forearc ~3 km deep on the continent, a 1–1.5 km arc, a backarc basin where the Altiplano stands"),
         ),
-        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, "no foreland basin beside a growing range: continental interiors sit at a uniform 300–400 m"),
-        ("Rocky Mountains, 38–42°N 110–105°W", 38.0..=42.0, -110.0, -105.0, 1500.0..=3000.0, "no mountain building far inland of a plate boundary (the Laramide uplift, Tian Shan)"),
-        ("Ethiopian highlands, 5–10°N 36–40°E", 5.0..=10.0, 36.0, 40.0, 1000.0..=2600.0, "no plume uplift: the Ethiopian and East African domes are 1.5–2 km over 1000 km"),
+        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, Some("no foreland basin beside the Andes: continental interiors sit at a uniform 300–400 m")),
+        ("Rocky Mountains, 38–42°N 110–105°W", 38.0..=42.0, -110.0, -105.0, 1500.0..=3000.0, Some("no mountain building far inland of a plate boundary (the Laramide uplift, Tian Shan)")),
+        ("Ethiopian highlands, 5–10°N 36–40°E", 5.0..=10.0, 36.0, 40.0, 1000.0..=2600.0, Some("no plume uplift: the Ethiopian and East African domes are 1.5–2 km over 1000 km")),
     ] {
         let cells = cells_in(g, lat, lon0, lon1);
         let (m, r) = both(&|v| mean(g, &cells, |c| v[c as usize]));
-        s.range("elevation", format!("{name} (ETOPO1 {r:.0})"), m, want, "m").gap(why);
+        s.range("elevation", format!("{name} (ETOPO1 {r:.0})"), m, want, "m");
+        if let Some(why) = gap {
+            s.gap(why);
+        }
     }
 }
 

@@ -4,7 +4,7 @@
 //! radius) returning height in units of the feature's depth or height.
 
 use geoforge_core::grid::{cells_within, Cell, Grid};
-use geoforge_core::{BodyContext, UnitVec3};
+use geoforge_core::UnitVec3;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -19,12 +19,7 @@ const CRATER_K: f64 = 0.02;
 /// Heavily cratered surfaces stop gaining craters (new ones erase old ones).
 const SATURATION: f64 = 3.0;
 
-/// Relief multiplier from gravity: weaker gravity holds taller topography (Olympus Mons is
-/// 2.5× Mauna Loa on a planet with 0.38 g).
-#[must_use]
-pub fn relief_scale(body: &BodyContext) -> f64 {
-    (9.81 / body.gravity_m_s2()).clamp(0.5, 3.0)
-}
+pub use crate::relief::relief_scale;
 
 /// Craters accumulated on a surface of age `age_ma`, relative to a 4 Ga surface: Neukum's
 /// production function (a steep early bombardment, then a slow constant rate), saturating.

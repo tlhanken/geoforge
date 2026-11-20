@@ -198,7 +198,8 @@ product's randomness. `seed <dir> <product>` prints it.
   deformed sediment, ophiolite; arc: volcanics and plutons…) picked by smooth noise, with
   rock ages from the province's history.
 - **Elevation**: GDH1 ocean depth from crust age, continental freeboard with plateaus,
-  province relief, shelves and slopes planed to sea level, sea level from the ocean's volume,
+  province relief (continental collisions: foreland basin, front range, plateau on the
+  upper plate; heights × 1/g), shelves and slopes planed to sea level, sea level from the ocean's volume,
   then stream-power erosion (Braun & Willett implicit scheme) with erodibility from
   lithology and uplift in active belts: rivers cut dendritic valleys while ranges stay high.
 - **Rigid lids** (`lid_*`): one plate; crust split into old highlands and younger lowlands

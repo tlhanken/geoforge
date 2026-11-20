@@ -12,6 +12,7 @@ pub mod hydrology;
 pub mod lid;
 pub mod noise;
 pub mod preconditions;
+pub mod relief;
 pub mod tectonics;
 
 pub use biomes::Biomes;

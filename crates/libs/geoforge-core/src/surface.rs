@@ -120,6 +120,9 @@ category!(GeologicProvince {
     Corona = 25, "Corona", [240, 160, 40],
     Tessera = 26, "Tessera", [150, 130, 160],
     CrateredIce = 27, "Cratered Ice", [205, 220, 230],
+    // Continental collisions (numbered after the rigid-lid kinds, which keep theirs).
+    OrogenicPlateau = 28, "Orogenic Plateau", [205, 133, 63],
+    ForelandBasin = 29, "Foreland Basin", [189, 183, 107],
 });
 
 /// A geologic province: one painted region of the provinces partition.

@@ -1,9 +1,8 @@
 //! Province characteristics and constants, ported from geoforge v1 (Stage 2).
 //!
 //! Widths are **total** widths in km unless noted. Where v1 expanded a width on each side
-//! of a boundary, the total here keeps v1's effective result, except collision orogens:
-//! v1's 1000–2500 km *per side* (2000–5000 km total) is reduced to 1000–2500 km total,
-//! which spans the Alps-to-Tibet range on Earth.
+//! of a boundary, the total here keeps v1's effective result. Continental collisions are not
+//! v1's: they are built asymmetrically (see [`Collision`]).
 
 use geoforge_core::surface::{GeologicProvince as G, Province};
 
@@ -29,9 +28,60 @@ pub const BACKARC_BASIN_MAX_MULTIPLIER: f64 = 2.0;
 pub const BACKARC_BASIN_MIN_PLATE_AREA_KM2: f64 = 500_000.0;
 pub const MIN_CONVERGENCE_RATE_CM_PER_YEAR: f64 = 2.0;
 
-pub const COLLISION_BASE_WIDTH_KM: f64 = 1000.0;
-pub const COLLISION_WIDTH_FACTOR: f64 = 0.15;
-pub const COLLISION_MAX_MULTIPLIER: f64 = 2.5;
+/// Slowest convergence that still builds a collision belt: the Alps rise at under 1 cm/yr.
+pub const COLLISION_MIN_RATE_CM_PER_YEAR: f64 = 0.5;
+
+/// The shape of a continent–continent collision, across the boundary.
+///
+/// One plate goes under the other: its upper crust is scraped off and stacked into a
+/// steep **front range** just across the boundary (the Himalaya, the Zagros, the Alps), its
+/// lithosphere slides beneath the upper plate and thickens it into a **plateau** behind the
+/// range (Tibet, the Iranian plateau), and the load of the range bends the down-going plate
+/// into a **foreland basin** in front (the Ganges plain, Mesopotamia and the Gulf).
+///
+/// Fast convergence stacks more crust: the range rises higher and the plateau grows
+/// wider and higher. Calibrated on Earth at one degree, with PB2002's normal convergence
+/// rates: the Alps (~0.5 cm/yr) have a 2 km range and no plateau, and the Himalaya
+/// (~3.7 cm/yr) a 5 km range before Tibet, 5 km high and ~650 km wide. Rate is all this
+/// knows; how long a collision has run matters too, so the Iranian plateau behind the
+/// Zagros (~3 cm/yr, but half as old) comes out ~40% above its real 1.3 km. Peaks rise above
+/// these means (the terrain detail adds ridges). Heights are for Earth's gravity; multiply
+/// by [`crate::relief::relief_scale`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Collision {
+    /// Width of the front range on the upper plate, km.
+    pub range_km: f64,
+    /// Width of the plateau behind it, km (0: none).
+    pub plateau_km: f64,
+    /// Width of the foreland basin on the lower plate, km.
+    pub foreland_km: f64,
+    /// Crest of the front range above the continental base, m.
+    pub range_m: f64,
+    /// Plateau surface above the continental base (itself 0.3–0.9 km), m.
+    pub plateau_m: f64,
+    /// Deepest point of the foreland basin below the continental base, m (sediment-filled).
+    pub foreland_m: f64,
+}
+
+impl Collision {
+    #[must_use]
+    pub fn at_rate(rate_cm_yr: f64) -> Self {
+        let r = rate_cm_yr.max(0.0);
+        let ramp = |lo: f64, hi: f64| ((r - lo) / (hi - lo)).clamp(0.0, 1.0);
+        Self {
+            range_km: (150.0 + 30.0 * r).min(350.0),
+            plateau_km: if r < 2.0 { 0.0 } else { (250.0 + 110.0 * r).min(1000.0) },
+            foreland_km: (150.0 + 30.0 * r).min(350.0),
+            range_m: 2000.0 + 3000.0 * ramp(0.5, 4.0),
+            plateau_m: 5000.0 * smooth(ramp(2.0, 4.0)),
+            foreland_m: 250.0,
+        }
+    }
+}
+
+fn smooth(t: f64) -> f64 {
+    t * t * (3.0 - 2.0 * t)
+}
 
 /// Rift zone half-width range. v1 expanded 250–400 km on each side (500–800 km total),
 /// which turned short divergent stretches into discs; the East African rift system is
@@ -105,6 +155,14 @@ pub fn collision_orogen(rate: f64, width_km: f64) -> Province {
     p(G::CollisionOrogen, 1.0, 0.9, width_km, norm(rate), rate)
 }
 #[must_use]
+pub fn orogenic_plateau(rate: f64, width_km: f64) -> Province {
+    p(G::OrogenicPlateau, 0.8, 0.45, width_km, norm(rate), rate)
+}
+#[must_use]
+pub fn foreland_basin(rate: f64, width_km: f64) -> Province {
+    p(G::ForelandBasin, -0.1, 0.2, width_km, norm(rate), rate)
+}
+#[must_use]
 pub fn accretionary_wedge(rate: f64, width_km: f64) -> Province {
     p(G::AccretionaryWedge, 0.2, 0.7, width_km, norm(rate), rate)
 }
@@ -175,4 +233,18 @@ pub fn continental_hotspot_track(length_km: f64) -> Province {
 #[must_use]
 pub fn paleo_orogen(width_km: f64) -> Province {
     p(G::PaleoOrogen, 0.6, 0.6, width_km, 0.3, 0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Collision;
+
+    #[test]
+    fn faster_collisions_build_bigger() {
+        let (alps, zagros, himalaya) = (Collision::at_rate(0.5), Collision::at_rate(3.0), Collision::at_rate(3.7));
+        assert_eq!(alps.plateau_km, 0.0);
+        assert!(alps.range_m < zagros.range_m && zagros.range_m <= himalaya.range_m);
+        assert!(zagros.plateau_m < himalaya.plateau_m && zagros.plateau_km < himalaya.plateau_km);
+        assert!((4500.0..=5000.0).contains(&himalaya.plateau_m));
+    }
 }

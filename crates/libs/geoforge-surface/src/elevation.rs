@@ -5,6 +5,10 @@
 //! - Continents sit at a freeboard of a few hundred metres; provinces add their relief
 //!   (plateaus behind collisions, narrow trenches, rift valleys with shoulders, seamount
 //!   chains that sink as they age).
+//! - Continental collisions are asymmetric: a foreland basin on the plate going under, a
+//!   steep front range across the boundary, and a plateau behind it whose interior barely
+//!   erodes (see `geology::provinces::Collision`). Their heights scale with gravity
+//!   (`relief`).
 //! - Continental crust near the continent–ocean edge is submerged as shelf and slope, so
 //!   land is less than the continental-crust area, as on Earth.
 //! - Sea level is set so the oceans hold exactly the body's water (ocean global-equivalent
@@ -12,6 +16,7 @@
 //! - Rivers then cut valleys (stream-power erosion, see `erosion`), while active mountain
 //!   belts keep rising, so ranges stay high and drainage networks branch and merge.
 
+use crate::geology::provinces as pc;
 use crate::noise::TerrainNoise;
 use crate::tectonics::boundaries::{self, BoundaryParams};
 use geoforge_core::grid::{distance_field, Cell, Grid};
@@ -22,6 +27,9 @@ use geoforge_core::{BodyContext, Error};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+
+/// An orogenic plateau rises to full height over this far in from its outer edges, km.
+const PLATEAU_EDGE_KM: f64 = 120.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -65,7 +73,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -124,7 +132,7 @@ impl Generator for Elevation {
             let Some(prov) = provinces.table.get(*key) else { continue };
             let Some(seg) = prov.boundary.and_then(|si| segments.get(si)) else { continue };
             let reach_km = match prov.kind {
-                G::CollisionOrogen => prov.width_km / 2.0 + 50.0,
+                G::CollisionOrogen | G::ForelandBasin => prov.width_km * 1.2 + 50.0,
                 G::ContinentalRift => 450.0,
                 G::MidOceanRidge => 200.0,
                 G::OceanTrench => 80.0,
@@ -156,7 +164,28 @@ impl Generator for Elevation {
                 interior_km.insert(c, d.get(&c).map_or(prov.width_km, |v| v * r));
             }
         }
+        // Depth inside each orogenic plateau, from its outer edges (not the edge against
+        // its front range), so the plateau rises from its back and sides and meets the range
+        // at full height.
+        for (key, cells) in &by_owner {
+            let Some(prov) = provinces.table.get(*key) else { continue };
+            if prov.kind != G::OrogenicPlateau {
+                continue;
+            }
+            let set: std::collections::HashSet<Cell> = cells.iter().copied().collect();
+            let outside = |n: Cell| !set.contains(&n) && provinces.row_at(n).is_none_or(|pr| pr.kind != G::CollisionOrogen);
+            let rim: Vec<Cell> = cells.iter().copied().filter(|&c| grid.neighbors(c).iter().any(outside)).collect();
+            let d = sparse_dist(grid, &rim, 2.0 * PLATEAU_EDGE_KM / r);
+            for &c in cells {
+                interior_km.insert(c, d.get(&c).map_or(2.0 * PLATEAU_EDGE_KM, |v| v * r));
+            }
+        }
         let base_cont = p.continental_base_m;
+        let relief = crate::relief::relief_scale(ctx.body);
+        let collision = |prov: &geoforge_core::surface::Province| {
+            let c = pc::Collision::at_rate(prov.convergence_rate_cm_yr);
+            pc::Collision { range_m: c.range_m * relief, plateau_m: c.plateau_m * relief, foreland_m: c.foreland_m * relief, ..c }
+        };
 
         // 1. Base + province relief (smooth part).
         let mut e: Vec<f64> = (0..n as Cell)
@@ -179,13 +208,28 @@ impl Generator for Elevation {
                 let Some(key) = provinces.owner_of(c) else { return z };
                 let Some(prov) = provinces.table.get(key) else { return z };
                 let d = bdist(c).unwrap_or(0.0);
-                let half = (prov.width_km / 2.0).max(spacing_km);
                 let pa = prov.anchor.map(|a| a.angle_to(grid.center(c)) * r);
                 match prov.kind {
+                    // Steep front from the foreland up to the crest, then down the back to
+                    // the plateau (or to the plain behind, where there is none).
                     G::CollisionOrogen => {
-                        let s = smoothstep(0.0, 1.0, 1.0 - d / half);
-                        let h = 2800.0 + 2200.0 * prov.intensity;
-                        z = base_cont + h * (1.6 * s).min(1.0) * (0.55 + 0.45 * s);
+                        let shape = collision(prov);
+                        let crest = 0.25 * shape.range_km;
+                        z = if d < crest {
+                            base_cont + shape.range_m * smoothstep(0.0, crest, d)
+                        } else {
+                            base_cont + shape.range_m + (shape.plateau_m - shape.range_m) * smoothstep(crest, shape.range_km, d)
+                        };
+                    }
+                    G::OrogenicPlateau => {
+                        // Ragged margins: the edge ramp starts early or late along the edge.
+                        let inside = interior_km.get(&c).copied().unwrap_or(2.0 * PLATEAU_EDGE_KM) + PLATEAU_EDGE_KM * noise.fbm(grid.center(c), 12.0, 3);
+                        z = base_cont + collision(prov).plateau_m * smoothstep(0.0, PLATEAU_EDGE_KM, inside);
+                    }
+                    // Bent down under the range's load and filled with its debris.
+                    G::ForelandBasin => {
+                        let shape = collision(prov);
+                        z = base_cont - shape.foreland_m * (1.0 - smoothstep(0.0, shape.foreland_km, d));
                     }
                     G::VolcanicArc => {
                         if ocean {
@@ -306,10 +350,12 @@ impl Generator for Elevation {
                 let land = crust[i] == CrustType::Continental;
                 let amp = if margin[i].is_some() { 60.0 } else if land { 120.0 + 900.0 * rough } else { 120.0 + 350.0 * rough };
                 let mut z = e[i] + rs * amp * base;
-                if matches!(kind, Some(G::CollisionOrogen | G::VolcanicArc | G::PaleoOrogen | G::ContinentalRift)) {
+                if matches!(kind, Some(G::CollisionOrogen | G::OrogenicPlateau | G::VolcanicArc | G::PaleoOrogen | G::ContinentalRift)) {
                     let ridges = noise.ridged(pt, freq * 3.0, 6);
                     let mountain_amp = match kind {
                         Some(G::CollisionOrogen) => 2600.0 * prov.map_or(0.0, |p| 0.5 + 0.5 * p.intensity),
+                        // Ranges and basins across the plateau (Tibet's ~1 km internal relief).
+                        Some(G::OrogenicPlateau) => 1100.0,
                         Some(G::VolcanicArc) => if crust[i] == CrustType::Oceanic { 1200.0 } else { 1800.0 },
                         Some(G::PaleoOrogen) => 700.0,
                         _ => 500.0,
@@ -357,7 +403,14 @@ impl Generator for Elevation {
 
         // 5. Rivers cut valleys (stream-power erosion; hard rock resists).
         if p.erosion.k > 0.0 {
-            let erodibility = inputs.lithology().map_or_else(|| vec![0.6; n], crate::geology::lithology::erodibility);
+            let mut erodibility = inputs.lithology().map_or_else(|| vec![0.6; n], crate::geology::lithology::erodibility);
+            // Plateaus sit in their front range's rain shadow and drain into their own basins:
+            // no river crosses Tibet's interior to the sea. Only their rims are cut.
+            for (i, k) in erodibility.iter_mut().enumerate() {
+                if provinces.row_at(i as Cell).is_some_and(|pr| pr.kind == G::OrogenicPlateau) && interior_km.get(&(i as Cell)).is_some_and(|&d| d >= PLATEAU_EDGE_KM) {
+                    *k = 0.0;
+                }
+            }
             // Active belts keep rising while they erode.
             let uplift: Vec<f64> = (0..n)
                 .map(|i| {

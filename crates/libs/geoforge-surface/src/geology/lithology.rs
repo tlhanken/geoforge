@@ -160,6 +160,8 @@ impl Earth {
             (Some(G::CollisionOrogen), true) => {
                 &[(L::Metamorphic, 0.38), (L::Granitoid, 0.20), (L::ClasticSedimentary, 0.24), (L::Carbonate, 0.12), (L::Ophiolite, 0.06)]
             }
+            (Some(G::OrogenicPlateau), true) => &[(L::ClasticSedimentary, 0.30), (L::Metamorphic, 0.24), (L::Granitoid, 0.20), (L::Carbonate, 0.14), (L::ArcVolcanic, 0.12)],
+            (Some(G::ForelandBasin), true) => &[(L::ClasticSedimentary, 0.78), (L::Carbonate, 0.12), (L::Evaporite, 0.10)],
             (Some(G::PaleoOrogen), true) => &[(L::Metamorphic, 0.42), (L::Granitoid, 0.25), (L::ClasticSedimentary, 0.27), (L::Ophiolite, 0.06)],
             (Some(G::VolcanicArc), true) => &[(L::ArcVolcanic, 0.58), (L::Granitoid, 0.30), (L::ClasticSedimentary, 0.12)],
             (Some(G::VolcanicArc), false) => &[(L::ArcVolcanic, 0.85), (L::Granitoid, 0.10), (L::PelagicSediment, 0.05)],
@@ -264,7 +266,7 @@ struct Setting {
 }
 
 fn age_ma(rule: AgeRule, s: &Setting, jitter: f64) -> f64 {
-    let belt = matches!(s.kind, Some(G::CollisionOrogen | G::PaleoOrogen | G::VolcanicArc | G::ExtendedCrust));
+    let belt = matches!(s.kind, Some(G::CollisionOrogen | G::OrogenicPlateau | G::PaleoOrogen | G::VolcanicArc | G::ExtendedCrust));
     let p = s.province_age;
     match rule {
         AgeRule::Crust => s.crust_age,
@@ -279,7 +281,7 @@ fn age_ma(rule: AgeRule, s: &Setting, jitter: f64) -> f64 {
         AgeRule::Infill => p * (0.2 + 0.8 * jitter),
         AgeRule::Cover => match s.kind {
             Some(G::CollisionOrogen | G::PaleoOrogen) => p + 50.0 + 250.0 * jitter,
-            Some(G::ForearcBasin | G::BackarcBasin | G::ContinentalRift) => p * jitter,
+            Some(G::ForearcBasin | G::BackarcBasin | G::ContinentalRift | G::ForelandBasin) => p * jitter,
             // Young deposits are the most widespread.
             _ => (2.0 + 538.0 * jitter.powf(1.8)).min(s.basement),
         },
