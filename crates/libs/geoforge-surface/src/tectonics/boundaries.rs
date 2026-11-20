@@ -17,17 +17,19 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BoundaryParams {
-    /// Relative motion within this angle of the boundary normal is convergent/divergent.
+    /// Relative motion within this angle of the boundary normal is convergent/divergent;
+    /// beyond it, transform. Earth's catalogues call a boundary transform only within ~20° of
+    /// pure strike-slip (PB2002: Sumatra and the Aleutians subduct at 50–70° obliquity).
     pub angle_threshold_deg: f64,
     /// Radius used to estimate the local boundary normal and to smooth the classification.
     pub normal_radius_km: f64,
-    /// Stretches shorter than this many cells merge into their neighbours.
-    pub min_segment_cells: usize,
+    /// Stretches shorter than this merge into their neighbours, km.
+    pub min_segment_km: f64,
 }
 
 impl Default for BoundaryParams {
     fn default() -> Self {
-        Self { angle_threshold_deg: 45.0, normal_radius_km: 150.0, min_segment_cells: 10 }
+        Self { angle_threshold_deg: 70.0, normal_radius_km: 150.0, min_segment_km: 100.0 }
     }
 }
 
@@ -73,6 +75,8 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
     let owner = &plates.owner.values;
     let spacing_km = grid.spacing_rad() * radius_km;
     let rings = ((p.normal_radius_km / spacing_km).ceil() as usize).max(2);
+    // A stretch's cells lie on both sides of the boundary: two per cell of length.
+    let min_cells = ((2.0 * p.min_segment_km / spacing_km).round() as usize).max(2);
 
     // 1. Boundary cells per unordered plate pair.
     let mut pairs: BTreeMap<(u32, u32), Vec<Cell>> = BTreeMap::new();
@@ -143,11 +147,11 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
     // 3. Smooth, merge short stretches, and cut into segments.
     let mut segments = Vec::new();
     for ((a, b), mut cells) in by_pair {
-        if cells.len() < p.min_segment_cells {
+        if cells.len() < min_cells {
             continue;
         }
         smooth_kinds(grid, &mut cells, rings);
-        merge_short(grid, &mut cells, p.min_segment_cells);
+        merge_short(grid, &mut cells, min_cells);
         let all: Vec<Cell> = {
             let mut v: Vec<Cell> = cells.keys().copied().collect();
             v.sort_unstable();

@@ -64,7 +64,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -225,9 +225,14 @@ impl B<'_> {
         cells.iter().map(|&c| self.grid.area_sr(c)).sum::<f64>() * self.r * self.r
     }
 
+    /// Each plate's side of a boundary, judged over the first 200 km into the plate: at an
+    /// active margin the trench lies offshore of a steep continental slope, so the cells on
+    /// the boundary itself can be deep water on a continental plate (Peru, Chile).
     fn sides(&self, s: &BoundarySegment) -> (Side, Side) {
+        const SIDE_KM: f64 = 200.0;
         let mk = |plate: u32| {
-            let cells: Vec<Cell> = s.cells.iter().copied().filter(|&c| self.owner[c as usize] == plate).collect();
+            let edge: Vec<Cell> = s.cells.iter().copied().filter(|&c| self.owner[c as usize] == plate).collect();
+            let cells = Self::cells_of(&self.reach(&edge, SIDE_KM, |c| self.owner[c as usize] == plate), |_, _| true);
             let n = cells.len().max(1) as f64;
             let cont = cells.iter().filter(|&&c| self.crust[c as usize] == CrustType::Continental).count() as f64;
             let mean_age = self.age.map_or(0.0, |a| cells.iter().map(|&c| f64::from(a[c as usize])).sum::<f64>() / n);
