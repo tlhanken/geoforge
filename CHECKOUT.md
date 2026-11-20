@@ -14,3 +14,11 @@ cargo build --release -p geoforge-cli      # binary: target/release/geoforge-v2
 | Something else | — | `./scripts/doctor.sh` |
 
 User guide: [docs/V2_PIPELINE.md](docs/V2_PIPELINE.md). Realism check: [docs/V2_REALISM.md](docs/V2_REALISM.md).
+
+Known cases: each layer is fed real Earth, Mars and Moon inputs and checked against what the
+real body does. To see the scorecards, and then the open gaps:
+
+```bash
+cargo test -p geoforge-pipeline known_cases -- --nocapture
+cargo test -p geoforge-pipeline known_gaps -- --ignored
+```

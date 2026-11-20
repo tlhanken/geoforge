@@ -161,8 +161,60 @@ Known misses on Earth's map:
    ice sheet's albedo, and there is no winter inversion. Yakutsk's winters are too mild for
    the same reason.
 7. **Subtropical oceans get half their rain** (20–30°: 360 mm vs ~700).
-8. **Rivers can't be checked here.** ETOPO1 at 20 km blocks narrow gorges, so the Congo ponds
-   behind its rapids, and the upper Mississippi and middle Yangtze end in closed basins.
+8. **Rivers can't be checked on this map.** ETOPO1 at 20 km blocks narrow gorges, so the
+   Congo ponds behind its rapids, and the upper Mississippi and middle Yangtze end in closed
+   basins. The known cases below burn big rivers into their map and check rivers there.
+
+## Known cases
+
+Three `cargo test` suites give each layer real inputs and check its output against what the
+real body does. The inputs are small fixtures in
+`crates/libs/geoforge-pipeline/tests/fixtures`. Cases the model is known to miss are
+recorded as gaps, each with its reason. Gaps never fail the main tests, and each suite's
+`#[ignore]`d `…_known_gaps` test asserts them:
+
+```
+cargo test -p geoforge-pipeline known_cases -- --nocapture   # the three scorecards
+cargo test -p geoforge-pipeline --test known_planets          # one suite
+cargo test -p geoforge-pipeline known_gaps -- --ignored       # the open gaps
+```
+
+Each run writes its scorecard to `target/known-cases/<suite>.txt`.
+
+| Suite | Inputs | Checked against | Cases | Gaps |
+|---|---|---|---|---|
+| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 38 | 11 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 52 |
+| `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
+
+Biggest open gaps, by layer:
+
+- **Elevation from plates:**
+  - Andean margins are built like ocean–ocean ones: no Altiplano, and the arc–trench gap is
+    ~340 km (Earth 150–300).
+  - Collision belts are symmetric and have no plateau: Tibet 1.2 km vs 5.0.
+  - No plume uplift (Ethiopia), foreland basins (the Amazon at 350 m) or intraplate ranges
+    (the Rockies).
+  - Ridge–transform staircases are smoothed into ridges.
+- **Circulation:**
+  - The Humboldt Current is a third as cold as observed.
+  - The North Atlantic Drift brings too little warmth.
+- **Rain:**
+  - Gulf of Mexico moisture never turns north: the Great Plains get no summer rain, and the
+    eastern US is too dry for forest. The Pampas and north China have the same problem.
+  - Winter storms drench the interior Southwest and Greece; the Great Basin gets 2300 mm,
+    so it drains to the sea.
+  - The West African monsoon and the summer rain belt over Arabia reach too far north.
+- **Temperature:** Europe turns continental too fast, Siberian winters are too mild, and the
+  Antarctic plateau is ~17 °C too warm.
+- **Biomes:**
+  - At one degree, every lowland cell on a big river turns wetland.
+  - The classifier gets four of 31 stations wrong: Tehran (savanna), Nairobi and Reykjavik
+    (temperate forest), and Vancouver (just short of rainforest).
+- **Mars and the Moon:**
+  - Polar winters fall below the CO₂ frost point.
+  - Mars's relief overshoots in two of three seeds.
+  - The Moon has no far-side highland bulge and no basin the size of South Pole–Aitken.
 
 ## What matches
 
