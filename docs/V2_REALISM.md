@@ -113,13 +113,19 @@ missing. The changes since:
   - air over colder ground condenses gradually instead of all at once (this had dumped the
     Pacific on Southern California);
   - storm-track eddies carry vapour deeper inland;
-  - land recycling scales with the season's warmth;
+  - land recycling scales with the season's warmth, but land gives back little more than open
+    water would evaporate into the same air (wet regions had fed on their own rain);
+  - lifting over terrain wrings out the vapour within a scale height or two (~1.5 km), so a
+    4 km plateau rim rains about twice what a 1 km rise does, not four times;
   - broad plateaus warm the air above them (about 2 °C per km);
   - maritime air reaches about 2500 km inland instead of 1200;
   - deserts get +5 °C mean and +7 °C range instead of +3.5 and +5.
 - **Ocean:** the western boundary current crosses its basin where the gyres meet and runs up
-  the far shore (a North Atlantic Drift). The SST anomaly remembers for months, and
-  upwelling is stronger.
+  the far shore (a North Atlantic Drift), but only in a basin of a gyre's width and only up a
+  coast that runs north–south. The SST anomaly remembers for months, and upwelling is
+  stronger. Only flow that differs from its latitude's mean makes an anomaly, the gradient it
+  crosses stops at the freezing point of seawater, and the zonal mean taken off is smoothed
+  over 10° of latitude (each had drawn warm and cold bands round the globe).
 - **Biomes:** ground that never thaws is ice sheet, not alpine, even on a high plateau.
 
 | Real Earth, 2048×1024 | Before | After | Observed |
@@ -184,7 +190,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 48 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 37 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 35 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -196,9 +202,9 @@ Biggest open gaps, by layer:
     beyond the Andean foreland sits at the continental base (~300 m).
   - Ridge–transform staircases are smoothed into ridges.
 - **Rain:**
-  - Winter storms still drench the interior Southwest (Phoenix 970 mm, and the Great Basin
+  - Winter storms still drench the interior Southwest (Phoenix 930 mm, and the Great Basin
     drains to the sea), London and Kazakhstan.
-  - The West African monsoon reaches too far north (Timbuktu 800 mm); Nairobi gets 3600 mm.
+  - The West African monsoon reaches too far north (Timbuktu 810 mm); Nairobi gets 2800 mm.
   - North-east Siberia is too dry (Yakutsk 15 mm).
 - **Temperature:** the subtropical interiors are ~5 °C too cold (Phoenix, Riyadh, Timbuktu),
   Europe turns continental too fast, Siberian winters are too mild, Lima's coastal cold

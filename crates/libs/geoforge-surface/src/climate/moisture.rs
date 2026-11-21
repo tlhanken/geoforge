@@ -63,9 +63,12 @@ pub(super) fn moisture(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: 
                 let l = a.land[i];
                 let s = ws[i];
                 let mut wi = up[i];
-                // Lifting over terrain rains out; sinking air dries.
+                // Lifting over terrain rains out; sinking air dries. Lifting wrings out the
+                // vapour within a scale height or two (~1.5 km), so a 4 km rise rains about
+                // twice what a 1 km one does, not four times: plateau rims took a quarter of
+                // all land rain.
                 let dz = (a.elev[i] - elev_up_cache[i]) / 1000.0;
-                let oro = if dz > 0.0 { 1.0 + 2.0 * dz } else { (1.0 + 2.0 * dz).max(0.35) };
+                let oro = if dz > 0.0 { 1.0 + 3.0 * (1.0 - (-dz / 1.5).exp()) } else { (1.0 + 2.0 * dz).max(0.35) };
                 let rate = (rainout * conv[i] * oro).min(0.6);
                 // Rain needs humid air: rising air rains from ~30% of saturation, sinking air
                 // only above ~70%.
@@ -80,11 +83,13 @@ pub(super) fn moisture(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: 
                     wi -= d;
                 }
                 // Evaporation: the sea relaxes air toward 85% humidity; land recycles rain, more of it
-                // the warmer the season (evaporation is limited by the sun's energy).
+                // the warmer the season (evaporation is limited by the sun's energy), but little
+                // more than open water would give the same air: very wet land cannot hand most of
+                // a 5 m rainfall back to humid air, which made wet regions feed on themselves.
                 let t = temp[i];
                 let recycle = 0.65 * ((t + 5.0) / 25.0).clamp(0.0, 1.0) + 0.15 * ((t - 18.0) / 8.0).clamp(0.0, 1.0);
                 let e_sea = 0.28 * (0.85 * s - wi).max(0.0);
-                let e_land = recycle * p[i];
+                let e_land = (recycle * p[i]).min(e_sea + 0.015 * s);
                 wi += (1.0 - l) * e_sea + l * e_land;
                 (wi.max(0.0), pi)
             })

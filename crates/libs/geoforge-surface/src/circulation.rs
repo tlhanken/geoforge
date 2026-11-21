@@ -92,7 +92,12 @@ fn basins(a: &Atmo, radius_km: f64) -> Basins {
         let dx = g.res.to_radians() * radius_km * g.lat(y).to_radians().cos().max(0.02);
         let sea = |x: usize| a.land[y * g.w + x] < 0.5;
         if (0..g.w).all(sea) {
+            // No shore anywhere round the circle.
             open_row[y] = true;
+            for x in 0..g.w {
+                west_km[y * g.w + x] = f64::INFINITY;
+                east_km[y * g.w + x] = f64::INFINITY;
+            }
             continue;
         }
         // Walk east from a land cell, then west from a land cell, counting sea cells.
@@ -250,12 +255,9 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             continue;
         }
         let lat = g.lat(y);
-        // Wind drift: ~3% of the wind speed, turned 30° to the right of the wind in the north
-        // and to the left in the south (Ekman).
-        let (wu, wv) = (annual[i].0 * WIND_REF_M_S * 0.03, annual[i].1 * WIND_REF_M_S * 0.03);
-        let turn = -lat.signum() * 30f64.to_radians();
-        v.0 += wu * turn.cos() - wv * turn.sin();
-        v.1 += wu * turn.sin() + wv * turn.cos();
+        let drift = wind_drift(annual[i], lat);
+        v.0 += drift.0;
+        v.1 += drift.1;
         // Equatorial currents are faster than drift alone; a countercurrent just north of the
         // equator.
         let eq = (-(lat / 7.0).powi(2)).exp();
@@ -269,20 +271,43 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         // western boundary current leaves the coast and crosses the basin, turning poleward
         // as it nears the far side and running on up the eastern shore (the Gulf Stream, North
         // Atlantic Drift and Norwegian Current; the Kuroshio, North Pacific and Alaska
-        // Currents).
+        // Currents). Only in a basin of a gyre's width: across a wider stretch of open water
+        // (the Atlantic and Indian Oceans together at 45°S) the current joins the circumpolar
+        // flow instead.
         let hemi = lat.signum();
         let front = if hemi > 0.0 { fronts.0 } else { fronts.1 };
         if let Some(front) = front {
             let basin = 1.0 - open_band[y];
-            let x_rel = b.west_km[i] / (b.west_km[i] + b.east_km[i]).max(1.0);
+            let width = b.west_km[i] + b.east_km[i];
+            let crossing = 1.0 - smoothstep(MAX_GYRE_KM, 1.5 * MAX_GYRE_KM, width);
+            let x_rel = if b.open_row[y] { 0.0 } else { b.west_km[i] / width.max(1.0) };
             let jet = (-((lat.abs() - front) / 5.0).powi(2)).exp();
             let beyond = ((lat.abs() - front) / 5.0).clamp(0.0, 1.0) * ((front + 28.0 - lat.abs()) / 6.0).clamp(0.0, 1.0);
-            let shore = (-b.east_km[i] / 700.0).exp();
-            v.0 += basin * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
-            v.1 += basin * p.drift_m_s * hemi * (0.6 * jet * x_rel + 0.8 * beyond * shore);
+            // An eastern shore the current can run up: a coast that also reaches ~5° toward
+            // the equator (Norway, Alaska, southern Chile), not Antarctica's, which runs
+            // east–west.
+            let (x, dx) = (i % g.w, g.res.to_radians() * radius_km * lat.to_radians().cos().max(0.02));
+            let y_eq = (y as i64 + (hemi * 5.0 / g.res).round() as i64).clamp(0, g.h as i64 - 1) as usize;
+            let runs_equatorward = !b.open_row[y] && a.land[y_eq * g.w + (x + (b.east_km[i] / dx).round() as usize + 1) % g.w] >= 0.5;
+            let shore = if runs_equatorward { (-b.east_km[i] / 700.0).exp() } else { 0.0 };
+            v.0 += basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
+            v.1 += basin * p.drift_m_s * hemi * (0.6 * crossing * jet * x_rel + 0.8 * beyond * shore);
         }
     }
     cur
+}
+
+fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Wind drift (m/s): ~3% of the wind speed, turned 30° to the right of the wind in the north
+/// and to the left in the south (Ekman).
+fn wind_drift(wind: (f64, f64), lat: f64) -> (f64, f64) {
+    let (wu, wv) = (wind.0 * WIND_REF_M_S * 0.03, wind.1 * WIND_REF_M_S * 0.03);
+    let turn = -lat.signum() * 30f64.to_radians();
+    (wu * turn.cos() - wv * turn.sin(), wu * turn.sin() + wv * turn.cos())
 }
 
 /// Latitude of the strongest westerly stress in each hemisphere (north, south), between 25°
@@ -303,6 +328,10 @@ fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<f64>, Option<f64>) {
 
 /// How far offshore coastal upwelling cools the sea, km (e-folding).
 const UPWELLING_KM: f64 = 400.0;
+/// Freezing point of seawater, °C.
+const SEA_FREEZE_C: f64 = -1.8;
+/// Latitude span over which the sea-surface anomaly's zonal mean is taken off, degrees.
+const ZONAL_MEAN_SMOOTH_DEG: f64 = 10.0;
 
 /// Sea-surface temperature anomaly (°C) from currents crossing the temperature gradient,
 /// carried downstream, plus coastal upwelling.
@@ -310,6 +339,17 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
     let g = &a.g;
     let b = basins(a, radius_km);
     let dy_km = g.res.to_radians() * radius_km;
+    // The wind drift's part that is the same all round a latitude circle (the Ekman drift
+    // under the westerlies) moves heat the zonal temperature already carries: counting it
+    // painted warm and cold bands right round the globe. Only its departures from the
+    // latitude's mean, and the gyres, make anomalies.
+    let v_mean: Vec<f64> = (0..g.h)
+        .map(|y| {
+            let annual = |i: usize| (0.5 * (seasons[0][i].0 + seasons[1][i].0), 0.5 * (seasons[0][i].1 + seasons[1][i].1));
+            let sea: Vec<usize> = (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).collect();
+            if sea.is_empty() { 0.0 } else { sea.iter().map(|&i| wind_drift(annual(i), g.lat(y)).1).sum::<f64>() / sea.len() as f64 }
+        })
+        .collect();
     let source: Vec<f64> = (0..g.len())
         .map(|i| {
             if a.land[i] >= 0.5 {
@@ -317,8 +357,11 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
             }
             let y = i / g.w;
             let (yn, ys) = (y.saturating_sub(1), (y + 1).min(g.h - 1));
-            let dtdy = (tz[yn] - tz[ys]) / ((ys - yn).max(1) as f64 * dy_km * 1000.0); // °C per m northward
-            let mut s = -cur[i].1 * dtdy * p.heat_memory_days * 86_400.0;
+            // The sea surface follows the zonal temperature down only to freezing: over the ice
+            // at high latitudes its gradient is the air's, not the water's.
+            let sst = |t: f64| t.max(SEA_FREEZE_C);
+            let dtdy = (sst(tz[yn]) - sst(tz[ys])) / ((ys - yn).max(1) as f64 * dy_km * 1000.0); // °C per m northward
+            let mut s = -(cur[i].1 - v_mean[y]) * dtdy * p.heat_memory_days * 86_400.0;
             let lat = g.lat(y);
             // Upwelling: equatorward wind along an eastern shore, in the subtropics, all year (a
             // monsoon's reversing winds upwell only half the year, and not off India).
@@ -334,18 +377,25 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
     let flow: Vec<(f64, f64)> = cur.iter().map(|v| (v.0 / 0.5, v.1 / 0.5)).collect();
     let mut anom = carry_along(g, &flow, &source, &a.land, 200, 0.97);
     diffuse_sea(g, &mut anom, &a.land, 0.3);
-    // A departure from the zonal mean averages to zero along each latitude circle: the zonal
-    // temperature already holds what a zonally uniform drift does (without this, the drift
-    // under the Southern Ocean's westerlies drew a cold, rain-starved ring at 52°S).
-    for y in 0..g.h {
-        let row = y * g.w..(y + 1) * g.w;
-        let sea: Vec<usize> = row.filter(|&i| a.land[i] < 0.5).collect();
-        if sea.is_empty() {
-            continue;
-        }
-        let m = sea.iter().map(|&i| anom[i]).sum::<f64>() / sea.len() as f64;
-        for i in sea {
-            anom[i] -= m;
+    // A departure from the zonal temperature averages to zero round each latitude circle.
+    // The mean taken off is smoothed over ~10° of latitude so that it cannot itself draw
+    // bands where one row's mean differs from the next.
+    let rows: Vec<(f64, f64)> = (0..g.h)
+        .map(|y| (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).fold((0.0, 0.0), |(s, n), i| (s + anom[i], n + 1.0)))
+        .collect();
+    let half = (ZONAL_MEAN_SMOOTH_DEG / 2.0 / g.res).round() as i64;
+    let mean: Vec<f64> = (0..g.h as i64)
+        .map(|y| {
+            let (s, n) = (y - half..=y + half).filter(|k| (0..g.h as i64).contains(k)).fold((0.0, 0.0), |(s, n), k| {
+                let w = 1.0 - (k - y).abs() as f64 / (half + 1) as f64;
+                (s + w * rows[k as usize].0, n + w * rows[k as usize].1)
+            });
+            if n > 0.0 { s / n } else { 0.0 }
+        })
+        .collect();
+    for (i, v) in anom.iter_mut().enumerate() {
+        if a.land[i] < 0.5 {
+            *v -= mean[i / g.w];
         }
     }
     anom.iter().map(|v| v.clamp(-8.0, 8.0)).collect()
@@ -399,7 +449,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 5;
+    const VERSION: u32 = 6;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {

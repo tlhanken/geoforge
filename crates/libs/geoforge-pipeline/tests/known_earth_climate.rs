@@ -134,12 +134,11 @@ const RAIN_GAPS: &[(&str, &str)] = &[
     ("Timbuktu", WEST_AFRICA),
     ("Tehran", "the Alborz's rain spreads to its dry southern foot (485–700 mm in the cells around Tehran)"),
     ("Astana", KAZAKHSTAN),
-    ("Nairobi", "the East African highlands are drenched (3500 mm, observed 870)"),
+    ("Nairobi", "the East African highlands are drenched (2800 mm, observed 870)"),
     ("Lhasa", TIBET),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
     ("Siberian taiga", "central Siberia is too dry for taiga (230 mm at 60°N 100°E, observed ~400–500)"),
-    ("Arabia", ARABIA),
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
     ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
     ("Sahel", WEST_AFRICA),
@@ -549,8 +548,7 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
         mean(g, &e.land(), |c| e.precip[c as usize]),
         650.0..=950.0,
         "mm",
-    )
-    .gap("land gets ~20% too much rain: the drenched interior Southwest, the Kazakh steppe and East Africa");
+    );
     let both = |lo: f64, hi: f64| {
         [
             e.sea(lo..=hi, -180.0, 180.0),

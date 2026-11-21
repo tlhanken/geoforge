@@ -227,7 +227,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 6;
+    const VERSION: u32 = 7;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -287,9 +287,11 @@ impl Generator for Climate {
                 let range = swing * (0.13 + 0.87 * cont);
                 let mut pr = g.sample(&co.precip, ll.lat_deg, ll.lon_deg).max(0.0) * (0.8 * wave_p.fbm(pt, 4.0, 3)).exp();
                 if is_land {
-                    // Local relief above the atmosphere grid's smooth surface catches more rain.
+                    // Local relief above the atmosphere grid's smooth surface catches more rain,
+                    // up to half as much again (a plateau's top behind its rim is not wetter
+                    // than the slope that faces the wind).
                     let rel = (e - g.sample(&e_smooth, ll.lat_deg, ll.lon_deg)) / 1000.0;
-                    pr *= (1.0 + 0.45 * rel).clamp(0.55, 1.9);
+                    pr *= (1.0 + 0.3 * rel).clamp(0.6, 1.5);
                 }
                 (t as f32, range as f32, pr as f32)
             })
