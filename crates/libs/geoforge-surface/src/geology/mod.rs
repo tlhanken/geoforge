@@ -451,8 +451,8 @@ impl B<'_> {
     ///
     /// The exception is a plate already riding over an ocean slab next to the collision:
     /// its crust is hot and weak above the slab, so the other plate's colder lithosphere
-    /// drives under it whatever their sizes (the Brazilian shield under the Andes in the
-    /// Subandean belt, where PB2002's Altiplano microplate meets South America).
+    /// drives under it whatever their sizes (in Taiwan, China's margin goes under the Luzon
+    /// arc).
     fn lower_and_upper(&self, s: &BoundarySegment, a: Side, b: Side, arc_fronts: &BTreeMap<u32, Vec<Cell>>) -> (Side, Side) {
         let weak = |side: Side| {
             let Some(front) = arc_fronts.get(&side.plate) else { return 0.0 };

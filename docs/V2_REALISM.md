@@ -219,7 +219,7 @@ Collisions are built asymmetrically (`geology::provinces::Collision`):
   because they rode in behind ocean floor that was already subducting beneath it. Once their
   buoyant upper crust is scraped off, the rest is dense enough to follow. The exception is a
   plate that already rides over an ocean slab within ~600 km: its crust is hot and weak, so
-  the other drives under it (South America's shield under the Andes, in the Subandean belt).
+  the other drives under it (in Taiwan, China's margin goes under the Luzon arc).
 - **What forms:** a foreland basin on the lower plate, a steep front range across the
   boundary, and a plateau behind it on the upper plate. Rivers do not cross the plateau's
   interior to the sea, so it stays flat and dotted with lakes.
