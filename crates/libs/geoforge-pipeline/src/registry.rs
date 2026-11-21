@@ -20,6 +20,7 @@ pub enum Implementation {
     LidElevation,
     Circulation,
     Climate,
+    Erosion,
     Hydrology,
     Biomes,
 }
@@ -60,6 +61,10 @@ macro_rules! dispatch {
                 type $g = surface::Climate;
                 $body
             }
+            Implementation::Erosion => {
+                type $g = surface::Erosion;
+                $body
+            }
             Implementation::Hydrology => {
                 type $g = surface::Hydrology;
                 $body
@@ -74,7 +79,7 @@ macro_rules! dispatch {
 
 impl Implementation {
     /// In order of preference within each layer.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Tectonics,
         Self::LidTectonics,
         Self::Geology,
@@ -83,6 +88,7 @@ impl Implementation {
         Self::LidElevation,
         Self::Circulation,
         Self::Climate,
+        Self::Erosion,
         Self::Hydrology,
         Self::Biomes,
     ];

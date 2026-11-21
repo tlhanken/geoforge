@@ -231,7 +231,7 @@ impl Generator for Climate {
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
-        &[ProductId::Elevation]
+        &[ProductId::RoughElevation]
     }
     fn wants() -> &'static [ProductId] {
         &[ProductId::WindJan, ProductId::WindJul, ProductId::SstAnomaly]
@@ -245,7 +245,7 @@ impl Generator for Climate {
         if inputs.temperature().is_some() && inputs.temperature_range().is_some() && inputs.precipitation().is_some() && inputs.precipitation_warm_share().is_some() {
             return Ok(out);
         }
-        let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
+        let elev = &inputs.rough_elevation().ok_or(Error::MissingInput(ProductId::RoughElevation))?.values;
         let grid = ctx.grid;
         let r = ctx.radius_km();
         let co = Self::coarse(ctx, inputs, elev, p);
@@ -342,6 +342,20 @@ impl Generator for Climate {
         }
         Ok(out)
     }
+}
+
+/// Temperature on the final heightmap. The climate ran on the rough heightmap, so ground the
+/// erosion layer has cut lower since is warmer by the lapse rate (Earth's moist 6.5 °C/km;
+/// a `lapse_rate_c_per_km` override in the climate's parameters is not seen here).
+#[must_use]
+pub fn on_ground(temperature: &[f32], rough: Option<&[f32]>, elevation: &[f32], body: &BodyContext) -> Vec<f32> {
+    let Some(rough) = rough else { return temperature.to_vec() };
+    let lapse = ClimateParams::default().lapse_rate(body) / 1000.0;
+    temperature
+        .iter()
+        .zip(rough.iter().zip(elevation))
+        .map(|(&t, (&r, &e))| if e >= 0.0 && r >= 0.0 { t + (lapse * f64::from(r - e)) as f32 } else { t })
+        .collect()
 }
 
 /// Potential evapotranspiration, mm/yr, from mean annual temperature (Thornthwaite-like,

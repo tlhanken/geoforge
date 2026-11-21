@@ -1,4 +1,6 @@
-//! Elevation layer: metres above sea level.
+//! Elevation layer: the rough heightmap, metres above sea level, before rivers cut it.
+//! The erosion layer (`erosion`) cuts valleys into it once the climate says where the rain
+//! falls, and writes the final `elevation`.
 //!
 //! - Ocean floor depth follows crust age (GDH1, Stein & Stein 1992): 2600 m at the ridge
 //!   crest, deepening as the plate cools to ~5650 m.
@@ -16,16 +18,14 @@
 //!   land is less than the continental-crust area, as on Earth.
 //! - Sea level is set so the oceans hold exactly the body's water (ocean global-equivalent
 //!   layer × surface area); the stored field is then shifted so sea level is 0.
-//! - Rivers then cut valleys (stream-power erosion, see `erosion`), while active mountain
-//!   belts keep rising, so ranges stay high and drainage networks branch and merge.
 
 use crate::geology::provinces as pc;
 use crate::noise::TerrainNoise;
 use crate::tectonics::boundaries::{self, BoundaryParams};
 use geoforge_core::grid::{distance_field, Cell, Grid};
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
-use geoforge_core::shapes::Field;
-use geoforge_core::surface::{CrustType, GeologicProvince as G};
+use geoforge_core::shapes::{Field, Partition};
+use geoforge_core::surface::{CrustType, GeologicProvince, GeologicProvince as G, Province};
 use geoforge_core::{BodyContext, Error};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -52,17 +52,12 @@ pub struct ElevationParams {
     pub plateau_m: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
-    /// Extra sediment fill of closed land depressions, m, after erosion (rifts excepted).
-    /// Erosion already breaches sills where rivers are big, so the default is 0.
-    pub sediment_fill_m: f64,
-    /// Fluvial erosion (stream power), run before the sediment fill.
-    pub erosion: crate::erosion::ErosionParams,
     pub boundaries: BoundaryParams,
 }
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, sediment_fill_m: 0.0, erosion: crate::erosion::ErosionParams::default(), boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, boundaries: BoundaryParams::default() }
     }
 }
 
@@ -83,7 +78,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 5;
+    const VERSION: u32 = 6;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -98,9 +93,11 @@ impl Generator for Elevation {
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &ElevationParams) -> Result<Products, Error> {
         let mut out = Products::new();
-        if inputs.elevation().is_some() {
+        if inputs.rough_elevation().is_some() {
             return Ok(out);
         }
+        // Randomness is drawn from the `elevation` seed, as before the heightmap was split
+        // into rough and eroded layers, so the split changed no existing world.
         let crust = inputs.crust_type().ok_or(Error::MissingInput(ProductId::CrustType))?;
         let provinces = inputs.provinces().ok_or(Error::MissingInput(ProductId::Provinces))?;
         let grid = ctx.grid;
@@ -178,22 +175,7 @@ impl Generator for Elevation {
                 interior_km.insert(c, d.get(&c).map_or(prov.width_km, |v| v * r));
             }
         }
-        // Depth inside each orogenic plateau, from its outer edges (not the edge against
-        // its front range or arc), so the plateau rises from its back and sides and meets the
-        // range at full height.
-        for (key, cells) in &by_owner {
-            let Some(prov) = provinces.table.get(*key) else { continue };
-            if prov.kind != G::OrogenicPlateau {
-                continue;
-            }
-            let set: std::collections::HashSet<Cell> = cells.iter().copied().collect();
-            let outside = |n: Cell| !set.contains(&n) && provinces.row_at(n).is_none_or(|pr| !matches!(pr.kind, G::CollisionOrogen | G::VolcanicArc));
-            let rim: Vec<Cell> = cells.iter().copied().filter(|&c| grid.neighbors(c).iter().any(outside)).collect();
-            let d = sparse_dist(grid, &rim, 2.0 * PLATEAU_EDGE_KM / r);
-            for &c in cells {
-                interior_km.insert(c, d.get(&c).map_or(2.0 * PLATEAU_EDGE_KM, |v| v * r));
-            }
-        }
+        interior_km.extend(plateau_interior_km(grid, provinces, r));
         let base_cont = p.continental_base_m;
         let relief = crate::relief::relief_scale(ctx.body);
         let collision = |prov: &geoforge_core::surface::Province| {
@@ -430,58 +412,38 @@ impl Generator for Elevation {
                 break;
             }
         }
-        let mut field: Vec<f32> = e.iter().map(|z| (z - sea) as f32).collect();
+        let field: Vec<f32> = e.iter().map(|z| (z - sea) as f32).collect();
 
-        // 5. Rivers cut valleys (stream-power erosion; hard rock resists).
-        if p.erosion.k > 0.0 {
-            let mut erodibility = inputs.lithology().map_or_else(|| vec![0.6; n], crate::geology::lithology::erodibility);
-            // Plateaus sit in their front range's rain shadow and drain into their own basins:
-            // no river crosses Tibet's interior to the sea. Only their rims are cut.
-            for (i, k) in erodibility.iter_mut().enumerate() {
-                if provinces.row_at(i as Cell).is_some_and(|pr| pr.kind == G::OrogenicPlateau) && interior_km.get(&(i as Cell)).is_some_and(|&d| d >= PLATEAU_EDGE_KM) {
-                    *k = 0.0;
-                }
-            }
-            // Active belts keep rising while they erode.
-            let uplift: Vec<f64> = (0..n)
-                .map(|i| {
-                    let kind = provinces.row_at(i as Cell).map(|pr| pr.kind);
-                    let active = match kind {
-                        Some(G::CollisionOrogen) => 1.0,
-                        Some(G::VolcanicArc) => 0.8,
-                        Some(G::ContinentalRift | G::ContinentalHotspotTrack) => 0.4,
-                        _ => 0.0,
-                    };
-                    active * p.erosion.orogen_uplift * f64::from(field[i]).max(0.0)
-                })
-                .collect();
-            let jitter = crate::hydrology::flat_jitter(grid, ctx.seed(ProductId::Elevation).value() ^ 0xE205);
-            crate::erosion::erode(grid, &mut field, &erodibility, &uplift, &jitter, r, &p.erosion);
-        }
-
-        // 6. Long-term sediment fill: closed land basins fill up (or their sills
-        //    are cut) by up to `sediment_fill_m`, except in active rifts.
-        if p.sediment_fill_m > 0.0 {
-            let d = crate::hydrology::drainage(grid, &field);
-            let fill = p.sediment_fill_m;
-            for i in 0..n {
-                if field[i] < 0.0 {
-                    continue;
-                }
-                let depth = d.filled[i] - f64::from(field[i]);
-                if depth <= 0.0 {
-                    continue;
-                }
-                let rift = provinces.owner_of(i as Cell).and_then(|k| provinces.table.get(k)).is_some_and(|pr| pr.kind == G::ContinentalRift);
-                if !rift {
-                    field[i] = (f64::from(field[i]) + depth.min(fill)) as f32;
-                }
-            }
-        }
-        out.insert(ProductData::Elevation(Field::from_values(grid.spec(), field)));
+        out.insert(ProductData::RoughElevation(Field::from_values(grid.spec(), field)));
         Ok(out)
     }
 }
+
+/// Depth (km) inside each orogenic plateau, from its outer edges (not the edge against its
+/// front range or arc), so the plateau rises from its back and sides and meets the range at
+/// full height. Cells more than twice the edge width inside read as that width.
+pub(crate) fn plateau_interior_km(grid: &dyn Grid, provinces: &Partition<Province>, r: f64) -> HashMap<Cell, f64> {
+    use GeologicProvince as G;
+    let mut out = HashMap::new();
+    for (key, cells) in &provinces.cells_by_owner() {
+        let Some(prov) = provinces.table.get(*key) else { continue };
+        if prov.kind != G::OrogenicPlateau {
+            continue;
+        }
+        let set: std::collections::HashSet<Cell> = cells.iter().copied().collect();
+        let outside = |n: Cell| !set.contains(&n) && provinces.row_at(n).is_none_or(|pr| !matches!(pr.kind, G::CollisionOrogen | G::VolcanicArc));
+        let rim: Vec<Cell> = cells.iter().copied().filter(|&c| grid.neighbors(c).iter().any(outside)).collect();
+        let d = sparse_dist(grid, &rim, 2.0 * PLATEAU_EDGE_KM / r);
+        for &c in cells {
+            out.insert(c, d.get(&c).map_or(2.0 * PLATEAU_EDGE_KM, |v| v * r));
+        }
+    }
+    out
+}
+
+/// Plateau interiors deeper than this sit in their front range's rain shadow and drain into
+/// their own basins: rivers cut only their rims.
+pub(crate) const PLATEAU_INTERIOR_KM: f64 = PLATEAU_EDGE_KM;
 
 fn sparse_dist(grid: &dyn Grid, sources: &[Cell], max_rad: f64) -> HashMap<Cell, f64> {
     use std::collections::BinaryHeap;

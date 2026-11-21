@@ -60,9 +60,10 @@ fn measure(a: Archetype, seed: u64) -> Stats {
             LayerId::Elevation,
             LayerId::Circulation,
             LayerId::Climate,
+            LayerId::Erosion,
         ]
     } else {
-        &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation]
+        &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Erosion]
     };
     let p = known::run_seeded(seed, &body, &g, Products::new(), layers);
     let e = known::scalar(&p, Products::elevation);

@@ -89,7 +89,7 @@ fn earth() -> &'static Earth {
             &body,
             &g,
             inputs,
-            &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation],
+            &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion],
         );
         Earth {
             grid: g,
@@ -547,7 +547,7 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         ("Tibet, 30–35°N 80–95°E", 30.0..=35.0, 80.0, 95.0, 3500.0..=5500.0, None),
         ("Himalaya, 27.5–29.5°N 80–90°E", 27.5..=29.5, 80.0, 90.0, 2500.0..=5500.0, None),
         ("Ganges plain, 24–27°N 78–88°E", 24.0..=27.0, 78.0, 88.0, 0.0..=500.0, None),
-        ("Iranian plateau, 30–35°N 52–60°E", 30.0..=35.0, 52.0, 60.0, 800.0..=2200.0, None),
+        ("Iranian plateau, 30–35°N 52–60°E", 30.0..=35.0, 52.0, 60.0, 800.0..=2200.0, Some("rate is all the collision model knows: Arabia converges nearly as fast as India but has collided half as long, and the dry plateau barely erodes")),
         ("Mesopotamia, 30–34°N 43–47°E", 30.0..=34.0, 43.0, 47.0, -100.0..=400.0, None),
         (
             "central Andes, 15–25°S 70–65°W",
@@ -581,7 +581,7 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
             400.0..=1500.0,
             Some("a slow margin's cordillera stands only one or two cells wide, and erodes"),
         ),
-        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, Some("the retroarc foreland ends ~300 km past the Andes; the lowland beyond it sits at the continental base, ~300 m")),
+        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, None),
         ("Rocky Mountains, 38–42°N 110–105°W", 38.0..=42.0, -110.0, -105.0, 1500.0..=3000.0, Some("no mountain building far inland of a plate boundary (the Laramide uplift, Tian Shan)")),
         ("Ethiopian highlands, 5–10°N 36–40°E", 5.0..=10.0, 36.0, 40.0, 1000.0..=2600.0, Some("no plume uplift: the Ethiopian and East African domes are 1.5–2 km over 1000 km")),
     ] {
@@ -600,6 +600,18 @@ fn dump(e: &Earth, kind_at: &BTreeMap<(Cell, String, String), BoundaryKind>) {
     known::dump(
         "tectonics_elevation",
         known::scalar(&e.products, Products::elevation),
+    );
+    known::dump(
+        "tectonics_rough_elevation",
+        known::scalar(&e.products, Products::rough_elevation),
+    );
+    known::dump(
+        "tectonics_precipitation",
+        known::scalar(&e.products, Products::precipitation),
+    );
+    known::dump(
+        "tectonics_temperature",
+        known::scalar(&e.products, Products::temperature),
     );
     known::dump(
         "tectonics_crust_age",

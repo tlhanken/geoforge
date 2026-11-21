@@ -21,17 +21,19 @@ pub enum LayerId {
     Elevation,
     Circulation,
     Climate,
+    Erosion,
     Hydrology,
     Biomes,
 }
 
 impl LayerId {
-    pub const ALL: [LayerId; 7] = [
+    pub const ALL: [LayerId; 8] = [
         LayerId::Tectonics,
         LayerId::Geology,
         LayerId::Elevation,
         LayerId::Circulation,
         LayerId::Climate,
+        LayerId::Erosion,
         LayerId::Hydrology,
         LayerId::Biomes,
     ];
@@ -43,6 +45,7 @@ impl LayerId {
             LayerId::Elevation => "elevation",
             LayerId::Circulation => "circulation",
             LayerId::Climate => "climate",
+            LayerId::Erosion => "erosion",
             LayerId::Hydrology => "hydrology",
             LayerId::Biomes => "biomes",
         }
@@ -91,7 +94,7 @@ pub enum ProductId {
     GeologyEvents,
     Lithology,
     RockAge,
-    Elevation,
+    RoughElevation,
     WindJan,
     WindJul,
     OceanCurrents,
@@ -100,6 +103,7 @@ pub enum ProductId {
     TemperatureRange,
     Precipitation,
     PrecipitationWarmShare,
+    Elevation,
     Rivers,
     Lakes,
     Watersheds,
@@ -107,7 +111,7 @@ pub enum ProductId {
 }
 
 impl ProductId {
-    pub const ALL: [ProductId; 21] = [
+    pub const ALL: [ProductId; 22] = [
         ProductId::Plates,
         ProductId::CrustType,
         ProductId::CrustAge,
@@ -116,7 +120,7 @@ impl ProductId {
         ProductId::GeologyEvents,
         ProductId::Lithology,
         ProductId::RockAge,
-        ProductId::Elevation,
+        ProductId::RoughElevation,
         ProductId::WindJan,
         ProductId::WindJul,
         ProductId::OceanCurrents,
@@ -125,6 +129,7 @@ impl ProductId {
         ProductId::TemperatureRange,
         ProductId::Precipitation,
         ProductId::PrecipitationWarmShare,
+        ProductId::Elevation,
         ProductId::Rivers,
         ProductId::Lakes,
         ProductId::Watersheds,
@@ -143,6 +148,7 @@ impl ProductId {
             ProductId::GeologyEvents => "geology_events",
             ProductId::Lithology => "lithology",
             ProductId::RockAge => "rock_age",
+            ProductId::RoughElevation => "rough_elevation",
             ProductId::Elevation => "elevation",
             ProductId::WindJan => "wind_jan",
             ProductId::WindJul => "wind_jul",
@@ -169,7 +175,8 @@ impl ProductId {
         match self {
             ProductId::Plates | ProductId::CrustType | ProductId::CrustAge | ProductId::TectonicEvents => LayerId::Tectonics,
             ProductId::Provinces | ProductId::GeologyEvents | ProductId::Lithology | ProductId::RockAge => LayerId::Geology,
-            ProductId::Elevation => LayerId::Elevation,
+            ProductId::RoughElevation => LayerId::Elevation,
+            ProductId::Elevation => LayerId::Erosion,
             ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents | ProductId::SstAnomaly => LayerId::Circulation,
             ProductId::Temperature | ProductId::TemperatureRange | ProductId::Precipitation | ProductId::PrecipitationWarmShare => LayerId::Climate,
             ProductId::Rivers | ProductId::Lakes | ProductId::Watersheds => LayerId::Hydrology,
@@ -186,6 +193,7 @@ impl ProductId {
             ProductId::CrustType
             | ProductId::CrustAge
             | ProductId::RockAge
+            | ProductId::RoughElevation
             | ProductId::Elevation
             | ProductId::WindJan
             | ProductId::WindJul
@@ -226,7 +234,7 @@ impl ProductId {
     pub fn unit(self) -> &'static str {
         match self {
             ProductId::CrustAge | ProductId::RockAge => "Ma",
-            ProductId::Elevation => "m",
+            ProductId::RoughElevation | ProductId::Elevation => "m",
             ProductId::WindJan | ProductId::WindJul | ProductId::OceanCurrents => "m/s",
             ProductId::Temperature | ProductId::TemperatureRange | ProductId::SstAnomaly => "degC",
             ProductId::Precipitation => "mm/yr",
@@ -375,7 +383,7 @@ pub enum ProductData {
     GeologyEvents(Timeline),
     Lithology(Partition<Rock>),
     RockAge(Field<f32>),
-    Elevation(Field<f32>),
+    RoughElevation(Field<f32>),
     WindJan(Field<[f32; 2]>),
     WindJul(Field<[f32; 2]>),
     OceanCurrents(Field<[f32; 2]>),
@@ -384,6 +392,7 @@ pub enum ProductData {
     TemperatureRange(Field<f32>),
     Precipitation(Field<f32>),
     PrecipitationWarmShare(Field<f32>),
+    Elevation(Field<f32>),
     Rivers(Network<RiverNode, RiverReach>),
     Lakes(Partition<Lake>),
     Watersheds(Partition<Watershed>),
@@ -402,6 +411,7 @@ impl ProductData {
             ProductData::GeologyEvents(_) => ProductId::GeologyEvents,
             ProductData::Lithology(_) => ProductId::Lithology,
             ProductData::RockAge(_) => ProductId::RockAge,
+            ProductData::RoughElevation(_) => ProductId::RoughElevation,
             ProductData::Elevation(_) => ProductId::Elevation,
             ProductData::WindJan(_) => ProductId::WindJan,
             ProductData::WindJul(_) => ProductId::WindJul,
@@ -424,6 +434,7 @@ impl ProductData {
         match self {
             ProductData::CrustAge(f)
             | ProductData::RockAge(f)
+            | ProductData::RoughElevation(f)
             | ProductData::Elevation(f)
             | ProductData::SstAnomaly(f)
             | ProductData::Temperature(f)
@@ -439,6 +450,7 @@ impl ProductData {
         match self {
             ProductData::CrustAge(f)
             | ProductData::RockAge(f)
+            | ProductData::RoughElevation(f)
             | ProductData::Elevation(f)
             | ProductData::SstAnomaly(f)
             | ProductData::Temperature(f)
@@ -455,6 +467,7 @@ impl ProductData {
         Some(match id {
             ProductId::CrustAge => ProductData::CrustAge(f),
             ProductId::RockAge => ProductData::RockAge(f),
+            ProductId::RoughElevation => ProductData::RoughElevation(f),
             ProductId::Elevation => ProductData::Elevation(f),
             ProductId::SstAnomaly => ProductData::SstAnomaly(f),
             ProductId::Temperature => ProductData::Temperature(f),
@@ -543,6 +556,7 @@ getters! {
     geology_events => GeologyEvents: Timeline,
     lithology => Lithology: Partition<Rock>,
     rock_age => RockAge: Field<f32>,
+    rough_elevation => RoughElevation: Field<f32>,
     elevation => Elevation: Field<f32>,
     wind_jan => WindJan: Field<[f32; 2]>,
     wind_jul => WindJul: Field<[f32; 2]>,

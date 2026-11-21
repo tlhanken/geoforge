@@ -82,9 +82,10 @@ impl Generator for LidElevation {
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &LidElevationParams) -> Result<Products, Error> {
         let mut out = Products::new();
-        if inputs.elevation().is_some() {
+        if inputs.rough_elevation().is_some() {
             return Ok(out);
         }
+        // Randomness is drawn from the `elevation` seed, as before the heightmap was split.
         let grid = ctx.grid;
         let n = grid.len();
         let r = ctx.radius_km();
@@ -174,7 +175,7 @@ impl Generator for LidElevation {
         } else {
             e.iter().zip(&area).map(|(z, a)| z * a).sum::<f64>() / area.iter().sum::<f64>()
         };
-        out.insert(ProductData::Elevation(Field::from_values(grid.spec(), e.iter().map(|z| (z - datum) as f32).collect())));
+        out.insert(ProductData::RoughElevation(Field::from_values(grid.spec(), e.iter().map(|z| (z - datum) as f32).collect())));
         Ok(out)
     }
 }
@@ -194,7 +195,7 @@ mod tests {
         let mut all = LidTectonics::run(&ctx, &Products::new(), &LidTectonicsParams::default()).unwrap();
         all.extend(LidGeology::run(&ctx, &all, &LidGeologyParams::default()).unwrap());
         all.extend(LidElevation::run(&ctx, &all, &LidElevationParams::default()).unwrap());
-        let e = &all.elevation().unwrap().values;
+        let e = &all.rough_elevation().unwrap().values;
         let lo = f64::from(e.iter().copied().fold(f32::INFINITY, f32::min));
         let hi = f64::from(e.iter().copied().fold(f32::NEG_INFINITY, f32::max));
         let mean = e.iter().zip(grid.cells()).map(|(z, c)| f64::from(*z) * grid.area_sr(c)).sum::<f64>() / (4.0 * std::f64::consts::PI);

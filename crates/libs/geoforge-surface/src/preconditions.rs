@@ -17,6 +17,11 @@ pub fn plate_tectonics(body: &BodyContext) -> Check {
     require(body.interior.regime == TectonicRegime::Plates, "needs plate tectonics")
 }
 
+/// A rocky crust, whatever moves it.
+pub fn rocky_surface(body: &BodyContext) -> Check {
+    require(body.interior.has_lithosphere(), "needs a rocky crust")
+}
+
 /// Rock crust under one rigid lid: stagnant, episodic, or geologically dead.
 pub fn rigid_lid(body: &BodyContext) -> Check {
     require(body.interior.has_lithosphere(), "needs a rocky crust")?;

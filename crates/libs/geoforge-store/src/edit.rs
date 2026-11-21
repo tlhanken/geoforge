@@ -72,7 +72,7 @@ pub struct TableRow {
 #[must_use]
 pub fn gray_range(p: ProductId) -> Option<(f64, f64)> {
     Some(match p {
-        ProductId::Elevation => (-12_000.0, 12_000.0),
+        ProductId::Elevation | ProductId::RoughElevation => (-12_000.0, 12_000.0),
         ProductId::CrustAge => (0.0, 4_500.0),
         ProductId::Temperature => (-90.0, 70.0),
         ProductId::TemperatureRange => (0.0, 80.0),

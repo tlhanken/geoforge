@@ -180,14 +180,14 @@ struct Basin {
 impl Generator for Hydrology {
     type Params = HydrologyParams;
     const NAME: &'static str = "hydrology";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const LAYER: LayerId = LayerId::Hydrology;
 
     fn needs() -> &'static [ProductId] {
         &[ProductId::Elevation, ProductId::Precipitation, ProductId::Temperature]
     }
     fn wants() -> &'static [ProductId] {
-        &[ProductId::Provinces]
+        &[ProductId::Provinces, ProductId::RoughElevation]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         crate::preconditions::surface_water(body)
@@ -205,6 +205,7 @@ impl Generator for Hydrology {
         let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
         let precip = &inputs.precipitation().ok_or(Error::MissingInput(ProductId::Precipitation))?.values;
         let temp = &inputs.temperature().ok_or(Error::MissingInput(ProductId::Temperature))?.values;
+        let temp = &crate::climate::on_ground(temp, inputs.rough_elevation().map(|f| f.values.as_slice()), elev, ctx.body);
         let area_km2: Vec<f64> = (0..n).map(|c| grid.area_sr(c as Cell) * r * r).collect();
         let pet: Vec<f64> = temp.iter().map(|&t| pet_mm(f64::from(t))).collect();
         let runoff: Vec<f64> = (0..n).map(|c| runoff_mm(f64::from(precip[c]), pet[c], p.budyko_w)).collect();

@@ -33,10 +33,10 @@ fn generate_edit_regenerate() {
     let differ: Vec<ProductId> = ProductId::ALL.into_iter().filter(|&p| loaded.get(p) != p1.get(p)).collect();
     assert!(differ.is_empty(), "differ after reload: {differ:?}");
 
-    // Export elevation, raise a block by ~2 km, import as a patch.
+    // Export the rough heightmap, raise a block by ~2 km, import as a patch.
     let edit = pipe::edit_folder(&w);
-    pipe::export(&w, &[ProductId::Elevation], &edit).unwrap();
-    let png = edit.join("elevation.png");
+    pipe::export(&w, &[ProductId::RoughElevation], &edit).unwrap();
+    let png = edit.join("rough_elevation.png");
     let mut img = image::open(&png).unwrap().into_luma16();
     let step = 24000.0 / 65535.0;
     for y in 60..68 {
@@ -46,20 +46,22 @@ fn generate_edit_regenerate() {
         }
     }
     img.save(&png).unwrap();
-    let rep = pipe::import(&mut w, ProductId::Elevation, &edit, false).unwrap();
+    let rep = pipe::import(&mut w, ProductId::RoughElevation, &edit, false).unwrap();
     assert_eq!(rep.mode, "patch");
     assert_eq!(rep.changed_cells, 64);
 
     // Only elevation and what depends on it rerun; the edit is in the result.
     let plan = pipe::plan(&w).unwrap();
     let stale: Vec<LayerId> = plan.layers.iter().filter(|l| l.needs_run()).map(|l| l.layer).collect();
-    assert_eq!(stale, vec![LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Hydrology, LayerId::Biomes]);
+    assert_eq!(stale, vec![LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion, LayerId::Hydrology, LayerId::Biomes]);
     let (p3, r3) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
     assert_eq!(ran(&r3), stale);
-    let (Some(e1), Some(e3)) = (p1.elevation(), p3.elevation()) else { panic!() };
+    let (Some(e1), Some(e3)) = (p1.rough_elevation(), p3.rough_elevation()) else { panic!() };
     let c = 64 * 256 + 104;
     assert!((e3.values[c] - e1.values[c] - 2000.0).abs() < 1.0, "{} {}", e1.values[c], e3.values[c]);
     assert_eq!(e3.values[0], e1.values[0]);
+    // Erosion carries the raised block into the final heightmap.
+    assert!(p3.elevation().unwrap().values[c] > p1.elevation().unwrap().values[c] + 1000.0);
     // Higher ground is colder.
     assert!(p3.temperature().unwrap().values[c] < p1.temperature().unwrap().values[c] - 8.0);
 
@@ -67,8 +69,8 @@ fn generate_edit_regenerate() {
     w.manifest.params.get_mut("elevation").unwrap()["continental_base_m"] = serde_json::json!(300.0);
     w.save_manifest().unwrap();
     let (p4, _) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
-    assert!(pipe::edit_status(&w).get("elevation").is_some_and(|s| s.rebased));
-    let e4 = p4.elevation().unwrap();
+    assert!(pipe::edit_status(&w).get("rough_elevation").is_some_and(|s| s.rebased));
+    let e4 = p4.rough_elevation().unwrap();
     assert!(e4.values[c] > e1.values[c] + 1500.0);
 
     // Author the crust type outright (all continental): tectonics keeps it, the rest follows.

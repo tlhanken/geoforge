@@ -22,14 +22,14 @@ fn regimes_pick_their_generators() {
     use I::*;
     let archetype = |a: Archetype| world(a.slug(), Some(a.context(Key(1), a.name())), None);
     let cases = [
-        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Hydrology), Some(Biomes)]),
-        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), None, None]),
-        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), None, None]),
-        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, None, None]),
-        (Archetype::Europa, vec![None; 7]),
-        (Archetype::GasGiant, vec![None; 7]),
+        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Erosion), Some(Hydrology), Some(Biomes)]),
+        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None]),
+        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None]),
+        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None]),
+        (Archetype::Europa, vec![None; 8]),
+        (Archetype::GasGiant, vec![None; 8]),
     ];
-    assert_eq!(LayerId::ALL.len(), 7);
+    assert_eq!(LayerId::ALL.len(), 8);
     for (a, want) in cases {
         assert_eq!(fillers(&archetype(a)), want, "{a}");
     }

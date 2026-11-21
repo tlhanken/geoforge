@@ -188,6 +188,12 @@ pub fn elevation_product(g: &AnyGrid, e: Vec<f32>) -> ProductData {
     ProductData::Elevation(Field::from_values(g.spec(), e))
 }
 
+/// A real heightmap given to the pipeline as its rough heightmap too, so the climate sees it
+/// and erosion leaves it as it is.
+pub fn rough_elevation_product(g: &AnyGrid, e: Vec<f32>) -> ProductData {
+    ProductData::RoughElevation(Field::from_values(g.spec(), e))
+}
+
 /// One known case.
 pub struct Check {
     pub layer: &'static str,

@@ -6,7 +6,7 @@ downstream then regenerates from your version.
 
 ```text
 cosmology (thin: one solar system)  →  BodyContext  →  surface layers  →  (refinement, later)
-                                  tectonics → geology → elevation → circulation → climate → hydrology → biomes
+                  tectonics → geology → elevation → circulation → climate → erosion → hydrology → biomes
 ```
 
 Any solid body can be a world: Earth-like planets, Mars-, Venus- and Mercury-like worlds,
@@ -77,6 +77,7 @@ exactly that layer and everything after it stale.
 | elevation | `elevation` | `lid_elevation` | rocky crust |
 | circulation | `circulation` | `circulation` | solid surface, atmosphere |
 | climate | `climate` | `climate` | solid surface, atmosphere |
+| erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | rocky crust |
 | hydrology | `hydrology` | `hydrology` | liquid water on the surface |
 | biomes | `biomes` | `biomes` | liquid water on the surface |
 
@@ -91,9 +92,10 @@ new kind of body is a new `Generator` registered in `geoforge-pipeline/src/regis
 |---|---|---|
 | tectonics | `plates`, `crust_type`, `crust_age`, `tectonic_events` | partition, field, field, timeline |
 | geology | `provinces`, `geology_events`, `lithology` (rock catalog), `rock_age` (Ma) | partition, timeline, catalog partition, field |
-| elevation | `elevation` (m above sea level; above the mean radius on dry worlds) | field |
+| elevation | `rough_elevation`: the heightmap from tectonics, before rivers cut it (m above sea level; above the mean radius on dry worlds) | field |
 | circulation | `wind_jan`, `wind_jul` (m/s), `ocean_currents` (m/s), `sst_anomaly` (°C) | vector fields, field |
 | climate | `temperature` (°C), `temperature_range` (warmest − coldest month, °C), `precipitation` (mm/yr), `precipitation_warm_share` (share in the warm half-year) | fields |
+| erosion | `elevation`: the final heightmap, valleys cut where the rain runs off (m) | field |
 | hydrology | `rivers`, `lakes`, `watersheds` | network, partition, partition |
 | biomes | `biome` (biome catalog) | catalog partition |
 
@@ -102,11 +104,18 @@ Derived values (plate boundaries, slope, sea level, flow directions) are recompu
 ## Editing a layer
 
 ```bash
-geoforge-v2 export worlds/demo elevation       # edit/elevation.png (+ .pgw, .prj, .edit.json)
+geoforge-v2 export worlds/demo rough_elevation   # edit/rough_elevation.png (+ .pgw, .prj, .edit.json)
 #   … paint in GIMP, Krita, QGIS, Photoshop …
-geoforge-v2 import worlds/demo elevation       # a patch: only the pixels you changed
-geoforge-v2 generate worlds/demo --render      # climate, rivers and biomes follow your edit
+geoforge-v2 import worlds/demo rough_elevation   # a patch: only the pixels you changed
+geoforge-v2 generate worlds/demo --render        # climate, valleys, rivers and biomes follow
 ```
+
+**Which heightmap to edit.** The climate sees `rough_elevation`; `erosion` then cuts valleys
+into it where the rain runs off and writes `elevation`. To move mountains or coasts, edit
+`rough_elevation`. A finished heightmap drawn elsewhere goes in as `rough_elevation
+--authored` with `[params.erosion] k = 0`, so it passes through unchanged and the climate
+uses it. Edits to `elevation` itself (a lake basin, a gorge) reach rivers and biomes but not
+the climate.
 
 Edit views:
 
@@ -199,9 +208,13 @@ product's randomness. `seed <dir> <product>` prints it.
   rock ages from the province's history.
 - **Elevation**: GDH1 ocean depth from crust age, continental freeboard with plateaus,
   province relief (continental collisions: foreland basin, front range, plateau on the
-  upper plate; heights × 1/g), shelves and slopes planed to sea level, sea level from the ocean's volume,
-  then stream-power erosion (Braun & Willett implicit scheme) with erodibility from
-  lithology and uplift in active belts: rivers cut dendritic valleys while ranges stay high.
+  upper plate; heights × 1/g), shelves and slopes planed to sea level, sea level from the
+  ocean's volume. This is the rough heightmap.
+- **Erosion** (after the climate): stream-power erosion (Braun & Willett implicit scheme)
+  with erodibility from lithology and uplift in active belts, each cell's drainage area
+  weighted by its runoff (rain minus evaporation, Budyko) to the power 0.5. Wet ranges are
+  cut deep, deserts barely, so dry basins stay closed. Valley floors cut below the rough
+  surface are warmer by the lapse rate when hydrology and biomes read the temperature.
 - **Rigid lids** (`lid_*`): one plate; crust split into old highlands and younger lowlands
   (one hemisphere on stagnant lids like Mars, scattered on Venus, none on dead bodies);
   provinces for cratered highlands or ice, volcanic plains, tesserae, impact basins (the

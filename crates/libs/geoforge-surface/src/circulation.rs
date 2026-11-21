@@ -453,7 +453,7 @@ impl Generator for Circulation {
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
-        &[ProductId::Elevation]
+        &[ProductId::RoughElevation]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         crate::preconditions::surface_air(body)
@@ -464,7 +464,7 @@ impl Generator for Circulation {
         if [ProductId::WindJan, ProductId::WindJul, ProductId::OceanCurrents, ProductId::SstAnomaly].iter().all(|x| inputs.contains(*x)) {
             return Ok(out);
         }
-        let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
+        let elev = &inputs.rough_elevation().ok_or(Error::MissingInput(ProductId::RoughElevation))?.values;
         let grid = ctx.grid;
         let body = ctx.body;
         let r = ctx.radius_km();

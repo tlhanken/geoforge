@@ -292,14 +292,14 @@ pub struct Biomes;
 impl Generator for Biomes {
     type Params = BiomesParams;
     const NAME: &'static str = "biomes";
-    const VERSION: u32 = 3;
+    const VERSION: u32 = 4;
     const LAYER: LayerId = LayerId::Biomes;
 
     fn needs() -> &'static [ProductId] {
         &[ProductId::Elevation, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation]
     }
     fn wants() -> &'static [ProductId] {
-        &[ProductId::Lakes, ProductId::Rivers, ProductId::PrecipitationWarmShare]
+        &[ProductId::Lakes, ProductId::Rivers, ProductId::PrecipitationWarmShare, ProductId::RoughElevation]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
         crate::preconditions::surface_water(body)
@@ -314,6 +314,7 @@ impl Generator for Biomes {
         let n = grid.len();
         let elev = &inputs.elevation().ok_or(Error::MissingInput(ProductId::Elevation))?.values;
         let t = &inputs.temperature().ok_or(Error::MissingInput(ProductId::Temperature))?.values;
+        let t = &crate::climate::on_ground(t, inputs.rough_elevation().map(|f| f.values.as_slice()), elev, ctx.body);
         let tr = &inputs.temperature_range().ok_or(Error::MissingInput(ProductId::TemperatureRange))?.values;
         let pr = &inputs.precipitation().ok_or(Error::MissingInput(ProductId::Precipitation))?.values;
         let lakes = inputs.lakes();

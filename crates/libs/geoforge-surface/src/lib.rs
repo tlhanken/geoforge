@@ -19,6 +19,7 @@ pub use biomes::Biomes;
 pub use circulation::Circulation;
 pub use climate::Climate;
 pub use elevation::Elevation;
+pub use erosion::Erosion;
 pub use geology::Geology;
 pub use hydrology::Hydrology;
 pub use lid::{LidElevation, LidGeology, LidTectonics};

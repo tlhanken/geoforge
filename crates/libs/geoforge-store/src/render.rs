@@ -146,7 +146,8 @@ fn image_of(grid: GridSpec, px: impl Fn(usize) -> [u8; 3]) -> Result<RgbImage> {
 /// dry world elevation is relative to the mean radius and every cell is land.
 pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Result<Option<RgbImage>> {
     let spec = grid.spec();
-    let elev = ctx.elevation().map(|f| f.values.as_slice());
+    // The rough heightmap is shaded by itself; everything else by the final heightmap.
+    let elev = if p == ProductId::RoughElevation { ctx.rough_elevation() } else { ctx.elevation().or(ctx.rough_elevation()) }.map(|f| f.values.as_slice());
     let shade_f = elev.map(|e| hillshade(grid, e, radius_km, 12.0));
     let is_sea = |i: usize| sea && elev.is_some_and(|e| e[i] < 0.0);
     let lit = |i: usize, c: [u8; 3]| match &shade_f {
@@ -155,8 +156,8 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
     };
     let Some(data) = ctx.get(p) else { return Ok(None) };
     let mut img = match data {
-        ProductData::Elevation(f) if sea => image_of(spec, |i| lit(i, elevation_color(f64::from(f.values[i]))))?,
-        ProductData::Elevation(f) => image_of(spec, |i| lit(i, dry_elevation_color(f64::from(f.values[i]))))?,
+        ProductData::Elevation(f) | ProductData::RoughElevation(f) if sea => image_of(spec, |i| lit(i, elevation_color(f64::from(f.values[i]))))?,
+        ProductData::Elevation(f) | ProductData::RoughElevation(f) => image_of(spec, |i| lit(i, dry_elevation_color(f64::from(f.values[i]))))?,
         ProductData::CrustAge(f) => {
             let ct = ctx.crust_type();
             image_of(spec, |i| {

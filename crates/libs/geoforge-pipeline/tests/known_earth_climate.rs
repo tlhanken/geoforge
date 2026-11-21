@@ -207,6 +207,7 @@ fn earth() -> &'static Earth {
         let e = known::etopo(&g);
         let mut inputs = Products::new();
         inputs.insert(known::elevation_product(&g, e.clone()));
+        inputs.insert(known::rough_elevation_product(&g, e.clone()));
         let body = Archetype::Earth.context(Key(1), "Earth");
         let p = known::run(
             &body,
