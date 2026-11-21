@@ -28,6 +28,31 @@ pub const BACKARC_BASIN_MAX_MULTIPLIER: f64 = 2.0;
 pub const BACKARC_BASIN_MIN_PLATE_AREA_KM2: f64 = 500_000.0;
 pub const MIN_CONVERGENCE_RATE_CM_PER_YEAR: f64 = 2.0;
 
+/// Ocean–continent ("Andean") margins. The trench lies at the foot of the continental
+/// slope, the coast ~100 km inland of it, and the volcanic front ~200–300 km from the trench
+/// (Chile, Peru, Cascadia, Sumatra): a narrow wedge under the slope, an onshore forearc (the
+/// coastal range and central valley), then a volcanic cordillera ~150–250 km wide. Behind
+/// it the upper plate is shortened, not stretched, so a retroarc foreland basin (the Chaco,
+/// the Beni) takes the place of an extensional backarc. Widths grow with convergence rate as
+/// the ocean–ocean ones do.
+pub const ANDEAN_WEDGE_BASE_WIDTH_KM: f64 = 60.0;
+pub const ANDEAN_FOREARC_BASE_WIDTH_KM: f64 = 70.0;
+pub const ANDEAN_ARC_BASE_WIDTH_KM: f64 = 90.0;
+pub const RETROARC_FORELAND_BASE_WIDTH_KM: f64 = 150.0;
+/// The Altiplano–Puna: where fast convergence meets an old, heavy slab, the slab anchors
+/// the trench while the continent drives into it, and the crust behind the arc thickens
+/// into a plateau (Capitanio et al. 2011, Nature 480: the central Andes sit where the
+/// Nazca slab is oldest). ~300–400 km wide at ~3.8 km, three quarters of Tibet's height.
+/// The age threshold sits between the slab under Peru (~30–40 Ma, no plateau) and under
+/// the Altiplano (~50 Ma). Very old slabs sink steeply and roll back instead, stretching
+/// the upper plate (Molnar & Atwater 1978: the Japan Sea, the Marianas), so beyond
+/// ~100 Ma there is no plateau.
+pub const ANDEAN_PLATEAU_BASE_WIDTH_KM: f64 = 220.0;
+pub const ANDEAN_PLATEAU_MIN_SLAB_AGE_MA: f64 = 50.0;
+pub const ANDEAN_PLATEAU_MAX_SLAB_AGE_MA: f64 = 100.0;
+pub const ANDEAN_PLATEAU_MIN_RATE_CM_PER_YEAR: f64 = 4.0;
+pub const ANDEAN_PLATEAU_RELIEF: f64 = 0.75;
+
 /// Slowest convergence that still builds a collision belt: the Alps rise at under 1 cm/yr.
 pub const COLLISION_MIN_RATE_CM_PER_YEAR: f64 = 0.5;
 
@@ -156,7 +181,13 @@ pub fn collision_orogen(rate: f64, width_km: f64) -> Province {
 }
 #[must_use]
 pub fn orogenic_plateau(rate: f64, width_km: f64) -> Province {
-    p(G::OrogenicPlateau, 0.8, 0.45, width_km, norm(rate), rate)
+    p(G::OrogenicPlateau, 1.0, 0.45, width_km, norm(rate), rate)
+}
+/// A plateau behind an Andean arc. Its `elevation_intensity` is its height as a share of
+/// a collision plateau's at the same rate.
+#[must_use]
+pub fn andean_plateau(rate: f64, width_km: f64) -> Province {
+    p(G::OrogenicPlateau, ANDEAN_PLATEAU_RELIEF, 0.45, width_km, norm(rate), rate)
 }
 #[must_use]
 pub fn foreland_basin(rate: f64, width_km: f64) -> Province {

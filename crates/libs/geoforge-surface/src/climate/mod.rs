@@ -227,7 +227,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 5;
+    const VERSION: u32 = 6;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {

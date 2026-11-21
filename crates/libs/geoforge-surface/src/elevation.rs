@@ -9,6 +9,9 @@
 //!   steep front range across the boundary, and a plateau behind it whose interior barely
 //!   erodes (see `geology::provinces::Collision`). Their heights scale with gravity
 //!   (`relief`).
+//! - Ocean–continent margins rise from the trench to a coastal range, a volcanic cordillera
+//!   (higher where convergence is fast) and, behind an old slab, an Andean plateau; their
+//!   coasts run straight along the trench, with a narrow shelf.
 //! - Continental crust near the continent–ocean edge is submerged as shelf and slope, so
 //!   land is less than the continental-crust area, as on Earth.
 //! - Sea level is set so the oceans hold exactly the body's water (ocean global-equivalent
@@ -34,6 +37,9 @@ const ARC_PEAK_M: f64 = 1200.0;
 const ARC_VOLCANO_SPACING_KM: f64 = 70.0;
 /// An orogenic plateau rises to full height over this far in from its outer edges, km.
 const PLATEAU_EDGE_KM: f64 = 120.0;
+/// Within this distance of a convergent boundary coastlines are not roughened: an active
+/// margin's coast runs straight along its trench.
+const STRAIGHT_COAST_KM: f64 = 800.0;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -77,7 +83,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 4;
+    const VERSION: u32 = 5;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -112,7 +118,11 @@ impl Generator for Elevation {
             .collect();
         let edge_raw: Vec<f64> = distance_field(grid, coast, 1.0, |_| true).into_iter().map(|d| d * r).collect();
         // Coastlines are fractal: perturb distance-to-edge so margins form bays, capes and
-        // offshore banks instead of following the smooth plate boundary.
+        // offshore banks instead of following the smooth plate boundary. Not at active
+        // margins: there the coast runs straight along the trench (Chile, Peru, Sumatra).
+        let segments = inputs.plates().map(|pl| boundaries::analyze(grid, pl, r, &p.boundaries)).unwrap_or_default();
+        let convergent: Vec<Cell> = segments.iter().filter(|s| s.kind == geoforge_core::surface::BoundaryKind::Convergent).flat_map(|s| s.cells.iter().copied()).collect();
+        let near_trench = sparse_dist(grid, &convergent, STRAIGHT_COAST_KM / r);
         let coast_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0xC0A57);
         let edge_km: Vec<f64> = grid
             .cells()
@@ -122,14 +132,14 @@ impl Generator for Elevation {
                 // plus ~±90 km detail at ~250 km scale.
                 let n1 = coast_noise.fbm(pt, 8.0, 3);
                 let n2 = coast_noise.fbm(pt, 25.0, 4);
-                (edge_raw[c as usize] + 1000.0 * n1 + 300.0 * n2).max(0.0)
+                let open = near_trench.get(&c).map_or(1.0, |d| smoothstep(0.5 * STRAIGHT_COAST_KM, STRAIGHT_COAST_KM, d * r));
+                (edge_raw[c as usize] + open * 1000.0 * n1 + (0.3 + 0.7 * open) * 300.0 * n2).max(0.0)
             })
             .collect();
 
         // Distance (km) from the nearest source boundary of the province's own kind. Measured
         // per kind rather than per province so that where rifts or belts meet at a junction
         // their valleys and crests merge, instead of one branch's flank crossing another's axis.
-        let segments = inputs.plates().map(|pl| boundaries::analyze(grid, pl, r, &p.boundaries)).unwrap_or_default();
         let by_owner = provinces.cells_by_owner();
         let mut axes: BTreeMap<G, (Vec<Cell>, f64)> = BTreeMap::new();
         for key in by_owner.keys() {
@@ -169,15 +179,15 @@ impl Generator for Elevation {
             }
         }
         // Depth inside each orogenic plateau, from its outer edges (not the edge against
-        // its front range), so the plateau rises from its back and sides and meets the range
-        // at full height.
+        // its front range or arc), so the plateau rises from its back and sides and meets the
+        // range at full height.
         for (key, cells) in &by_owner {
             let Some(prov) = provinces.table.get(*key) else { continue };
             if prov.kind != G::OrogenicPlateau {
                 continue;
             }
             let set: std::collections::HashSet<Cell> = cells.iter().copied().collect();
-            let outside = |n: Cell| !set.contains(&n) && provinces.row_at(n).is_none_or(|pr| pr.kind != G::CollisionOrogen);
+            let outside = |n: Cell| !set.contains(&n) && provinces.row_at(n).is_none_or(|pr| !matches!(pr.kind, G::CollisionOrogen | G::VolcanicArc));
             let rim: Vec<Cell> = cells.iter().copied().filter(|&c| grid.neighbors(c).iter().any(outside)).collect();
             let d = sparse_dist(grid, &rim, 2.0 * PLATEAU_EDGE_KM / r);
             for &c in cells {
@@ -228,7 +238,7 @@ impl Generator for Elevation {
                     G::OrogenicPlateau => {
                         // Ragged margins: the edge ramp starts early or late along the edge.
                         let inside = interior_km.get(&c).copied().unwrap_or(2.0 * PLATEAU_EDGE_KM) + PLATEAU_EDGE_KM * noise.fbm(grid.center(c), 12.0, 3);
-                        z = base_cont + collision(prov).plateau_m * smoothstep(0.0, PLATEAU_EDGE_KM, inside);
+                        z = base_cont + collision(prov).plateau_m * prov.elevation_intensity * smoothstep(0.0, PLATEAU_EDGE_KM, inside);
                     }
                     // Bent down under the range's load and filled with its debris.
                     G::ForelandBasin => {
@@ -240,14 +250,18 @@ impl Generator for Elevation {
                             // The submarine ridge an island arc's volcanoes stand on (step 3).
                             z = z.max(ARC_RIDGE_M + 600.0 * prov.intensity);
                         } else {
-                            z = base_cont + 1600.0 + 1400.0 * prov.intensity;
+                            // A continental cordillera: ~1.5 km on a slow margin (the
+                            // Cascades), ~4 km where convergence is fast (the Andes).
+                            let fast = smoothstep(2.0, 8.0, prov.convergence_rate_cm_yr);
+                            z = base_cont + relief * (1000.0 + 3000.0 * fast);
                         }
                     }
                     G::AccretionaryWedge => {
                         z = if ocean { z * 0.45 } else { base_cont + 300.0 };
                     }
                     G::ForearcBasin => {
-                        z = if ocean { z.max(-3200.0) } else { base_cont - 250.0 };
+                        // Onshore at an Andean margin: the coastal range and central valley.
+                        z = if ocean { z.max(-3200.0) } else { base_cont + 300.0 * relief };
                     }
                     G::BackarcBasin => {
                         z = if ocean { z.min(-2800.0) } else { base_cont - 300.0 };
@@ -324,20 +338,26 @@ impl Generator for Elevation {
 
         // Continental margin zone: continental crust within slope + shelf width of the
         // continent–ocean edge. Shelves are built relative to sea level (below).
-        let shelf_w = |c: Cell| -> f64 {
+        // Slope and shelf widths (km): at an active margin the slope drops straight from a
+        // shelf only a few tens of km wide into the trench (Chile's is 5–30 km, and the land
+        // ~50 km from the 2 km isobath already stands 1–2 km high). Thickened
+        // crust (ranges, plateaus) is not drowned into bays: its margin follows the true edge.
+        let sw = p.slope_width_km;
+        let margin_w = |c: Cell| -> (f64, f64, bool) {
             match provinces.owner_of(c).and_then(|k| provinces.table.get(k)).map(|p| p.kind) {
-                Some(G::ExtendedCrust) => 380.0,
-                Some(G::VolcanicArc | G::AccretionaryWedge | G::CollisionOrogen | G::ForearcBasin) => 50.0,
-                _ => 200.0,
+                Some(G::ExtendedCrust) => (sw, 380.0, true),
+                Some(G::VolcanicArc | G::AccretionaryWedge | G::ForearcBasin) => (0.3 * sw, 15.0, true),
+                Some(G::CollisionOrogen | G::OrogenicPlateau) => (0.5 * sw, 50.0, false),
+                _ => (sw, 200.0, true),
             }
         };
-        let sw = p.slope_width_km;
-        let margin: Vec<Option<(f64, f64)>> = grid
+        let margin: Vec<Option<(f64, f64, f64)>> = grid
             .cells()
             .map(|c| {
                 let i = c as usize;
-                let shelf = shelf_w(c);
-                (crust[i] == CrustType::Continental && edge_km[i] < sw + shelf).then_some((edge_km[i], shelf))
+                let (slope, shelf, bays) = margin_w(c);
+                let d = if bays { edge_km[i] } else { edge_raw[i] };
+                (crust[i] == CrustType::Continental && d < slope + shelf).then_some((d, slope, shelf))
             })
             .collect();
 
@@ -389,7 +409,7 @@ impl Generator for Elevation {
         let mut sea = if gel_m > 0.0 { sea_level_for_volume(&e, &areas, gel_m) } else { 0.0 };
         for _ in 0..6 {
             for (i, m) in margin.iter().enumerate() {
-                let Some((d, shelf)) = *m else { continue };
+                let Some((d, sw, shelf)) = *m else { continue };
                 e[i] = if d < sw {
                     let t = smoothstep(0.0, sw, d);
                     sea - 3000.0 + (3000.0 - 130.0) * t + detail[i]

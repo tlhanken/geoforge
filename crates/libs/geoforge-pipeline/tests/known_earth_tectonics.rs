@@ -323,8 +323,7 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         near_share("SUB", &[G::VolcanicArc], 350.0),
         0.6..=1.0,
         "",
-    )
-    .gap("arcs stand too far behind the trench (median below)");
+    );
     s.range(
         "provinces",
         "continental collisions with an orogen nearby",
@@ -360,8 +359,7 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         gaps_km[gaps_km.len() / 2],
         120.0..=320.0,
         "km",
-    )
-    .gap("the accretionary wedge and forearc basin together span ~300 km");
+    );
     let stable = ["Craton", "Platform", "IntracratonicBasin", "PaleoOrogen"];
     for (name, lat, lon) in [
         ("Canadian Shield", 58.0, -95.0),
@@ -383,9 +381,9 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         "BackarcBasin",
         "AccretionaryWedge",
         "CollisionOrogen",
+        "OrogenicPlateau",
     ];
-    s.one_of("provinces", "central Andes (20°S 68°W)", &province_at(e, -20.0, -68.0), &arc)
-        .gap("the Altiplano microplate's oblique southern edge reads as divergent, and its rift paints over the arc");
+    s.one_of("provinces", "central Andes (20°S 68°W)", &province_at(e, -20.0, -68.0), &arc);
     s.one_of(
         "provinces",
         "Himalaya (29°N 84°E)",
@@ -557,9 +555,33 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
             -70.0,
             -65.0,
             2000.0..=4000.0,
-            Some("Andean margins are built like ocean–ocean ones: a wedge and forearc ~3 km deep on the continent, a 1–1.5 km arc, a backarc basin where the Altiplano stands"),
+            None,
         ),
-        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, Some("no foreland basin beside the Andes: continental interiors sit at a uniform 300–400 m")),
+        (
+            "Peruvian Andes, 8–12°S 78–74°W",
+            -12.0..=-8.0,
+            -78.0,
+            -74.0,
+            1200.0..=3000.0,
+            Some("over Peru's flat slab the cordillera is ~300 km of 4 km highlands; the model's young-slab cordillera is ~150 km wide and its forearc erodes to sea level"),
+        ),
+        (
+            "Pampean ranges, 28–34°S 68–64°W",
+            -34.0..=-28.0,
+            -68.0,
+            -64.0,
+            200.0..=1500.0,
+            Some("no flat-slab segments: the model's slab is as old here as under the Altiplano, so the plateau runs on to 37°S"),
+        ),
+        (
+            "Cascades, 43–48°N 123–120°W",
+            43.0..=48.0,
+            -123.0,
+            -120.0,
+            400.0..=1500.0,
+            Some("a slow margin's cordillera stands only one or two cells wide, and erodes"),
+        ),
+        ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, Some("the retroarc foreland ends ~300 km past the Andes; the lowland beyond it sits at the continental base, ~300 m")),
         ("Rocky Mountains, 38–42°N 110–105°W", 38.0..=42.0, -110.0, -105.0, 1500.0..=3000.0, Some("no mountain building far inland of a plate boundary (the Laramide uplift, Tian Shan)")),
         ("Ethiopian highlands, 5–10°N 36–40°E", 5.0..=10.0, 36.0, 40.0, 1000.0..=2600.0, Some("no plume uplift: the Ethiopian and East African domes are 1.5–2 km over 1000 km")),
     ] {

@@ -14,8 +14,14 @@
 //!   pixel" filter excluded every pixel, since the base layers cover the whole map).
 //! - In ocean–ocean subduction the older crust subducts (v1 used the lower plate id).
 //! - Continental collisions are asymmetric (v1 drew a ridge centred on the boundary): the
-//!   smaller continent goes under, a front range and a plateau grow on the larger, and a
-//!   foreland basin bends down in front (see [`provinces::Collision`]).
+//!   smaller continent goes under (unless the other rides over an ocean slab nearby), a
+//!   front range and a plateau grow on the upper plate, and a foreland basin bends down in
+//!   front (see [`provinces::Collision`]).
+//! - Ocean–continent margins are not built like island arcs: a narrow wedge under the
+//!   slope, an onshore forearc, a broad cordillera, a plateau behind it over an old slab,
+//!   and a retroarc foreland instead of an extensional backarc (see
+//!   [`provinces::ANDEAN_WEDGE_BASE_WIDTH_KM`]).
+//! - Rifts do not cut across belts already built at convergent margins.
 
 pub mod lithology;
 pub mod provinces;
@@ -67,7 +73,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 4;
+    const VERSION: u32 = 5;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -154,6 +160,10 @@ struct PlateInfo {
     kind: CrustType,
 }
 
+/// How far from an arc's trench the upper plate's crust counts as hot and weak (the
+/// central Andes are ~600 km across from the trench to the Subandean front).
+const ARC_WEAKENED_KM: f64 = 600.0;
+
 #[derive(Clone, Copy)]
 struct Side {
     plate: u32,
@@ -202,6 +212,34 @@ impl B<'_> {
                 let nd = d + self.km(c, n);
                 if nd <= max_km && best.get(&n).is_none_or(|&b| nd < b) {
                     best.insert(n, nd);
+                    heap.push(Item(nd, n));
+                }
+            }
+        }
+        best
+    }
+
+    /// Like [`Self::reach`], but also returns each cell's nearest source.
+    fn nearest(&self, sources: &[Cell], max_km: f64, allow: impl Fn(Cell) -> bool) -> HashMap<Cell, (f64, Cell)> {
+        let mut best: HashMap<Cell, (f64, Cell)> = HashMap::new();
+        let mut heap = BinaryHeap::new();
+        for &s in sources {
+            if best.insert(s, (0.0, s)).is_none() {
+                heap.push(Item(0.0, s));
+            }
+        }
+        while let Some(Item(d, c)) = heap.pop() {
+            let Some(&(b, src)) = best.get(&c) else { continue };
+            if d > b {
+                continue;
+            }
+            for n in self.grid.neighbors(c).iter() {
+                if !allow(n) {
+                    continue;
+                }
+                let nd = d + self.km(c, n);
+                if nd <= max_km && best.get(&n).is_none_or(|&(b, _)| nd < b) {
+                    best.insert(n, (nd, src));
                     heap.push(Item(nd, n));
                 }
             }
@@ -410,12 +448,52 @@ impl B<'_> {
     /// larger, as India and Arabia are into Asia. Polarity is inherited: the small continent
     /// rode in behind ocean floor that was already subducting beneath the big one, and once
     /// its buoyant upper crust is scraped off, the rest is dense enough to follow.
-    fn lower_and_upper(&self, a: Side, b: Side) -> (Side, Side) {
+    ///
+    /// The exception is a plate already riding over an ocean slab next to the collision:
+    /// its crust is hot and weak above the slab, so the other plate's colder lithosphere
+    /// drives under it whatever their sizes (the Brazilian shield under the Andes in the
+    /// Subandean belt, where PB2002's Altiplano microplate meets South America).
+    fn lower_and_upper(&self, s: &BoundarySegment, a: Side, b: Side, arc_fronts: &BTreeMap<u32, Vec<Cell>>) -> (Side, Side) {
+        let weak = |side: Side| {
+            let Some(front) = arc_fronts.get(&side.plate) else { return 0.0 };
+            let near = self.reach(front, ARC_WEAKENED_KM, |c| self.owner[c as usize] == side.plate);
+            let edge: Vec<Cell> = s.cells.iter().copied().filter(|&c| self.owner[c as usize] == side.plate).collect();
+            edge.iter().filter(|c| near.contains_key(c)).count() as f64 / edge.len().max(1) as f64
+        };
+        let (wa, wb) = (weak(a), weak(b));
+        if (wa - wb).abs() > 0.5 {
+            return if wa > wb { (b, a) } else { (a, b) };
+        }
         let size = |side: Side| (self.info.get(&side.plate).map_or(0.0, |i| i.cont_area_km2), side.plate);
         if size(a) < size(b) { (a, b) } else { (b, a) }
     }
 
+    /// The overriding plate and its boundary cells at every subduction under it.
+    fn arc_fronts(&self, segments: &[BoundarySegment]) -> BTreeMap<u32, Vec<Cell>> {
+        let mut fronts: BTreeMap<u32, Vec<Cell>> = BTreeMap::new();
+        for s in segments.iter().filter(|s| s.kind == BoundaryKind::Convergent) {
+            if let Some((_, over)) = self.subduction(s) {
+                fronts.entry(over.plate).or_default().extend(s.cells.iter().copied().filter(|&c| self.owner[c as usize] == over.plate));
+            }
+        }
+        fronts
+    }
+
+    /// The subducting and overriding sides of a convergent boundary with ocean floor on at
+    /// least one side (`None` for two continents).
+    fn subduction(&self, s: &BoundarySegment) -> Option<(Side, Side)> {
+        let (a, b) = self.sides(s);
+        match (a.continental, b.continental) {
+            (true, true) => None,
+            (false, true) => Some((a, b)),
+            (true, false) => Some((b, a)),
+            // The older (denser) oceanic crust sinks.
+            (false, false) => Some(if a.mean_age > b.mean_age || (a.mean_age == b.mean_age && a.plate < b.plate) { (a, b) } else { (b, a) }),
+        }
+    }
+
     fn collision_orogens(&mut self, segments: &[BoundarySegment]) {
+        let arc_fronts = self.arc_fronts(segments);
         for (i, s) in segments.iter().enumerate() {
             if s.kind != BoundaryKind::Convergent || s.rate_cm_yr < pc::COLLISION_MIN_RATE_CM_PER_YEAR {
                 continue;
@@ -424,7 +502,7 @@ impl B<'_> {
             if !(a.continental && b.continental) {
                 continue;
             }
-            let (lower, upper) = self.lower_and_upper(a, b);
+            let (lower, upper) = self.lower_and_upper(s, a, b, &arc_fronts);
             let shape = pc::Collision::at_rate(s.rate_cm_yr);
             let age = (1500.0 / (s.rate_cm_yr * 10.0).max(5.0)).clamp(5.0, 80.0);
             let (owner, crust) = (self.owner, self.crust);
@@ -458,28 +536,23 @@ impl B<'_> {
             if s.kind != BoundaryKind::Convergent {
                 continue;
             }
-            let (a, b) = self.sides(s);
-            let (sub, over) = match (a.continental, b.continental) {
-                (true, true) => continue,
-                (false, true) => (a, b),
-                (true, false) => (b, a),
-                (false, false) => {
-                    // The older (denser) oceanic crust sinks.
-                    if a.mean_age > b.mean_age || (a.mean_age == b.mean_age && a.plate < b.plate) { (a, b) } else { (b, a) }
-                }
-            };
+            let Some((sub, over)) = self.subduction(s) else { continue };
             let rate = s.rate_cm_yr;
             let age = (1500.0 / (rate * 10.0).max(5.0)).clamp(5.0, 120.0);
             // Trench: on the subducting plate, at the boundary.
             let t = self.reach(&s.cells, pc::OCEAN_TRENCH_WIDTH_KM / 2.0, |_| true);
             let trench = Self::cells_of(&t, |c, _| self.owner[c as usize] == sub.plate);
             self.push(trench, pc::ocean_trench(rate, s.length_km), Some(i), age);
+            if over.continental {
+                self.andean_margin(i, s, sub.plate, over.plate, age);
+                continue;
+            }
             // Wedge → forearc → arc → backarc, stepping into the overriding plate.
             let w1 = pc::rate_scaled(pc::ACCRETIONARY_WEDGE_BASE_WIDTH_KM, pc::ACCRETIONARY_WEDGE_WIDTH_FACTOR, pc::ACCRETIONARY_WEDGE_MAX_MULTIPLIER, rate);
             let w2 = pc::rate_scaled(pc::FOREARC_BASIN_BASE_WIDTH_KM, pc::FOREARC_BASIN_WIDTH_FACTOR, pc::FOREARC_BASIN_MAX_MULTIPLIER, rate);
             let w3 = pc::rate_scaled(pc::VOLCANIC_ARC_BASE_WIDTH_KM, pc::VOLCANIC_ARC_WIDTH_FACTOR, pc::VOLCANIC_ARC_MAX_MULTIPLIER, rate);
             let w4 = pc::rate_scaled(pc::BACKARC_BASIN_BASE_WIDTH_KM, pc::BACKARC_BASIN_WIDTH_FACTOR, pc::BACKARC_BASIN_MAX_MULTIPLIER, rate);
-            let backarc = self.plate_area(a.plate) > pc::BACKARC_BASIN_MIN_PLATE_AREA_KM2 || self.plate_area(b.plate) > pc::BACKARC_BASIN_MIN_PLATE_AREA_KM2;
+            let backarc = self.plate_area(sub.plate) > pc::BACKARC_BASIN_MIN_PLATE_AREA_KM2 || self.plate_area(over.plate) > pc::BACKARC_BASIN_MIN_PLATE_AREA_KM2;
             let total = w1 + w2 + w3 + if backarc { w4 } else { 0.0 };
             let sources: Vec<Cell> = s.cells.iter().copied().filter(|&c| self.owner[c as usize] == over.plate).collect();
             let m = self.reach(&sources, total, |c| self.owner[c as usize] == over.plate);
@@ -495,6 +568,43 @@ impl B<'_> {
                 self.push(ba, pc::backarc_basin(s.length_km), Some(i), age * 0.5);
             }
         }
+    }
+
+    /// Wedge → forearc → cordillera → (plateau) → retroarc foreland, stepping into a
+    /// continental upper plate (see [`pc::ANDEAN_WEDGE_BASE_WIDTH_KM`]). The plateau stands
+    /// only where the slab entering the nearest stretch of trench is old, but not very old.
+    /// Plateau and foreland are built on continental crust only.
+    fn andean_margin(&mut self, i: usize, s: &BoundarySegment, sub: u32, over: u32, age: f64) {
+        let rate = s.rate_cm_yr;
+        let scaled = |base: f64| pc::rate_scaled(base, pc::ACCRETIONARY_WEDGE_WIDTH_FACTOR, pc::ACCRETIONARY_WEDGE_MAX_MULTIPLIER, rate);
+        let (w1, w2, w3, w5) = (scaled(pc::ANDEAN_WEDGE_BASE_WIDTH_KM), scaled(pc::ANDEAN_FOREARC_BASE_WIDTH_KM), scaled(pc::ANDEAN_ARC_BASE_WIDTH_KM), scaled(pc::RETROARC_FORELAND_BASE_WIDTH_KM));
+        let w4 = if rate >= pc::ANDEAN_PLATEAU_MIN_RATE_CM_PER_YEAR { scaled(pc::ANDEAN_PLATEAU_BASE_WIDTH_KM) } else { 0.0 };
+        let arc_end = w1 + w2 + w3;
+        let total = arc_end + 1.3 * w4 + w5;
+        let (owner, crust) = (self.owner, self.crust);
+        let on = |plate: u32| move |c: Cell| owner[c as usize] == plate;
+        let edge = |plate: u32| -> Vec<Cell> { s.cells.iter().copied().filter(|&c| owner[c as usize] == plate).collect() };
+        let continental = |c: Cell| crust[c as usize] == CrustType::Continental;
+        let m = self.reach(&edge(over), total, on(over));
+        // Slab age where it enters the trench, carried inland from the nearest trench cell.
+        let slab: Vec<Cell> = edge(sub).into_iter().filter(|&c| !continental(c)).collect();
+        let near = self.nearest(&slab, total + self.r * self.grid.spacing_rad(), on(over));
+        let slab_age = |c: Cell| near.get(&c).zip(self.age).map(|(&(_, src), a)| f64::from(a[src as usize]));
+        let old = |c: Cell| w4 > 0.0 && slab_age(c).is_some_and(|t| (pc::ANDEAN_PLATEAU_MIN_SLAB_AGE_MA..=pc::ANDEAN_PLATEAU_MAX_SLAB_AGE_MA).contains(&t));
+        let (wn, grid) = (&self.width_noise, self.grid);
+        let swell = |c: Cell| (1.0 + 1.6 * wn.fbm(grid.center(c), 6.0, 3)).clamp(0.7, 1.3);
+        let back = |c: Cell| if old(c) { arc_end + w4 * swell(c) } else { arc_end };
+        let band = |lo: f64, hi: f64| Self::cells_of(&m, |_, d| d > lo && d <= hi);
+        let wedge = Self::cells_of(&m, |_, d| d <= w1);
+        let fore = band(w1, w1 + w2);
+        let arc = band(w1 + w2, arc_end);
+        let plateau = Self::cells_of(&m, |c, d| d > arc_end && d <= back(c) && continental(c));
+        let foreland = Self::cells_of(&m, |c, d| d > back(c) && d <= back(c) + w5 && continental(c));
+        self.push(foreland, pc::foreland_basin(rate, w5), Some(i), age * 0.5);
+        self.push(plateau, pc::andean_plateau(rate, w4), Some(i), age);
+        self.push(wedge, pc::accretionary_wedge(rate, w1), Some(i), age);
+        self.push(fore, pc::forearc_basin(w2), Some(i), age);
+        self.push(arc, pc::volcanic_arc(rate, s.length_km), Some(i), age);
     }
 
     fn oceanic_overlays(&mut self, segments: &[BoundarySegment]) {
@@ -525,7 +635,17 @@ impl B<'_> {
         }
     }
 
+    /// Rifts open between continents, but do not cut across belts already built at a
+    /// convergent margin: a short divergent stretch on an arc microplate's edge (PB2002's
+    /// Altiplano) is not the East African rift.
     fn continental_rifts(&mut self, segments: &[BoundarySegment]) {
+        use GeologicProvince as G;
+        let active: std::collections::HashSet<Cell> = self
+            .regions
+            .iter()
+            .filter(|(_, p)| matches!(p.kind, G::CollisionOrogen | G::OrogenicPlateau | G::ForelandBasin | G::VolcanicArc | G::ForearcBasin | G::AccretionaryWedge | G::OceanTrench))
+            .flat_map(|(cells, _)| cells.iter().copied())
+            .collect();
         for (i, s) in segments.iter().enumerate() {
             if s.kind != BoundaryKind::Divergent {
                 continue;
@@ -533,7 +653,7 @@ impl B<'_> {
             let (a, b) = self.sides(s);
             if a.continental && b.continental {
                 let half = pc::RIFT_MIN_HALF_WIDTH_KM + self.rng.r#gen::<f64>() * pc::RIFT_HALF_WIDTH_RANGE_KM;
-                let cells = Self::cells_of(&self.reach(&s.cells, half, |_| true), |_, _| true);
+                let cells = Self::cells_of(&self.reach(&s.cells, half, |_| true), |c, _| !active.contains(&c));
                 let age = (300.0 / (s.rate_cm_yr * 10.0).max(5.0)).clamp(2.0, 40.0);
                 self.push(cells, pc::continental_rift(s.rate_cm_yr, s.length_km), Some(i), age);
             }

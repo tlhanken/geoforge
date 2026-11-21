@@ -183,29 +183,26 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
-| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 45 | 8 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 52 |
+| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1 | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 48 | 7 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 37 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
 
 - **Elevation from plates:**
-  - Andean margins are built like ocean–ocean ones: no Altiplano, and the arc–trench gap is
-    ~340 km (Earth 150–300).
-  - No plume uplift (Ethiopia), no foreland basin beside the Andes (the Amazon at 350 m),
-    no intraplate ranges (the Rockies).
+  - No flat-slab segments: the Andean plateau runs on south of the Altiplano over the
+    Pampean ranges (2.7 km, ETOPO1 0.7), and Peru's cordillera is half as wide as it should be.
+  - No plume uplift (Ethiopia), no intraplate ranges (the Rockies); the Amazon lowland
+    beyond the Andean foreland sits at the continental base (~300 m).
   - Ridge–transform staircases are smoothed into ridges.
-- **Circulation:**
-  - The Humboldt Current is a third as cold as observed.
-  - The North Atlantic Drift brings too little warmth.
 - **Rain:**
-  - Gulf of Mexico moisture never turns north: the Great Plains get no summer rain, and the
-    eastern US is too dry for forest. The Pampas and north China have the same problem.
-  - Winter storms drench the interior Southwest and Greece; the Great Basin gets 2300 mm,
-    so it drains to the sea.
-  - The West African monsoon and the summer rain belt over Arabia reach too far north.
-- **Temperature:** Europe turns continental too fast, Siberian winters are too mild, and the
-  Antarctic plateau is ~17 °C too warm.
+  - Winter storms still drench the interior Southwest (Phoenix 970 mm, and the Great Basin
+    drains to the sea), London and Kazakhstan.
+  - The West African monsoon reaches too far north (Timbuktu 800 mm); Nairobi gets 3600 mm.
+  - North-east Siberia is too dry (Yakutsk 15 mm).
+- **Temperature:** the subtropical interiors are ~5 °C too cold (Phoenix, Riyadh, Timbuktu),
+  Europe turns continental too fast, Siberian winters are too mild, Lima's coastal cold
+  does not reach the air, and the Antarctic plateau is ~17 °C too warm.
 - **Biomes:**
   - At one degree, every lowland cell on a big river turns wetland.
   - The classifier gets four of 31 stations wrong: Tehran (savanna), Nairobi and Reykjavik
@@ -220,7 +217,9 @@ Biggest open gaps, by layer:
 Collisions are built asymmetrically (`geology::provinces::Collision`):
 - **Which plate goes under:** the smaller continent. India and Arabia went under Asia
   because they rode in behind ocean floor that was already subducting beneath it. Once their
-  buoyant upper crust is scraped off, the rest is dense enough to follow.
+  buoyant upper crust is scraped off, the rest is dense enough to follow. The exception is a
+  plate that already rides over an ocean slab within ~600 km: its crust is hot and weak, so
+  the other drives under it (South America's shield under the Andes, in the Subandean belt).
 - **What forms:** a foreland basin on the lower plate, a steep front range across the
   boundary, and a plateau behind it on the upper plate. Rivers do not cross the plateau's
   interior to the sea, so it stays flat and dotted with lakes.
@@ -232,6 +231,25 @@ On PB2002's plates this gives Tibet 4.95 km (ETOPO1 4.95), the Himalaya 3.1 km (
 Ganges plain 230 m (200), Mesopotamia 150 m (185), and the Iranian plateau 1.9 km (1.3).
 Iran is too high because rate is all the model knows: Arabia converges almost as fast as
 India but has collided half as long.
+
+### Ocean–continent margins
+
+Where ocean floor goes under a continent (`geology::andean_margin`), the margin is built as
+the Andes, Cascadia and Sumatra are, not as an island arc:
+- **Across the margin:** a narrow wedge under a steep slope with a shelf a few tens of km
+  wide, so the coast lies ~100 km from the trench and runs straight along it; an onshore
+  forearc (the coastal range and central valley); then a volcanic cordillera 150–250 km
+  wide, ~1.5 km high on slow margins and ~4 km on fast ones. Behind it the upper plate is
+  shortened, so a retroarc foreland basin replaces the extensional backarc.
+- **The Andean plateau:** where convergence is fast (4 cm/yr or more) and the slab entering
+  the nearest trench is 50–100 Ma old, a plateau three quarters of Tibet's height stands
+  behind the arc. Capitanio et al. (2011) tie the Altiplano to the Nazca slab being oldest
+  there; slabs much older than ~100 Ma roll back and stretch the upper plate instead
+  (Molnar & Atwater 1978).
+- **Rifts** do not cut across belts already built at convergent margins.
+
+On PB2002's plates the central Andes (15–25°S, 70–65°W) average 2.5 km (ETOPO1 3.1), and the
+median arc–trench gap is 260 km (Earth 150–300).
 
 ## What matches
 
