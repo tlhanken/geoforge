@@ -21,7 +21,7 @@
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
 
-use crate::atmosphere::transport::{diffuse, semi_lagrangian};
+use crate::atmosphere::transport::semi_lagrangian;
 use crate::atmosphere::grid::is_sea;
 use crate::atmosphere::{winds, Atmo, AtmoGrid, Radiation, Season};
 use crate::climate::ClimateParams;
@@ -70,7 +70,7 @@ impl Default for CirculationParams {
             boundary_current_km: 150.0,
             drift_m_s: 0.3,
             heat_memory_days: 60.0,
-            upwelling_c: 8.0,
+            upwelling_c: 12.0,
         }
     }
 }
@@ -301,9 +301,12 @@ fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<f64>, Option<f64>) {
     (best(true), best(false))
 }
 
+/// How far offshore coastal upwelling cools the sea, km (e-folding).
+const UPWELLING_KM: f64 = 400.0;
+
 /// Sea-surface temperature anomaly (°C) from currents crossing the temperature gradient,
 /// carried downstream, plus coastal upwelling.
-fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], winds_annual: &[(f64, f64)], tz: &[f64], radius_km: f64, p: &CirculationParams) -> Vec<f64> {
+fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[f64], radius_km: f64, p: &CirculationParams) -> Vec<f64> {
     let g = &a.g;
     let b = basins(a, radius_km);
     let dy_km = g.res.to_radians() * radius_km;
@@ -317,10 +320,11 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], winds_annual: &[(f64, f64)], tz: &[
             let dtdy = (tz[yn] - tz[ys]) / ((ys - yn).max(1) as f64 * dy_km * 1000.0); // °C per m northward
             let mut s = -cur[i].1 * dtdy * p.heat_memory_days * 86_400.0;
             let lat = g.lat(y);
-            // Upwelling: equatorward wind along an eastern shore, in the subtropics.
-            let equatorward = winds_annual[i].1 * lat.signum() < 0.0;
+            // Upwelling: equatorward wind along an eastern shore, in the subtropics, all year (a
+            // monsoon's reversing winds upwell only half the year, and not off India).
+            let equatorward = seasons.iter().all(|w| w[i].1 * lat.signum() < 0.0);
             if equatorward && (8.0..42.0).contains(&lat.abs()) && !b.open_row[y] {
-                s -= p.upwelling_c * (-b.east_km[i] / 250.0).exp();
+                s -= p.upwelling_c * (-b.east_km[i] / UPWELLING_KM).exp();
             }
             s
         })
@@ -329,20 +333,65 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], winds_annual: &[(f64, f64)], tz: &[
     // keeps its warmth for months, so the Gulf Stream's reaches Norway.
     let flow: Vec<(f64, f64)> = cur.iter().map(|v| (v.0 / 0.5, v.1 / 0.5)).collect();
     let mut anom = carry_along(g, &flow, &source, &a.land, 200, 0.97);
-    diffuse(g, &mut anom, 0.3);
+    diffuse_sea(g, &mut anom, &a.land, 0.3);
+    // A departure from the zonal mean averages to zero along each latitude circle: the zonal
+    // temperature already holds what a zonally uniform drift does (without this, the drift
+    // under the Southern Ocean's westerlies drew a cold, rain-starved ring at 52°S).
+    for y in 0..g.h {
+        let row = y * g.w..(y + 1) * g.w;
+        let sea: Vec<usize> = row.filter(|&i| a.land[i] < 0.5).collect();
+        if sea.is_empty() {
+            continue;
+        }
+        let m = sea.iter().map(|&i| anom[i]).sum::<f64>() / sea.len() as f64;
+        for i in sea {
+            anom[i] -= m;
+        }
+    }
     anom.iter().map(|v| v.clamp(-8.0, 8.0)).collect()
 }
 
 /// A quantity carried by a flow: each step it is replaced by `(1 − keep)·source +
 /// keep·(value upstream)`, so it is a moving average of the sources along the path, with an
-/// e-folding length of `1 / (1 − keep)` steps. Zero on land.
+/// e-folding length of `1 / (1 − keep)` steps. Zero on land; water whose path starts at a
+/// shore (upwelled from below) takes the local source rather than the land's zero, which
+/// had washed out the cold along every coast.
 fn carry_along(g: &AtmoGrid, flow: &[(f64, f64)], source: &[f64], land: &[f64], steps: usize, keep: f64) -> Vec<f64> {
-    let mut a = source.to_vec();
+    let sea: Vec<f64> = land.iter().map(|&l| if l >= 0.5 { 0.0 } else { 1.0 }).collect();
+    let sea_up = semi_lagrangian(g, flow, &sea, 0.0);
+    let mut a: Vec<f64> = source.iter().zip(&sea).map(|(s, w)| s * w).collect();
     for _ in 0..steps {
         let up = semi_lagrangian(g, flow, &a, 0.0);
-        a = (0..g.len()).map(|i| if land[i] >= 0.5 { 0.0 } else { (1.0 - keep) * source[i] + keep * up[i] }).collect();
+        a = (0..g.len())
+            .map(|i| {
+                if sea[i] == 0.0 {
+                    return 0.0;
+                }
+                let upstream = if sea_up[i] > 0.05 { up[i] / sea_up[i] } else { source[i] };
+                (1.0 - keep) * source[i] + keep * upstream
+            })
+            .collect();
     }
     a
+}
+
+/// Diffusion over the sea alone: land neither gives nor takes.
+fn diffuse_sea(g: &AtmoGrid, f: &mut [f64], land: &[f64], k: f64) {
+    let src = f.to_vec();
+    let sea = |i: usize| land[i] < 0.5;
+    for y in 0..g.h {
+        for x in 0..g.w {
+            let i = y * g.w + x;
+            if !sea(i) {
+                continue;
+            }
+            let nbrs = [y * g.w + (x + g.w - 1) % g.w, y * g.w + (x + 1) % g.w, y.saturating_sub(1) * g.w + x, (y + 1).min(g.h - 1) * g.w + x];
+            let (s, n) = nbrs.iter().filter(|&&j| sea(j)).fold((0.0, 0.0), |(s, n), &j| (s + src[j], n + 1.0));
+            if n > 0.0 {
+                f[i] = (1.0 - k) * src[i] + k * s / n;
+            }
+        }
+    }
 }
 
 pub struct Circulation;
@@ -350,7 +399,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 3;
+    const VERSION: u32 = 4;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -382,7 +431,7 @@ impl Generator for Circulation {
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
         let (tz, _) = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c).zonal_temperature(&lats);
-        let sst = if has_sea { sst_anomaly(&atmo, &cur, &annual, &tz, r, p) } else { vec![0.0; g.len()] };
+        let sst = if has_sea { sst_anomaly(&atmo, &cur, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
         let n = grid.len();
@@ -469,7 +518,7 @@ mod tests {
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
         let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
-        let sst = sst_anomaly(&a, &cur, &annual, &tz, 6371.0, &p);
+        let sst = sst_anomaly(&a, &cur, [&annual, &annual], &tz, 6371.0, &p);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
         assert!(s(38.0, 43) > 1.0, "warm western boundary {}", s(38.0, 43));
         assert!(s(25.0, 119) < -0.5, "cool eastern boundary {}", s(25.0, 119));

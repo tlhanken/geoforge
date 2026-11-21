@@ -55,7 +55,7 @@ impl Cells {
     /// Poleward edge of the Ferrel cell (the polar front) on the side of `lat`: it follows
     /// the sun like the rest of the pattern.
     fn polar_front(&self, lat: f64) -> f64 {
-        (self.ferrel + 1.2 * self.itcz * lat.signum()).clamp((self.hadley + 10.0).min(88.0), 88.0)
+        (self.ferrel + 4.0 + 0.5 * self.itcz * lat.signum()).clamp((self.hadley + 10.0).min(88.0), 88.0)
     }
 
     /// Surface wind (east, north), in units of a typical trade wind, of the zonal pattern.
@@ -114,10 +114,14 @@ impl Cells {
         let rel = (lat - rain_belt).abs();
         let ascent = 0.9 * (-(rel / (7.0 + 3.0 * land)).powi(2)).exp();
         // The sinking branch of each Hadley cell: a broad belt inside its subtropical edge,
-        // strongest in the winter hemisphere (whose cell reaches across the equator).
-        let edge = self.edge(lat).abs();
-        let winter = (-lat.signum() * self.itcz / 7.0).clamp(-1.0, 1.0);
-        let sink = (0.525 + 0.225 * winter) * plateau(lat.abs(), edge - 0.55 * self.hadley, edge + 0.1 * self.hadley, 8.0);
+        // strongest in the winter hemisphere (whose cell reaches across the equator). Each
+        // cell's belt is judged on its own side, so the rain-out is continuous across the ITCZ.
+        let belt = |poleward: f64, edge: f64, winter: f64| {
+            (0.525 + 0.225 * winter.clamp(-1.0, 1.0)) * plateau(poleward, edge - 0.55 * self.hadley, edge + 0.1 * self.hadley, 8.0)
+        };
+        let north = belt(lat, self.itcz + self.hadley, -self.itcz / 7.0);
+        let south = belt(-lat, self.hadley - self.itcz, self.itcz / 7.0);
+        let sink = north.max(south);
         (1.0 + ascent - sink + self.storminess(lat)).max(0.2)
     }
 
@@ -128,7 +132,9 @@ impl Cells {
     pub fn storminess(&self, lat: f64) -> f64 {
         let storm_lat = ((self.hadley + 18.0).min(self.ferrel) + 0.5 * self.itcz * lat.signum()).max(self.hadley);
         let storm = 0.8 * (-((lat.abs() - storm_lat) / 12.0).powi(2)).exp();
-        let subpolar = if lat.abs() > storm_lat { 0.5 } else { 0.0 };
+        // Fronts come often poleward of the track, fading in over ~12° (a step here drew
+        // rain lines along the latitude circles).
+        let subpolar = 0.5 * plateau(lat.abs(), storm_lat, 200.0, 12.0);
         storm + subpolar
     }
 }

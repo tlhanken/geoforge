@@ -103,88 +103,53 @@ const STATIONS: &[Station] = &[
 ];
 
 // Known gaps, by station or place: what the model gets wrong there.
-const NORTH_ATLANTIC: &str =
-    "the North Atlantic Drift carries too little warmth north (NE Atlantic +1.7 °C, observed +4.4)";
-const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range is 36 °C (observed 26), Germany's 22 (observed ~18)";
-const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 41 °C (observed 58)";
-const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 2300 mm at 40°N 117°W, observed ~250)";
+const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range is 31 °C (observed 26) and its mean 5 °C cold";
+const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 45 °C (observed 58)";
+const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 1600 mm at 40°N 117°W, observed ~250)";
 const GREAT_PLAINS: &str = "no summer rain on the Great Plains (warm-half share 0.00 at 40°N 100°W, observed ~0.75): Gulf of Mexico moisture never turns north";
-const WEST_AFRICA: &str =
-    "the West African monsoon reaches too far north (2450 mm at 13°N 0°E, observed ~600)";
-const ARABIA: &str =
-    "the summer rain belt reaches into Arabia (430 mm at 22°N 47°E, all of it in summer)";
-const HUMBOLDT: &str = "the Humboldt Current is a third as cold as observed (−1.5 °C, observed −4.9), so Lima is hot and gets the summer rains";
-const PAMPAS: &str =
-    "no summer rain flows south over the Pampas (Buenos Aires 374 mm, observed 1200)";
-const KAZAKHSTAN: &str = "the Kazakh steppe is twice as wet and less continental than observed (707 mm, range 27 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
+const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
+const ARABIA: &str = "the summer rain belt reaches into Arabia (600 mm at 22°N 47°E, all of it in summer), which cools it";
+const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
+const ICELAND: &str = "cold East Greenland water chills the air reaching Iceland: Reykjavik is 8 °C cold and gets a fifth of its rain";
+const KAZAKHSTAN: &str = "the Kazakh steppe is three times too wet and less continental than observed (990 mm, range 22 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
 const TIBET: &str = "Tibetan summers too warm (warmest month 16 °C at 4900 m, observed ~7) and the monsoon does not climb the plateau";
 const ANTARCTICA: &str = "the Antarctic plateau is ~17 °C too warm";
 const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Moscow", EUROPE),
     ("Yakutsk", SIBERIA),
-    ("Ulaanbaatar", SIBERIA),
-    ("Reykjavik", NORTH_ATLANTIC),
-    ("Chicago", "the eastern US runs 4 °C warm"),
+    ("Reykjavik", ICELAND),
     ("Beijing", "north China runs 4 °C warm"),
-    ("Tehran", "the Iranian plateau runs 4 °C cool"),
+    ("Tehran", "the Iranian plateau runs 6 °C cool"),
     ("Riyadh", ARABIA),
     ("Timbuktu", WEST_AFRICA),
     ("Phoenix", SOUTHWEST),
-    ("Lima", HUMBOLDT),
-    ("Utqiagvik", "the Arctic coast runs 5 °C warm"),
+    ("Lima", LIMA),
+    ("Utqiagvik", "the Arctic coast runs 4 °C warm"),
     ("Vostok", ANTARCTICA),
 ];
-const RANGE_GAPS: &[(&str, &str)] = &[
-    (
-        "Manaus",
-        "the equatorial interior is twice as seasonal as observed",
-    ),
-    ("Moscow", EUROPE),
-    ("Yakutsk", SIBERIA),
-];
+const RANGE_GAPS: &[(&str, &str)] = &[];
 const RAIN_GAPS: &[(&str, &str)] = &[
-    (
-        "London",
-        "no rain shadow in the lee of Britain's hills: London gets west-coast rain",
-    ),
-    ("Yakutsk", "the Siberian interior gets a sixth of its rain"),
-    ("Los Angeles", SOUTHWEST),
+    ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
+    ("Yakutsk", "the Siberian interior gets an eighth of its rain"),
+    ("Reykjavik", ICELAND),
     ("Phoenix", SOUTHWEST),
-    (
-        "Cape Town",
-        "the Cape's winter fronts bring a third of their rain",
-    ),
-    ("Buenos Aires", PAMPAS),
-    (
-        "Beijing",
-        "the East Asian summer monsoon brings under half its rain",
-    ),
-    ("Riyadh", ARABIA),
+    ("Cape Town", "the Cape's winter fronts bring 40% of their rain"),
     ("Timbuktu", WEST_AFRICA),
-    ("Lima", HUMBOLDT),
+    ("Tehran", "the Alborz's rain spreads to its dry southern foot (485–700 mm in the cells around Tehran)"),
     ("Dodge City", GREAT_PLAINS),
     ("Astana", KAZAKHSTAN),
-    ("Manaus", "the Amazon gets half its rain"),
-    (
-        "Nairobi",
-        "the East African highlands are drenched (3300 mm, observed 870)",
-    ),
+    ("Nairobi", "the East African highlands are drenched (3500 mm, observed 870)"),
     ("Lhasa", TIBET),
-    (
-        "Summit, Greenland",
-        "Greenland's interior gets under half its snow",
-    ),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
     ("Arabia", ARABIA),
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
+    ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
     ("Sahel", WEST_AFRICA),
     ("Great Plains", GREAT_PLAINS),
-    ("Eastern US", "the eastern US is too dry for forest (700 mm at 38°N 82°W, observed ~1100): Gulf of Mexico moisture never turns north"),
+    ("Eastern US", "the eastern US is too dry for forest (630 mm at 38°N 82°W, observed ~1100): Gulf of Mexico moisture never turns north"),
     ("Kazakh steppe", KAZAKHSTAN),
-    ("Pampas", PAMPAS),
-    ("Central Europe", EUROPE),
-    ("Greece", "Greece is drenched by winter storms (2750 mm at 38°N 22°E, observed 400–1100), too wet for Mediterranean woodland"),
+    ("Greece", "Greece is drenched by winter storms (1450 mm at 38°N 22°E, observed 400–1100), too wet for Mediterranean woodland"),
     ("Tibet", TIBET),
 ];
 const CLASSIFIER_GAPS: &[(&str, &str)] = &[
@@ -291,9 +256,19 @@ impl Earth {
         near(&self.grid, lat, lon, 2, |c| self.elev[c as usize] >= 0.0) as usize
     }
 
+    /// The land cell within a degree of a station whose height is nearest the station's: a
+    /// one-degree cell averages over valleys and ranges, and Lima's own cell is mostly Andes.
+    fn station_cell(&self, st: &Station) -> usize {
+        let near = cells_in(&self.grid, (st.lat - 1.0)..=(st.lat + 1.0), st.lon - 1.0, st.lon + 1.0);
+        near.into_iter()
+            .filter(|&c| self.elev[c as usize] >= 0.0)
+            .min_by(|&a, &b| (self.elev[a as usize] - st.elev_m).abs().total_cmp(&(self.elev[b as usize] - st.elev_m).abs()))
+            .map_or_else(|| self.at_land(st.lat, st.lon), |c| c as usize)
+    }
+
     fn station(&self, name: &str) -> (&'static Station, usize) {
         let st = STATIONS.iter().find(|st| st.name == name).unwrap();
-        (st, self.at_land(st.lat, st.lon))
+        (st, self.station_cell(st))
     }
 
     /// Area-weighted mean (east, north) of a vector field.
@@ -451,72 +426,19 @@ fn ocean(s: &mut Scorecard, e: &Earth) {
         "°C",
     );
     // Observed: annual SST departure from the zonal mean (scripts/real-earth/check.py).
-    for (name, lat, lon0, lon1, obs, gap) in [
-        (
-            "Kuroshio, 30–40°N 130–150°E",
-            30.0..=40.0,
-            130.0,
-            150.0,
-            0.2,
-            None,
-        ),
-        (
-            "California Current, 25–40°N 130–115°W",
-            25.0..=40.0,
-            -130.0,
-            -115.0,
-            -4.2,
-            None,
-        ),
-        (
-            "Humboldt, 25–5°S 85–72°W",
-            -25.0..=-5.0,
-            -85.0,
-            -72.0,
-            -4.9,
-            Some(HUMBOLDT),
-        ),
-        (
-            "Benguela, 30–15°S 5–14°E",
-            -30.0..=-15.0,
-            5.0,
-            14.0,
-            -4.4,
-            None,
-        ),
-        (
-            "Canary, 15–30°N 25–12°W",
-            15.0..=30.0,
-            -25.0,
-            -12.0,
-            -3.0,
-            None,
-        ),
-        (
-            "NE Atlantic, 45–65°N 30°W–10°E",
-            45.0..=65.0,
-            -30.0,
-            10.0,
-            4.4,
-            Some(NORTH_ATLANTIC),
-        ),
-    ] {
+    #[rustfmt::skip]
+    let observed = [
+        ("Kuroshio, 30–40°N 130–150°E", 30.0..=40.0, 130.0, 150.0, 0.2),
+        ("California Current, 25–40°N 130–115°W", 25.0..=40.0, -130.0, -115.0, -4.2),
+        ("Humboldt, 25–5°S 85–72°W", -25.0..=-5.0, -85.0, -72.0, -4.9),
+        ("Benguela, 30–15°S 5–14°E", -30.0..=-15.0, 5.0, 14.0, -4.4),
+        ("Canary, 15–30°N 25–12°W", 15.0..=30.0, -25.0, -12.0, -3.0),
+        ("NE Atlantic, 45–65°N 30°W–10°E", 45.0..=65.0, -30.0, 10.0, 4.4),
+    ];
+    for (name, lat, lon0, lon1, obs) in observed {
         // Within 2.5 °C of observed, on the observed side of zero.
-        let (lo, hi) = if obs > 0.0 {
-            (f64::max(0.0, obs - 2.5), obs + 2.5)
-        } else {
-            (obs - 2.5, f64::min(0.0, obs + 2.5))
-        };
-        s.range(
-            "sea surface",
-            format!("{name} (observed {obs:+.1})"),
-            anom(lat, lon0, lon1),
-            lo..=hi,
-            "°C",
-        );
-        if let Some(why) = gap {
-            s.gap(why);
-        }
+        let (lo, hi) = if obs > 0.0 { (f64::max(0.0, obs - 2.5), obs + 2.5) } else { (obs - 2.5, f64::min(0.0, obs + 2.5)) };
+        s.range("sea surface", format!("{name} (observed {obs:+.1})"), anom(lat, lon0, lon1), lo..=hi, "°C");
     }
 }
 
@@ -555,7 +477,7 @@ fn temperature(s: &mut Scorecard, e: &Earth) {
     )
     .gap(ANTARCTICA);
     for st in STATIONS {
-        let c = e.at_land(st.lat, st.lon);
+        let c = e.station_cell(st);
         // Compare at the station's height: the cell can be a few hundred metres off.
         let at_station = e.t[c] + 6.5 * (e.elev[c].max(0.0) - st.elev_m) / 1000.0;
         s.range(
@@ -591,7 +513,7 @@ fn temperature(s: &mut Scorecard, e: &Earth) {
 fn precipitation(s: &mut Scorecard, e: &Earth) {
     let g = &e.grid;
     for st in STATIONS {
-        let v = e.precip[e.at_land(st.lat, st.lon)];
+        let v = e.precip[e.station_cell(st)];
         // Within a factor of two or so; a hyperarid station may read zero.
         let lo = if st.precip < 50.0 {
             0.0
@@ -631,7 +553,8 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
         mean(g, &e.land(), |c| e.precip[c as usize]),
         650.0..=950.0,
         "mm",
-    );
+    )
+    .gap("land gets ~20% too much rain: the drenched interior Southwest, the Kazakh steppe and East Africa");
     let both = |lo: f64, hi: f64| {
         [
             e.sea(lo..=hi, -180.0, 180.0),
@@ -645,8 +568,7 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
         mean(g, &both(20.0, 30.0), |c| e.precip[c as usize]),
         450.0..=1000.0,
         "mm",
-    )
-    .gap("the subtropical oceans get half their rain");
+    );
     s.range(
         "precipitation",
         "equatorial oceans, 5°S–10°N (Earth ~2000)",
@@ -660,7 +582,7 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
     let matches = STATIONS
         .iter()
         .filter(|st| {
-            let c = e.at_land(st.lat, st.lon);
+            let c = e.station_cell(st);
             koppen_group(e.t[c], e.t_range[c], e.precip[c], e.warm_share[c])
                 == observed_group(st.koppen)
         })
@@ -808,6 +730,14 @@ fn scorecard() -> &'static Scorecard {
     static S: OnceLock<Scorecard> = OnceLock::new();
     S.get_or_init(|| {
         let e = earth();
+        known::dump("climate_temperature", e.t.iter().copied());
+        known::dump("climate_precipitation", e.precip.iter().copied());
+        known::dump("climate_warm_share", e.warm_share.iter().copied());
+        known::dump("climate_t_range", e.t_range.iter().copied());
+        known::dump("circulation_sst_anomaly", e.p.sst_anomaly().unwrap().values.iter().map(|&v| f64::from(v)));
+        let (jul, jan) = (e.p.wind_jul().unwrap(), e.p.wind_jan().unwrap());
+        known::dump("circulation_wind_jul", jul.values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));
+        known::dump("circulation_wind_jan", jan.values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));
         let mut s = Scorecard::default();
         winds(&mut s, e);
         ocean(&mut s, e);
