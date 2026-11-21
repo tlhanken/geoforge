@@ -12,6 +12,6 @@ pub mod grid;
 pub mod radiation;
 pub mod transport;
 
-pub use cells::{monsoon_flow, winds, Cells, Season};
+pub use cells::{monsoon_flow, winds, Cells, Season, Substellar};
 pub use grid::{Atmo, AtmoGrid};
 pub use radiation::Radiation;

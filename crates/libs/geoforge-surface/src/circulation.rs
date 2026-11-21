@@ -132,7 +132,7 @@ pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f6
     let g = &a.g;
     let cells = &season.cells;
     let mut w = winds(a, season, p.monsoon);
-    if p.subtropical_highs > 0.0 {
+    if p.subtropical_highs > 0.0 && season.locked.is_none() {
         // Anticyclones over each basin: poleward on the western side, equatorward on the east.
         let b = basins(a, 6371.0);
         let mut v_high = vec![0.0; g.len()];
@@ -449,7 +449,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 6;
+    const VERSION: u32 = 7;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -471,17 +471,18 @@ impl Generator for Circulation {
         let wet = body.interior.has_surface_liquid_water();
         let atmo = Atmo::from_world(grid, elev, p.resolution_deg, wet);
         let g: AtmoGrid = atmo.g;
-        let obl = body.irradiance.obliquity_deg;
-        let rot = body.exterior.rotation_h;
-        let jul = season_winds(&atmo, &Season::new(&atmo, rot, obl, 1.0, p.monsoon), p);
-        let jan = season_winds(&atmo, &Season::new(&atmo, rot, obl, -1.0, p.monsoon), p);
+        let jul = season_winds(&atmo, &Season::for_body(&atmo, body, 1.0, p.monsoon), p);
+        let jan = season_winds(&atmo, &Season::for_body(&atmo, body, -1.0, p.monsoon), p);
         let annual: Vec<(f64, f64)> = jul.iter().zip(&jan).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let has_sea = atmo.land.iter().any(|l| *l < 0.5);
         let cur = if has_sea { currents(&atmo, &annual, r, p) } else { vec![(0.0, 0.0); g.len()] };
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
         let (tz, _) = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c).zonal_temperature(&lats);
-        let sst = if has_sea { sst_anomaly(&atmo, &cur, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
+        // A locked world's currents carry heat to its night side; the zonal anomaly model does
+        // not describe that, so it is left out.
+        let locked = crate::atmosphere::Substellar::for_body(body).is_some();
+        let sst = if has_sea && !locked { sst_anomaly(&atmo, &cur, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
         let n = grid.len();
@@ -554,7 +555,7 @@ mod tests {
         let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
-        let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 23.0, 0.0), 0.0, g.w), &p);
+        let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 6371.0, 23.0, 0.0), 0.0, g.w), &p);
         let cur = currents(&a, &annual, 6371.0, &p);
         let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
         // Western boundary (x just east of 40) at 30°N: strong northward flow.

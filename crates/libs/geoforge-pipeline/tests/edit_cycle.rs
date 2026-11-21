@@ -24,7 +24,7 @@ fn generate_edit_regenerate() {
 
     // First run builds everything; a second run reuses everything.
     let (p1, r1) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
-    assert_eq!(ran(&r1), LayerId::ALL.to_vec());
+    assert_eq!(ran(&r1), LayerId::ALL.into_iter().filter(|l| *l != LayerId::Bands).collect::<Vec<_>>());
     let (_, r2) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
     assert!(ran(&r2).is_empty(), "nothing should rerun: {:?}", ran(&r2));
     // Reopening from disk gives the same products.
@@ -87,7 +87,7 @@ fn generate_edit_regenerate() {
     let ProductData::CrustType(ct) = p5.get(ProductId::CrustType).unwrap() else { panic!() };
     assert!(ct.values.iter().all(|c| *c == geoforge_core::surface::CrustType::Continental));
     let plan = pipe::plan(&w).unwrap();
-    assert!(plan.layers.iter().flat_map(|l| &l.products).all(|p| p.state == State::Fresh));
+    assert!(plan.layers.iter().filter(|l| l.not_applicable.is_none()).flat_map(|l| &l.products).all(|p| p.state == State::Fresh));
 
     // Reset drops the edit; it is generated again.
     pipe::reset(&mut w, ProductId::CrustType).unwrap();

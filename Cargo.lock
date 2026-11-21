@@ -440,6 +440,7 @@ dependencies = [
  "geoforge-cosmos",
  "geoforge-pipeline",
  "geoforge-store",
+ "geoforge-surface",
  "serde_json",
  "toml",
 ]

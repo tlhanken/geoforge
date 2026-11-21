@@ -305,6 +305,16 @@ Their gaps:
   and no water lost while the young star was bright.
 - A pulsar's wind does not heat its planets.
 
+### Other worlds' circulation
+
+- Cells beyond Earth's three are a pattern, not a simulation: very fast rotators (5–7 cells)
+  show thin row-by-row streaks in ocean rain, and the ocean gyres still follow one jet.
+- Tidally locked worlds: the substellar point is always at 0°E; ocean currents do not carry
+  heat to the night side (the SST anomaly is left out), and the CO₂ thermostat still tunes
+  the air for a turning world, so locked worlds come out cooler than geology would leave them.
+- Giants' bands are drawn from the wind profile, not simulated: no polar hexagon or
+  cyclone clusters, storms do not drift, and colour is a palette by class (no chemistry).
+
 ## Known gaps
 
 1. **Generated worlds now run dry.** Hot desert is 0.05–0.34 of land vs 0.14, land drier

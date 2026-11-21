@@ -329,6 +329,18 @@ fn show(w: &World) -> R<()> {
         body.interior.surface_ocean_gel_km(),
         body.interior.surface_pressure_bar()
     );
+    if body.interior.has_atmosphere() {
+        let rot = body.exterior.rotation_h;
+        if let Some(s) = geoforge_surface::atmosphere::Substellar::for_body(&body) {
+            println!("circulation: tidally locked; air rises under the star (0°N {:.0}°E) and returns along the ground from the night side; equatorial jet {:.1}", s.lon, s.superrotation);
+        } else if body.interior.has_solid_surface() {
+            let cells = geoforge_surface::atmosphere::Cells::for_body(rot, body.exterior.radius_km, 0.0, 0.0);
+            println!("circulation: {} cells per hemisphere; eddy-driven jets: {}; Hadley cell to {:.0}°", cells.count(), cells.jets, cells.hadley);
+        } else {
+            let p = geoforge_surface::bands::Profile::for_body(&body, &geoforge_surface::bands::BandsParams::default());
+            println!("bands: jets per hemisphere: {}; equatorial wind {:+.0} m/s", p.jets, p.wind(0.0));
+        }
+    }
     if let GridSpec::Equirect { width, height } = w.manifest.grid {
         println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
     }

@@ -22,14 +22,15 @@ fn regimes_pick_their_generators() {
     use I::*;
     let archetype = |a: Archetype| world(a.slug(), Some(a.context(Key(1), a.name())), None);
     let cases = [
-        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Erosion), Some(Hydrology), Some(Biomes)]),
-        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None]),
-        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None]),
-        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None]),
-        (Archetype::Europa, vec![None; 8]),
-        (Archetype::GasGiant, vec![None; 8]),
+        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Erosion), Some(Hydrology), Some(Biomes), None]),
+        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None]),
+        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None]),
+        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None, None]),
+        (Archetype::Europa, vec![None; 9]),
+        (Archetype::GasGiant, [vec![None; 8], vec![Some(GiantBands)]].concat()),
+        (Archetype::IceGiant, [vec![None; 8], vec![Some(GiantBands)]].concat()),
     ];
-    assert_eq!(LayerId::ALL.len(), 8);
+    assert_eq!(LayerId::ALL.len(), 9);
     for (a, want) in cases {
         assert_eq!(fillers(&archetype(a)), want, "{a}");
     }
@@ -65,4 +66,19 @@ fn any_body_of_a_system_can_be_the_focus() {
     let dir = std::env::temp_dir().join(format!("geoforge-types-nobody-{}", std::process::id()));
     let err = pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 64, height: 32 }, body: None, focus: Some("Nowhere".into()) });
     assert!(err.is_err());
+}
+
+/// A giant gets bands and nothing else, the same each time.
+#[test]
+fn giants_get_bands() {
+    let a = Archetype::GasGiant;
+    let mut w1 = world("giant-1", Some(a.context(Key(1), a.name())), None);
+    let mut w2 = world("giant-2", Some(a.context(Key(1), a.name())), None);
+    let (p1, _) = pipe::generate(&mut w1, &GenerateOptions::default(), |_| {}).unwrap();
+    let (p2, _) = pipe::generate(&mut w2, &GenerateOptions::default(), |_| {}).unwrap();
+    let bands = p1.cloud_bands().unwrap();
+    assert_eq!(Some(bands), p2.cloud_bands());
+    assert!(p1.zonal_wind().unwrap().values.iter().any(|&u| u > 50.0) && p1.elevation().is_none());
+    let (lo, hi) = bands.values.iter().fold((1.0f32, 0.0f32), |(l, h), &v| (l.min(v), h.max(v)));
+    assert!(lo < 0.3 && hi > 0.8, "dark belts and bright zones: {lo}..{hi}");
 }

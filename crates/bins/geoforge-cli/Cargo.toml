@@ -14,6 +14,7 @@ path = "src/main.rs"
 geoforge-core = { path = "../../libs/geoforge-core" }
 geoforge-cosmos = { path = "../../libs/geoforge-cosmos" }
 geoforge-store = { path = "../../libs/geoforge-store" }
+geoforge-surface = { path = "../../libs/geoforge-surface" }
 geoforge-pipeline = { path = "../../libs/geoforge-pipeline" }
 clap = { workspace = true }
 serde_json = "1"

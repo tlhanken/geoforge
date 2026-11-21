@@ -24,10 +24,12 @@ pub enum LayerId {
     Erosion,
     Hydrology,
     Biomes,
+    /// The banded cloud tops of a world without a surface (giants).
+    Bands,
 }
 
 impl LayerId {
-    pub const ALL: [LayerId; 8] = [
+    pub const ALL: [LayerId; 9] = [
         LayerId::Tectonics,
         LayerId::Geology,
         LayerId::Elevation,
@@ -36,6 +38,7 @@ impl LayerId {
         LayerId::Erosion,
         LayerId::Hydrology,
         LayerId::Biomes,
+        LayerId::Bands,
     ];
     #[must_use]
     pub fn name(self) -> &'static str {
@@ -48,6 +51,7 @@ impl LayerId {
             LayerId::Erosion => "erosion",
             LayerId::Hydrology => "hydrology",
             LayerId::Biomes => "biomes",
+            LayerId::Bands => "bands",
         }
     }
     #[must_use]
@@ -108,10 +112,12 @@ pub enum ProductId {
     Lakes,
     Watersheds,
     Biome,
+    ZonalWind,
+    CloudBands,
 }
 
 impl ProductId {
-    pub const ALL: [ProductId; 22] = [
+    pub const ALL: [ProductId; 24] = [
         ProductId::Plates,
         ProductId::CrustType,
         ProductId::CrustAge,
@@ -134,6 +140,8 @@ impl ProductId {
         ProductId::Lakes,
         ProductId::Watersheds,
         ProductId::Biome,
+        ProductId::ZonalWind,
+        ProductId::CloudBands,
     ];
 
     /// Stable name: used in file names and seed derivation. Frozen.
@@ -162,6 +170,8 @@ impl ProductId {
             ProductId::Lakes => "lakes",
             ProductId::Watersheds => "watersheds",
             ProductId::Biome => "biome",
+            ProductId::ZonalWind => "zonal_wind",
+            ProductId::CloudBands => "cloud_bands",
         }
     }
 
@@ -181,6 +191,7 @@ impl ProductId {
             ProductId::Temperature | ProductId::TemperatureRange | ProductId::Precipitation | ProductId::PrecipitationWarmShare => LayerId::Climate,
             ProductId::Rivers | ProductId::Lakes | ProductId::Watersheds => LayerId::Hydrology,
             ProductId::Biome => LayerId::Biomes,
+            ProductId::ZonalWind | ProductId::CloudBands => LayerId::Bands,
         }
     }
 
@@ -202,7 +213,9 @@ impl ProductId {
             | ProductId::Temperature
             | ProductId::TemperatureRange
             | ProductId::Precipitation
-            | ProductId::PrecipitationWarmShare => Shape::Field,
+            | ProductId::PrecipitationWarmShare
+            | ProductId::ZonalWind
+            | ProductId::CloudBands => Shape::Field,
             ProductId::TectonicEvents | ProductId::GeologyEvents => Shape::Timeline,
             ProductId::Rivers => Shape::Network,
         }
@@ -239,6 +252,7 @@ impl ProductId {
             ProductId::Temperature | ProductId::TemperatureRange | ProductId::SstAnomaly => "degC",
             ProductId::Precipitation => "mm/yr",
             ProductId::PrecipitationWarmShare => "fraction",
+            ProductId::ZonalWind => "m/s",
             _ => "",
         }
     }
@@ -397,6 +411,8 @@ pub enum ProductData {
     Lakes(Partition<Lake>),
     Watersheds(Partition<Watershed>),
     Biome(Partition<BiomeClass>),
+    ZonalWind(Field<f32>),
+    CloudBands(Field<f32>),
 }
 
 impl ProductData {
@@ -425,6 +441,8 @@ impl ProductData {
             ProductData::Lakes(_) => ProductId::Lakes,
             ProductData::Watersheds(_) => ProductId::Watersheds,
             ProductData::Biome(_) => ProductId::Biome,
+            ProductData::ZonalWind(_) => ProductId::ZonalWind,
+            ProductData::CloudBands(_) => ProductId::CloudBands,
         }
     }
 
@@ -440,7 +458,9 @@ impl ProductData {
             | ProductData::Temperature(f)
             | ProductData::TemperatureRange(f)
             | ProductData::Precipitation(f)
-            | ProductData::PrecipitationWarmShare(f) => Some(f),
+            | ProductData::PrecipitationWarmShare(f)
+            | ProductData::ZonalWind(f)
+            | ProductData::CloudBands(f) => Some(f),
             _ => None,
         }
     }
@@ -456,7 +476,9 @@ impl ProductData {
             | ProductData::Temperature(f)
             | ProductData::TemperatureRange(f)
             | ProductData::Precipitation(f)
-            | ProductData::PrecipitationWarmShare(f) => Some(f),
+            | ProductData::PrecipitationWarmShare(f)
+            | ProductData::ZonalWind(f)
+            | ProductData::CloudBands(f) => Some(f),
             _ => None,
         }
     }
@@ -474,6 +496,8 @@ impl ProductData {
             ProductId::TemperatureRange => ProductData::TemperatureRange(f),
             ProductId::Precipitation => ProductData::Precipitation(f),
             ProductId::PrecipitationWarmShare => ProductData::PrecipitationWarmShare(f),
+            ProductId::ZonalWind => ProductData::ZonalWind(f),
+            ProductId::CloudBands => ProductData::CloudBands(f),
             _ => return None,
         })
     }
@@ -570,6 +594,8 @@ getters! {
     lakes => Lakes: Partition<Lake>,
     watersheds => Watersheds: Partition<Watershed>,
     biome => Biome: Partition<BiomeClass>,
+    zonal_wind => ZonalWind: Field<f32>,
+    cloud_bands => CloudBands: Field<f32>,
 }
 
 impl Products {

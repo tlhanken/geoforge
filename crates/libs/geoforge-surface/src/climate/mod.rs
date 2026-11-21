@@ -8,9 +8,11 @@
 //!    and pressure) and poleward heat transport, with an ice-albedo feedback on wet worlds.
 //! 2. **Seasons** from the body's obliquity, eccentricity and year: the annual harmonic of
 //!    insolation sets the seasonal swing, damped by the air column and the ocean.
-//! 3. **Circulation** from rotation: Hadley, Ferrel and polar cells (the Hadley cell widens
-//!    on slowly rotating bodies), shifted seasonally with the ITCZ, which moves further over
-//!    large heated land; plus monsoon flow into the summer heat lows.
+//! 3. **Circulation** from rotation and size: a Hadley cell (wider on slow rotators) and as
+//!    many eddy-driven jets as the Rhines scale allows (Earth one: Ferrel and polar cells),
+//!    shifted seasonally with the ITCZ, which moves further over large heated land; plus
+//!    monsoon flow into the summer heat lows. A tidally locked world is balanced and
+//!    circulated around its substellar point instead, without seasons.
 //! 4. **Continentality**: a maritime-air tracer carried by the winds, so west coasts in the
 //!    westerlies are mild and continental interiors have large seasonal swings.
 //! 5. **Moisture**: water vapour carried along the winds on a coarse atmosphere grid;
@@ -35,7 +37,7 @@ pub use moisture::w_sat;
 
 use crate::atmosphere::transport::carry;
 use crate::atmosphere::grid::{ground_m, is_sea};
-use crate::atmosphere::{Atmo, AtmoGrid, Radiation, Season};
+use crate::atmosphere::{Atmo, AtmoGrid, Radiation, Season, Substellar};
 use geoforge_core::grid::{distance_field, Cell};
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
 use geoforge_core::shapes::Field;
@@ -143,7 +145,6 @@ impl Climate {
         let lapse = p.lapse_rate(body);
         let atmo = Atmo::from_world(grid, elev, p.resolution_deg, wet);
         let g = atmo.g;
-        let obl_w = body.irradiance.obliquity_deg;
         // The rain belt and monsoons follow the circulation layer's defaults.
         let circulation = crate::circulation::CirculationParams::default();
         let season_winds: Vec<Vec<(f64, f64)>> = match (inputs.wind_jul(), inputs.wind_jan()) {
@@ -153,7 +154,7 @@ impl Climate {
             ],
             _ => [1.0, -1.0]
                 .into_iter()
-                .map(|sign| crate::circulation::season_winds(&atmo, &Season::new(&atmo, body.exterior.rotation_h, obl_w, sign, circulation.monsoon), &circulation))
+                .map(|sign| crate::circulation::season_winds(&atmo, &Season::for_body(&atmo, body, sign, circulation.monsoon), &circulation))
                 .collect(),
         };
         let sst: Vec<f64> = match inputs.sst_anomaly() {
@@ -163,10 +164,11 @@ impl Climate {
 
         // 1. Zonal energy balance.
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
-        let obl = body.irradiance.obliquity_deg;
         let radiation = Radiation::for_body(body, p.heat_transport, p.greenhouse_offset_c);
-        let (tz, tmean) = radiation.zonal_temperature(&lats);
-        let swing_z: Vec<f64> = lats.iter().map(|&l| radiation.seasonal_range(l)).collect();
+        // A tidally locked world: by angle from the substellar point, with no seasons.
+        let locked = Substellar::for_body(body);
+        let (tz, tmean) = if locked.is_some() { radiation.substellar_temperature(&lats) } else { radiation.zonal_temperature(&lats) };
+        let swing_z: Vec<f64> = lats.iter().map(|&l| if locked.is_some() { 0.0 } else { radiation.seasonal_range(l) }).collect();
 
         // 2–4. Continentality and current-warmed air from annual-mean winds.
         let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
@@ -184,7 +186,7 @@ impl Climate {
         let mut t_sl = vec![0.0; g.len()];
         let mut swing = vec![0.0; g.len()];
         let monsoon = circulation.monsoon;
-        let seasons_def = [1.0, -1.0].map(|sign| Season::new(&atmo, body.exterior.rotation_h, obl, sign, monsoon));
+        let seasons_def = [1.0, -1.0].map(|sign| Season::for_body(&atmo, body, sign, monsoon));
         let mut t_season = [vec![0.0; g.len()], vec![0.0; g.len()]];
         let mut t_mean_here = vec![0.0; g.len()];
         for i in 0..g.len() {
@@ -193,8 +195,11 @@ impl Climate {
             let is_land = atmo.land[i] >= 0.5;
             let cont = continentality(is_land, mar[i], if is_land { 400.0 } else { 0.0 });
             // Interiors at higher latitude are colder than the zonal mean; mild west coasts warmer.
-            let hi = (lat.to_radians().sin().abs() - 0.3).max(0.0);
-            let t = tz[y] - 7.0 * (cont - 0.35) * hi * atmo.land[i].max(0.3) + sst_air[i];
+            let (hi, t0) = match &locked {
+                Some(s) => (0.0, interpolate(&lats, &tz, 90.0 - s.zenith(lat, g.lon(i % g.w)))),
+                None => ((lat.to_radians().sin().abs() - 0.3).max(0.0), tz[y]),
+            };
+            let t = t0 - 7.0 * (cont - 0.35) * hi * atmo.land[i].max(0.3) + sst_air[i];
             t_sl[i] = t;
             swing[i] = swing_z[y];
             let range = swing[i].abs() * (0.13 + 0.87 * cont);
@@ -227,7 +232,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 7;
+    const VERSION: u32 = 8;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -356,6 +361,22 @@ pub fn on_ground(temperature: &[f32], rough: Option<&[f32]>, elevation: &[f32], 
         .zip(rough.iter().zip(elevation))
         .map(|(&t, (&r, &e))| if e >= 0.0 && r >= 0.0 { t + (lapse * f64::from(r - e)) as f32 } else { t })
         .collect()
+}
+
+/// `f` at `x` by linear interpolation between samples `f[k]` at `xs[k]` (any order).
+fn interpolate(xs: &[f64], f: &[f64], x: f64) -> f64 {
+    let mut idx: Vec<usize> = (0..xs.len()).collect();
+    idx.sort_by(|&a, &b| xs[a].total_cmp(&xs[b]));
+    let (first, last) = (idx[0], idx[idx.len() - 1]);
+    if x <= xs[first] {
+        return f[first];
+    }
+    if x >= xs[last] {
+        return f[last];
+    }
+    let k = idx.windows(2).find(|w| x <= xs[w[1]]).expect("x inside the samples");
+    let (a, b) = (k[0], k[1]);
+    f[a] + (f[b] - f[a]) * (x - xs[a]) / (xs[b] - xs[a])
 }
 
 /// Potential evapotranspiration, mm/yr, from mean annual temperature (Thornthwaite-like,

@@ -1,4 +1,20 @@
-//! The general circulation by rotation: Hadley, Ferrel and polar cells, and monsoons.
+//! The general circulation by rotation and size: Hadley cells, eddy-driven jets with the
+//! cells between them, and monsoons.
+//!
+//! The Hadley cell narrows as rotation quickens (width ∝ Ω^(−2/3); Earth 30°). Poleward of
+//! it, eddy-driven jets are spaced by the Rhines scale (Chemke & Kaspi 2015), so a world
+//! that spins faster or is larger has more of them: at four times Earth's rotation, or with
+//! a larger radius, idealized GCMs show about three per hemisphere (GFDL). Each jet has
+//! surface westerlies under it and easterlies on its poleward side, so a hemisphere has
+//! 1 + 2·jets cells: Earth one jet and three cells (Hadley, Ferrel, polar), a fast or big
+//! world five or seven, and a slow one like Venus or Titan no jet and a Hadley cell reaching
+//! to a polar cap.
+//!
+//! A world that turns once per orbit keeps one face to its star ([`Substellar`]): the air
+//! rises over the substellar point and flows back toward it along the ground from every
+//! side, the night side under sinking air; faster-turning ones add an equatorial
+//! superrotating jet (Haqq-Misra et al. 2018: slow rotators beyond ~20-day periods, Rhines
+//! rotators below).
 //!
 //! [`Cells`] is the zonal pattern of one season. [`Season`] adds the longitudes: the ITCZ
 //! follows the sun over the oceans but is pulled far into the summer hemisphere over large
@@ -7,6 +23,7 @@
 //! westerlies.
 
 use super::grid::Atmo;
+use geoforge_core::BodyContext;
 use std::f64::consts::PI;
 
 /// How far the ITCZ moves over land, as a share of the obliquity per unit of summer-side
@@ -30,6 +47,18 @@ pub struct Cells {
     pub hadley: f64,
     /// Poleward edge of the Ferrel cells, degrees.
     pub ferrel: f64,
+    /// Eddy-driven jets per hemisphere ([`jets_for`]).
+    pub jets: u32,
+}
+
+/// Eddy-driven jets per hemisphere: jet spacing follows the Rhines scale, ∝ (a·Ω)^(−1/2) at
+/// fixed wind speed, and the winds themselves weaken with faster rotation; fitted as
+/// round((a·Ω / a⊕·Ω⊕)^0.75) through Earth's one jet and the three of a world spinning four
+/// times faster. Mars: 1; a 1.8 R⊕ world with Earth's day: 2; Venus and Titan: 0.
+#[must_use]
+pub fn jets_for(rotation_h: f64, radius_km: f64) -> u32 {
+    let a_omega = (radius_km / 6371.0) * (24.0 / rotation_h.abs().max(1.0));
+    a_omega.powf(0.75).round().min(12.0) as u32
 }
 
 /// 0 below `lo`, 1 inside, 0 above `hi`, with smooth shoulders `soft` wide.
@@ -43,11 +72,49 @@ fn plateau(x: f64, lo: f64, hi: f64, soft: f64) -> f64 {
 
 impl Cells {
     #[must_use]
-    pub fn for_body(rotation_h: f64, obliquity: f64, season: f64) -> Self {
+    pub fn for_body(rotation_h: f64, radius_km: f64, obliquity: f64, season: f64) -> Self {
         // Hadley width ~ Ω^(-2/3) (GCM scaling); Earth: 30°.
         let hadley = (30.0 * (rotation_h.abs().max(1.0) / 24.0).powf(2.0 / 3.0)).clamp(12.0, 80.0);
         let ferrel = (hadley * 2.0).min(85.0);
-        Self { itcz: season * 0.3 * obliquity.min(45.0), hadley, ferrel }
+        Self { itcz: season * 0.3 * obliquity.min(45.0), hadley, ferrel, jets: jets_for(rotation_h, radius_km) }
+    }
+
+    /// Cells per hemisphere: the Hadley cell, then a pair per jet; with no jet, a polar cap.
+    #[must_use]
+    pub fn count(&self) -> u32 {
+        if self.jets == 0 { 2 } else { 1 + 2 * self.jets }
+    }
+
+    /// Where `lat` (poleward of the Hadley cell) falls among the jets: westerly band or not,
+    /// position across the band (0–1), and the band's width (degrees). One jet's westerlies run
+    /// from the Hadley edge to the polar front, as on Earth; more jets repeat that pair of
+    /// bands, westerly and easterly, in the same proportions out to the pole; no jet leaves
+    /// one easterly polar band.
+    fn band(&self, lat: f64) -> (bool, f64, f64) {
+        let e0 = self.edge(lat).abs();
+        let span = (90.0 - e0).max(1.0);
+        if self.jets == 0 {
+            return (false, ((lat.abs() - e0) / span).clamp(0.0, 1.0), span);
+        }
+        let f = ((self.polar_front(lat) - e0) / span).clamp(0.2, 0.8);
+        let pair = span / f64::from(self.jets);
+        let r = (lat.abs() - e0).clamp(0.0, span - 1e-9);
+        let q = r - (r / pair).floor() * pair;
+        if q < f * pair {
+            (true, q / (f * pair), f * pair)
+        } else {
+            (false, (q - f * pair) / ((1.0 - f) * pair), (1.0 - f) * pair)
+        }
+    }
+
+    /// Centres of the westerly bands on the side of `lat` (where the storm tracks run), and
+    /// the band width, degrees.
+    fn storm_tracks(&self, lat: f64) -> (Vec<f64>, f64) {
+        let e0 = self.edge(lat).abs();
+        let span = (90.0 - e0).max(1.0);
+        let f = ((self.polar_front(lat) - e0) / span).clamp(0.2, 0.8);
+        let pair = span / f64::from(self.jets.max(1));
+        ((0..self.jets).map(|k| e0 + f64::from(k) * pair + 0.5 * f * pair).collect(), f * pair)
     }
 
     /// Subtropical edge of the Hadley cell on the side of `lat`.
@@ -89,6 +156,11 @@ impl Cells {
             };
             return (u, -0.45 * s * side);
         }
+        if self.jets != 1 {
+            let (westerly, x, _) = self.band(lat);
+            let s = (PI * x).sin();
+            return if westerly { (1.0 * s, 0.3 * s * hemi) } else { (-0.6 * s, -0.35 * s * hemi) };
+        }
         let edge = self.edge(lat);
         let front = self.polar_front(lat);
         let ferrel_w = (front - edge.abs()).max(5.0);
@@ -124,7 +196,15 @@ impl Cells {
         };
         let north = belt(lat, self.itcz + self.hadley, -self.itcz / 7.0);
         let south = belt(-lat, self.hadley - self.itcz, self.itcz / 7.0);
-        let sink = north.max(south);
+        let mut sink = north.max(south);
+        // With more jets, each easterly band hands over to the next westerlies under a high.
+        if self.jets > 1 {
+            let (tracks, w) = self.storm_tracks(lat);
+            for c in tracks.iter().skip(1) {
+                let high = c - 0.5 * w;
+                sink = sink.max(0.4 * (-((lat.abs() - high) / (0.3 * w)).powi(2)).exp());
+            }
+        }
         (1.0 + ascent - sink + self.storminess(lat)).max(0.2)
     }
 
@@ -133,12 +213,72 @@ impl Cells {
     /// rain to the subtropical west coasts.
     #[must_use]
     pub fn storminess(&self, lat: f64) -> f64 {
+        if self.jets == 0 {
+            // No baroclinic eddies to speak of on a slow rotator.
+            return 0.0;
+        }
+        if self.jets > 1 {
+            let (tracks, w) = self.storm_tracks(lat);
+            let scale = w / 34.0;
+            let storm = tracks.iter().map(|c| 0.8 * (-((lat.abs() - c) / (12.0 * scale)).powi(2)).exp()).fold(0.0, f64::max);
+            return storm + 0.5 * plateau(lat.abs(), tracks[0], 200.0, 12.0 * scale);
+        }
         let storm_lat = ((self.hadley + 18.0).min(self.ferrel) + 0.5 * self.itcz * lat.signum()).max(self.hadley);
         let storm = 0.8 * (-((lat.abs() - storm_lat) / 12.0).powi(2)).exp();
         // Fronts come often poleward of the track, fading in over ~12° (a step here drew
         // rain lines along the latitude circles).
         let subpolar = 0.5 * plateau(lat.abs(), storm_lat, 200.0, 12.0);
         storm + subpolar
+    }
+}
+
+/// The circulation of a tidally locked world, organised around the point under its star.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Substellar {
+    /// Longitude of the substellar point (on the equator), degrees.
+    pub lon: f64,
+    /// Surface equatorial superrotation, in trade-wind units: none for periods over 20 days.
+    pub superrotation: f64,
+}
+
+/// Longitude under the star of a locked world: the map is centred on its day side.
+pub const SUBSTELLAR_LON: f64 = 0.0;
+
+impl Substellar {
+    /// `Some` when the body turns once per orbit (to within 1%).
+    #[must_use]
+    pub fn for_body(body: &BodyContext) -> Option<Self> {
+        let year_h = body.irradiance.year_days * 24.0;
+        let locked = year_h > 0.0 && (body.exterior.rotation_h / year_h - 1.0).abs() < 0.01;
+        let period_days = body.exterior.rotation_h / 24.0;
+        locked.then(|| Self { lon: SUBSTELLAR_LON, superrotation: 0.4 * ((20.0 - period_days) / 15.0).clamp(0.0, 1.0) })
+    }
+
+    /// Angle from the substellar point, degrees (0 under the star, 180 opposite).
+    #[must_use]
+    pub fn zenith(&self, lat: f64, lon: f64) -> f64 {
+        (lat.to_radians().cos() * (lon - self.lon).to_radians().cos()).clamp(-1.0, 1.0).acos().to_degrees()
+    }
+
+    /// Surface wind (east, north): toward the substellar point, fastest at the terminator,
+    /// plus the equatorial jet.
+    #[must_use]
+    pub fn wind(&self, lat: f64, lon: f64) -> (f64, f64) {
+        let (phi, dl) = (lat.to_radians(), (self.lon - lon).to_radians());
+        let (e, n) = (dl.sin(), -phi.sin() * dl.cos());
+        let norm = e.hypot(n);
+        let speed = 0.9 * self.zenith(lat, lon).to_radians().sin();
+        let jet = self.superrotation * (-(lat / 25.0).powi(2)).exp();
+        if norm < 1e-9 {
+            return (jet, 0.0);
+        }
+        (speed * e / norm + jet, speed * n / norm)
+    }
+
+    /// Rain-out multiplier: a wide convective region under the star, sinking air elsewhere.
+    #[must_use]
+    pub fn convergence(&self, lat: f64, lon: f64) -> f64 {
+        0.3 + 1.5 * (-(self.zenith(lat, lon) / 55.0).powi(2)).exp()
     }
 }
 
@@ -150,16 +290,31 @@ pub struct Season {
     pub sign: f64,
     /// ITCZ latitude in each grid column, degrees.
     pub itcz: Vec<f64>,
+    /// A tidally locked world's pattern, which replaces the cells.
+    pub locked: Option<Substellar>,
+    /// Longitude of each grid column, degrees (used when locked).
+    pub lon: Vec<f64>,
 }
 
 impl Season {
+    /// The season of `body`: [`Season::new`], or for a tidally locked world one season all
+    /// year round around its substellar point.
+    #[must_use]
+    pub fn for_body(a: &Atmo, body: &BodyContext, sign: f64, monsoon: f64) -> Self {
+        let (rot, r, obl) = (body.exterior.rotation_h, body.exterior.radius_km, body.irradiance.obliquity_deg);
+        match Substellar::for_body(body) {
+            Some(s) => Self { cells: Cells::for_body(rot, r, 0.0, 0.0), sign: 0.0, itcz: vec![0.0; a.g.w], locked: Some(s), lon: (0..a.g.w).map(|x| a.g.lon(x)).collect() },
+            None => Self::new(a, rot, r, obl, sign, monsoon),
+        }
+    }
+
     /// The ITCZ sits at the zonal latitude over open ocean and moves into the summer
     /// hemisphere over land, in proportion to the land (high land counts more: it heats the
     /// air higher up) on the summer side of the tropics. `monsoon` scales the shift
     /// (0 = zonal everywhere; 0.7 = Earth).
     #[must_use]
-    pub fn new(a: &Atmo, rotation_h: f64, obliquity: f64, sign: f64, monsoon: f64) -> Self {
-        let cells = Cells::for_body(rotation_h, obliquity, sign);
+    pub fn new(a: &Atmo, rotation_h: f64, radius_km: f64, obliquity: f64, sign: f64, monsoon: f64) -> Self {
+        let cells = Cells::for_body(rotation_h, radius_km, obliquity, sign);
         let g = &a.g;
         let (lo, hi) = (8.0 * cells.hadley / 30.0, 35.0 * cells.hadley / 30.0);
         let heat: Vec<f64> = (0..g.w)
@@ -187,23 +342,29 @@ impl Season {
                 cells.itcz + sign * shift * l
             })
             .collect();
-        Self { cells, sign, itcz }
+        Self { cells, sign, itcz, locked: None, lon: Vec::new() }
     }
 
     /// The zonal pattern alone (no land): for winds without a surface, and tests.
     #[must_use]
     pub fn zonal(cells: Cells, sign: f64, columns: usize) -> Self {
-        Self { cells, sign, itcz: vec![cells.itcz; columns] }
+        Self { cells, sign, itcz: vec![cells.itcz; columns], locked: None, lon: Vec::new() }
     }
 
     #[must_use]
     pub fn wind(&self, x: usize, lat: f64) -> (f64, f64) {
-        self.cells.wind_at(lat, self.itcz[x])
+        match &self.locked {
+            Some(s) => s.wind(lat, self.lon[x]),
+            None => self.cells.wind_at(lat, self.itcz[x]),
+        }
     }
 
     #[must_use]
     pub fn convergence(&self, x: usize, lat: f64, land: f64) -> f64 {
-        self.cells.convergence_at(lat, self.itcz[x], land)
+        match &self.locked {
+            Some(s) => s.convergence(lat, self.lon[x]),
+            None => self.cells.convergence_at(lat, self.itcz[x], land),
+        }
     }
 }
 
@@ -286,8 +447,9 @@ mod tests {
 
     #[test]
     fn hadley_cell_scales_with_rotation() {
-        let earth = Cells::for_body(24.0, 23.0, 0.0);
-        let slow = Cells::for_body(240.0, 23.0, 0.0);
+        let earth = Cells::for_body(24.0, 6371.0, 23.0, 0.0);
+        let slow = Cells::for_body(240.0, 6371.0, 23.0, 0.0);
+        assert_eq!(earth.count(), 3);
         assert!((earth.hadley - 30.0).abs() < 1e-9);
         assert!(slow.hadley > 60.0);
         // Trades in the tropics, westerlies in mid-latitudes.
@@ -297,6 +459,41 @@ mod tests {
         assert!(earth.convergence(0.0) > 1.5 && earth.convergence(22.0) < 0.6 && earth.convergence(-22.0) < 0.6);
     }
 
+    /// Cells by rotation and size: Earth three per hemisphere, Venus and Titan two (a wide
+    /// Hadley cell and a polar cap), a world spinning four times faster seven, with
+    /// alternating surface westerlies and easterlies, and a storm track under each jet.
+    #[test]
+    fn more_jets_on_faster_and_bigger_worlds() {
+        assert_eq!(jets_for(24.6, 3390.0), 1, "Mars");
+        assert_eq!(jets_for(5832.0, 6052.0), 0, "Venus");
+        assert_eq!(jets_for(383.0, 2575.0), 0, "Titan");
+        assert_eq!(jets_for(6.0, 6371.0), 3, "four times Earth's spin");
+        assert_eq!(jets_for(24.0, 1.8 * 6371.0), 2, "a big super-Earth");
+        let fast = Cells::for_body(6.0, 6371.0, 0.0, 0.0);
+        assert_eq!(fast.count(), 7);
+        let signs: Vec<bool> = (13..=89).map(|l| fast.wind(f64::from(l)).0 > 0.0).collect();
+        let flips = signs.windows(2).filter(|w| w[0] != w[1]).count();
+        assert!(flips >= 4, "alternating bands: {flips} flips");
+        let peaks = (13..=88).filter(|&l| {
+            let s = |x: i32| fast.storminess(f64::from(x));
+            s(l) > s(l - 1) && s(l) >= s(l + 1)
+        });
+        assert_eq!(peaks.count(), 3, "a storm track per jet");
+        let venus = Cells::for_body(5832.0, 6052.0, 0.0, 0.0);
+        assert_eq!(venus.count(), 2, "Hadley cell to a polar cap");
+        assert!(venus.wind(85.0).0 <= 0.0 && venus.storminess(50.0) == 0.0);
+    }
+
+    #[test]
+    fn locked_worlds_flow_to_the_substellar_point() {
+        let s = Substellar { lon: 0.0, superrotation: 0.0 };
+        let east_of = s.wind(0.0, 60.0);
+        let north_of = s.wind(40.0, 0.0);
+        assert!(east_of.0 < -0.5 && north_of.1 < -0.3, "{east_of:?} {north_of:?}");
+        assert!(s.wind(0.0, 179.0).0.abs() < 0.1, "calm at the antistellar point");
+        assert!(s.convergence(0.0, 0.0) > 1.7 && s.convergence(0.0, 120.0) < 0.5);
+    }
+
     /// A continent filling the northern subtropics of half the globe pulls July's ITCZ north
     /// over it, and the trades that cross the equator to reach it blow from the west.
     #[test]
@@ -304,12 +501,12 @@ mod tests {
         let g = AtmoGrid::new(2.0);
         let land: Vec<f64> = (0..g.len()).map(|i| if i % g.w < g.w / 2 && g.lat(i / g.w) > 5.0 && g.lat(i / g.w) < 40.0 { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
-        let jul = Season::new(&a, 24.0, 23.4, 1.0, 0.7);
+        let jul = Season::new(&a, 24.0, 6371.0, 23.4, 1.0, 0.7);
         let (over_land, over_sea) = (jul.itcz[g.w / 4], jul.itcz[3 * g.w / 4]);
         assert!(over_land > 15.0 && (over_sea - 7.0).abs() < 0.5, "land {over_land} sea {over_sea}");
         let (u, v) = jul.wind(g.w / 4, 8.0);
         assert!(u > 0.2 && v > 0.0, "monsoon westerlies {u} {v}");
-        let jan = Season::new(&a, 24.0, 23.4, -1.0, 0.7);
+        let jan = Season::new(&a, 24.0, 6371.0, 23.4, -1.0, 0.7);
         assert!((jan.itcz[g.w / 4] + 7.0).abs() < 0.5, "no southern land, zonal ITCZ in January");
     }
 }

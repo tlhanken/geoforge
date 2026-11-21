@@ -89,10 +89,12 @@ exactly that layer and everything after it stale.
 | erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | rocky crust |
 | hydrology | `hydrology` | `hydrology` | liquid water on the surface |
 | biomes | `biomes` | `biomes` | liquid water on the surface |
+| bands | — | — | no solid surface, an atmosphere: `giant_bands` |
 
 So Earth runs everything; Mars and Venus get a surface, winds and a climate but no rivers
-or biomes; the Moon, Mercury, frozen moons and asteroids get a surface only. Ice-shell
-worlds (Europa) and giants have no generator yet: every layer reports why. A generator for a
+or biomes; the Moon, Mercury, frozen moons and asteroids get a surface only. Giants get
+only the `bands` layer. Ice-shell worlds (Europa) have no generator yet: every layer
+reports why. A generator for a
 new kind of body is a new `Generator` registered in `geoforge-pipeline/src/registry.rs`.
 
 ## Products
@@ -107,6 +109,7 @@ new kind of body is a new `Generator` registered in `geoforge-pipeline/src/regis
 | erosion | `elevation`: the final heightmap, valleys cut where the rain runs off (m) | field |
 | hydrology | `rivers`, `lakes`, `watersheds` | network, partition, partition |
 | biomes | `biome` (biome catalog) | catalog partition |
+| bands | `zonal_wind` (m/s, eastward), `cloud_bands` (cloud-top brightness, 0 darkest belt – 1 brightest zone or oval) | fields |
 
 Derived values (plate boundaries, slope, sea level, flow directions) are recomputed, not stored.
 
@@ -251,12 +254,28 @@ product's randomness. `seed <dir> <product>` prints it.
   shield volcanoes (only on bodies big enough for long-lived plumes), rifts and coronae;
   elevation from the step, each landform and smaller craters, with relief scaled by
   gravity (Olympus Mons is 2.5× Mauna Loa at 0.38 g).
-- **Circulation**: January and July winds (Hadley/Ferrel/polar cells scaled by rotation,
-  seasonal ITCZ, monsoon, subtropical highs over each ocean basin); wind-driven ocean gyres
+- **Circulation**: January and July winds. Cells by rotation and size: a Hadley cell of
+  width ∝ Ω^(−2/3) (30° on Earth), then eddy-driven jets spaced by the Rhines scale,
+  round((a·Ω / a⊕·Ω⊕)^0.75) per hemisphere (Chemke & Kaspi 2015; GFDL: about three at 4×
+  Earth's rotation), each with westerlies, a storm track and easterlies poleward: 1 + 2·jets
+  cells, so Earth and Mars 3, a 12-hour Earth 5, a 6-hour one 7, Venus and Titan a Hadley
+  cell to a polar cap (`show` prints the count). Tidally locked worlds (day = year) instead
+  circulate around the substellar point (0°N 0°E): air rises under the star and returns along
+  the ground from the night side, with an equatorial jet below ~20-day periods (Haqq-Misra
+  et al. 2018). Then the seasonal ITCZ, monsoon, subtropical highs over each ocean basin); wind-driven ocean gyres
   (Sverdrup interior, Stommel western boundary currents, Ekman drift, equatorial currents,
   circumpolar current); SST anomaly from currents crossing the temperature gradient, carried
   downstream, plus coastal upwelling.
-- **Climate**: zonal energy balance on the body's own atmosphere: a gray greenhouse
+- **Bands** (giants): jets per hemisphere from the Rhines scale with ~60 m/s winds on gas
+  giants and ~250 on ice giants (Jupiter 6, Saturn 5, Uranus and Neptune 1); gas giants
+  superrotate at the equator, ice giants run retrograde there with a jet near 70°; zones
+  bright where the shear is anticyclonic, belts dark where cyclonic, contrast fading toward
+  the poles; wavy band edges, white ovals in the zones and one great storm in the widest
+  subtropical zone (a dark red spot on gas giants, a dark spot on ice giants).
+- **Climate**: zonal energy balance on the body's own atmosphere (on a locked world, by
+  angle from the substellar point, with no seasons, a convective cloud deck under the star
+  on wet worlds (Yang et al. 2013) and 1.6× the heat transport: Earth locked would be ~30 °C
+  under the star and ~−40 °C opposite): a gray greenhouse
   (OLR = σT⁴/(1 + ¾τ), τ from CO₂, collision-induced absorption and water vapour; fitted to
   Earth, Mars, Venus and Titan), heat transport and seasonal damping from the air column's
   mass, frost albedo from water snow or CO₂ frost; seasons from obliquity, eccentricity and

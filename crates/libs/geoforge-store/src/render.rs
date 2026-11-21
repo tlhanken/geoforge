@@ -4,6 +4,7 @@
 
 use crate::edit::{hsv, key_color};
 use crate::{Result, StoreError};
+use geoforge_core::body::BodyClass;
 use geoforge_core::grid::{AnyGrid, Grid, GridSpec};
 use geoforge_core::product::{ProductData, ProductId, Products};
 use geoforge_core::surface::Category;
@@ -144,7 +145,8 @@ fn image_of(grid: GridSpec, px: impl Fn(usize) -> [u8; 3]) -> Result<RgbImage> {
 /// For grids without a raster form.
 /// Render a product. `sea`: the world has surface water, so ground below 0 m is sea; on a
 /// dry world elevation is relative to the mean radius and every cell is land.
-pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Result<Option<RgbImage>> {
+/// `class` picks the cloud palette of a giant.
+pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea: bool, class: BodyClass) -> Result<Option<RgbImage>> {
     let spec = grid.spec();
     // The rough heightmap is shaded by itself; everything else by the final heightmap.
     let elev = if p == ProductId::RoughElevation { ctx.rough_elevation() } else { ctx.elevation().or(ctx.rough_elevation()) }.map(|f| f.values.as_slice());
@@ -223,6 +225,18 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
                 })?,
                 None => image_of(spec, |_| [235, 235, 235])?,
             }
+        }
+        ProductData::CloudBands(f) => {
+            let stops: &[(f64, [u8; 3])] = if class == BodyClass::IceGiant {
+                &[(0.0, [60, 110, 175]), (0.5, [130, 190, 225]), (1.0, [215, 240, 250])]
+            } else {
+                &[(0.0, [120, 70, 45]), (0.35, [175, 120, 80]), (0.6, [220, 195, 160]), (1.0, [250, 245, 232])]
+            };
+            image_of(spec, |i| ramp(stops, f64::from(f.values[i])))?
+        }
+        ProductData::ZonalWind(f) => {
+            let top = f.values.iter().fold(1.0_f32, |m, v| m.max(v.abs()));
+            image_of(spec, |i| ramp(&[(-1.0, [40, 70, 170]), (0.0, [240, 240, 240]), (1.0, [180, 40, 40])], f64::from(f.values[i] / top)))?
         }
         ProductData::TectonicEvents(_) | ProductData::GeologyEvents(_) => return Ok(None),
     };

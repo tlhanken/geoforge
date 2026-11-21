@@ -95,6 +95,29 @@ impl Radiation {
     #[must_use]
     pub fn zonal_temperature(&self, lats_deg: &[f64]) -> (Vec<f64>, f64) {
         let s: Vec<f64> = lats_deg.iter().map(|&l| insolation_by_latitude(self.flux, l, self.obliquity, self.eccentricity).annual_w_m2).collect();
+        self.balance(lats_deg, &s, &vec![0.0; lats_deg.len()])
+    }
+
+    /// Temperatures (°C) of a tidally locked world by "substellar latitude": 90° under the
+    /// star, 0 on the terminator, −90° opposite (Koll & Abbot's tidally locked coordinates),
+    /// and the global mean. Sunlight is the star's flux times the sine of that latitude by
+    /// day, nothing by night; the same heat transport spreads it. On a wet world the rising
+    /// air under the star builds a thick cloud deck that reflects much of the light and keeps
+    /// the day side from running away (Yang, Cowan & Abbot 2013): up to 0.35 more albedo
+    /// straight under the star, over water warmer than 30 °C (none below freezing).
+    #[must_use]
+    pub fn substellar_temperature(&self, lats_deg: &[f64]) -> (Vec<f64>, f64) {
+        let s: Vec<f64> = lats_deg.iter().map(|&l| self.flux * l.to_radians().sin().max(0.0)).collect();
+        let deck = if self.frost_c == Some(WATER_FROST_C) { SUBSTELLAR_CLOUDS } else { 0.0 };
+        let clouds: Vec<f64> = lats_deg.iter().map(|&l| deck * l.to_radians().sin().max(0.0)).collect();
+        // Day–night contrasts are what the whole circulation works on, with little rotation
+        // to hold them apart: heat moves more readily than from equator to pole.
+        let locked = Self { transport: self.transport * LOCKED_TRANSPORT, ..*self };
+        locked.balance(lats_deg, &s, &clouds)
+    }
+
+    /// Energy balance by band: sunlight `s`, extra albedo `clouds`.
+    fn balance(&self, lats_deg: &[f64], s: &[f64], clouds: &[f64]) -> (Vec<f64>, f64) {
         let w: Vec<f64> = lats_deg.iter().map(|l| l.to_radians().cos()).collect();
         let wsum: f64 = w.iter().sum();
         let c = self.transport;
@@ -104,8 +127,10 @@ impl Radiation {
             mean = t.iter().zip(&w).map(|(a, b)| a * b).sum::<f64>() / wsum;
             // Newton step on absorbed − emitted − exported, damped by half.
             let mut worst: f64 = 0.0;
-            for (ti, &si) in t.iter_mut().zip(&s) {
-                let net = si * (1.0 - self.albedo(*ti)) - self.olr(*ti) - c * (*ti - mean);
+            for ((ti, &si), &ci) in t.iter_mut().zip(s).zip(clouds) {
+                // Deep convective cloud needs warm water under it: none below 0 °C, full by 30.
+                let deck = ci * (*ti / 30.0).clamp(0.0, 1.0);
+                let net = si * (1.0 - self.albedo(*ti) - deck) - self.olr(*ti) - c * (*ti - mean);
                 let step = 0.5 * net / (self.greenhouse.olr_slope(*ti).max(0.05) + c);
                 *ti += step;
                 worst = worst.max(step.abs());
@@ -124,6 +149,12 @@ impl Radiation {
         seasonal_swing(self.flux, lat_deg, self.obliquity, self.eccentricity) * self.seasonal_gain
     }
 }
+
+/// Heat transport of a locked world relative to a rotating one.
+const LOCKED_TRANSPORT: f64 = 1.6;
+
+/// Extra albedo of the cloud deck straight under the star of a locked wet world.
+const SUBSTELLAR_CLOUDS: f64 = 0.35;
 
 /// Heat capacity of the air column, J/m²/K (cₚ ≈ 1000 J/kg/K).
 fn column_heat_j_m2_k(pressure_bar: f64, gravity_m_s2: f64) -> f64 {
@@ -168,6 +199,17 @@ mod tests {
         let lats: Vec<f64> = (0..180).map(|i| 89.5 - f64::from(i)).collect();
         let (t, mean) = r.zonal_temperature(&lats);
         (t, mean, r)
+    }
+
+    #[test]
+    /// Earth locked to the Sun: ~30 °C under the star and ~−40 °C opposite (locked aquaplanet
+    /// GCMs: 300–310 K and 230–250 K), cooler overall than turning (Yang et al. 2013).
+    fn earth_locked() {
+        let (_, mean_z, r) = zonal(Archetype::Earth);
+        let lats: Vec<f64> = (0..180).map(|i| -89.5 + f64::from(i)).collect();
+        let (t, mean) = r.substellar_temperature(&lats);
+        assert!((20.0..45.0).contains(&t[179]) && t[0] < -30.0, "substellar {:.0} °C, antistellar {:.0} °C", t[179], t[0]);
+        assert!((mean_z - 45.0..mean_z).contains(&mean), "locked worlds run cooler (clouds by day, ice by night): {mean} vs {mean_z}");
     }
 
     #[test]

@@ -37,6 +37,12 @@ pub fn surface_air(body: &BodyContext) -> Check {
     require(body.interior.has_atmosphere(), "needs an atmosphere")
 }
 
+/// No solid surface, only a deep atmosphere: a gas or ice giant.
+pub fn deep_atmosphere(body: &BodyContext) -> Check {
+    require(!body.interior.has_solid_surface(), "has a solid surface")?;
+    require(body.interior.has_atmosphere(), "needs an atmosphere")
+}
+
 /// Liquid water on the surface, so it rains, flows and pools.
 pub fn surface_water(body: &BodyContext) -> Check {
     surface_air(body)?;

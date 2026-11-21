@@ -561,7 +561,7 @@ pub fn render_all(world: &World, products: &Products, to: &Path, only: &[Product
         if !only.is_empty() && !only.contains(&p) {
             continue;
         }
-        if let Some(img) = geoforge_store::render::render(p, products, &grid, body.exterior.radius_km, body.interior.has_surface_liquid_water())? {
+        if let Some(img) = geoforge_store::render::render(p, products, &grid, body.exterior.radius_km, body.interior.has_surface_liquid_water(), body.exterior.class)? {
             let f = to.join(format!("{}.png", p.name()));
             img.save(&f).map_err(geoforge_store::StoreError::from)?;
             out.push(f);

@@ -23,6 +23,7 @@ pub enum Implementation {
     Erosion,
     Hydrology,
     Biomes,
+    GiantBands,
 }
 
 /// Run `$body` with `$g` bound to the generator type of implementation `$i`.
@@ -73,13 +74,17 @@ macro_rules! dispatch {
                 type $g = surface::Biomes;
                 $body
             }
+            Implementation::GiantBands => {
+                type $g = surface::GiantBands;
+                $body
+            }
         }
     };
 }
 
 impl Implementation {
     /// In order of preference within each layer.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Tectonics,
         Self::LidTectonics,
         Self::Geology,
@@ -91,6 +96,7 @@ impl Implementation {
         Self::Erosion,
         Self::Hydrology,
         Self::Biomes,
+        Self::GiantBands,
     ];
 
     #[must_use]
@@ -200,7 +206,7 @@ mod tests {
     fn selection_follows_the_body() {
         let earth = Archetype::Earth.context(Key(1), "Earth");
         for l in LayerId::ALL {
-            assert!(select(l, &earth).is_ok(), "{} on Earth", l.name());
+            assert_eq!(select(l, &earth).is_ok(), l != LayerId::Bands, "{} on Earth", l.name());
         }
         let mars = Archetype::Mars.context(Key(1), "Mars");
         assert_eq!(select(LayerId::Tectonics, &mars), Ok(Implementation::LidTectonics));
@@ -210,5 +216,6 @@ mod tests {
         let giant = Archetype::GasGiant.context(Key(1), "Jove");
         let why = select(LayerId::Tectonics, &giant).unwrap_err();
         assert!(why.0.contains("tectonics"), "{why}");
+        assert_eq!(select(LayerId::Bands, &giant), Ok(Implementation::GiantBands));
     }
 }
