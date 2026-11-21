@@ -13,7 +13,7 @@
 > ./target/release/geoforge-v2 generate worlds/demo --render
 > ```
 >
-> See [docs/V2_PIPELINE.md](docs/V2_PIPELINE.md) and [docs/V2_REALISM.md](docs/V2_REALISM.md).
+> See [docs/V2_PIPELINE.md](docs/V2_PIPELINE.md), [docs/V2_REALISM.md](docs/V2_REALISM.md) and the roadmap, [docs/V2_ROADMAP.md](docs/V2_ROADMAP.md).
 > The v1 crate below (`crates/bins/geoforge`) is kept as the reference implementation.
 
 Geoforge is a Rust library for generating scientifically-inspired tectonic plates for procedural world generation. It uses electrostatic physics simulation to create natural plate boundaries with Earth-like size variety.

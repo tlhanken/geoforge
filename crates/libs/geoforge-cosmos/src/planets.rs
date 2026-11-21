@@ -1,8 +1,9 @@
 //! Planetary systems for any star: what forms at birth, and what is left when the star has
 //! swollen into a giant or died.
 //!
-//! Planets form on a geometric ladder of orbits (period ratios 1.45–2.1, as in Kepler's
-//! multi-planet systems) from a few days out. Rates, by the host's initial mass `M` (M☉) and
+//! Planets form on a geometric ladder of orbits from a few days out, each 1.45–2.1 times
+//! farther than the last (period ratios 1.75–3.0; Kepler's multi-planet systems peak at
+//! 1.5–2, and giants are not yet kept 8 mutual Hill radii apart: see `docs/V2_ROADMAP.md`). Rates, by the host's initial mass `M` (M☉) and
 //! metallicity `[Fe/H]`:
 //!
 //! | Planets | Rate | After |
