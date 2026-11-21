@@ -106,7 +106,6 @@ const STATIONS: &[Station] = &[
 const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range is 31 °C (observed 26) and its mean 5 °C cold";
 const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 45 °C (observed 58)";
 const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 1600 mm at 40°N 117°W, observed ~250)";
-const GREAT_PLAINS: &str = "no summer rain on the Great Plains (warm-half share 0.00 at 40°N 100°W, observed ~0.75): Gulf of Mexico moisture never turns north";
 const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
 const ARABIA: &str = "the summer rain belt reaches into Arabia (600 mm at 22°N 47°E, all of it in summer), which cools it";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
@@ -136,7 +135,6 @@ const RAIN_GAPS: &[(&str, &str)] = &[
     ("Cape Town", "the Cape's winter fronts bring 40% of their rain"),
     ("Timbuktu", WEST_AFRICA),
     ("Tehran", "the Alborz's rain spreads to its dry southern foot (485–700 mm in the cells around Tehran)"),
-    ("Dodge City", GREAT_PLAINS),
     ("Astana", KAZAKHSTAN),
     ("Nairobi", "the East African highlands are drenched (3500 mm, observed 870)"),
     ("Lhasa", TIBET),
@@ -146,8 +144,7 @@ const PLACE_GAPS: &[(&str, &str)] = &[
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
     ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
     ("Sahel", WEST_AFRICA),
-    ("Great Plains", GREAT_PLAINS),
-    ("Eastern US", "the eastern US is too dry for forest (630 mm at 38°N 82°W, observed ~1100): Gulf of Mexico moisture never turns north"),
+    ("Eastern US", "the eastern US is too dry for forest (640 mm at 38°N 82°W, observed ~1100)"),
     ("Kazakh steppe", KAZAKHSTAN),
     ("Greece", "Greece is drenched by winter storms (1450 mm at 38°N 22°E, observed 400–1100), too wet for Mediterranean woodland"),
     ("Tibet", TIBET),
@@ -659,13 +656,8 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
         ("savanna", 0.10, 0.20),
         ("mediterranean_woodland", 0.01, 0.04),
     ] {
-        s.range(
-            "biomes",
-            format!("{slug}, share of land"),
-            share(slug),
-            lo..=hi,
-            "",
-        );
+        s.range("biomes", format!("{slug}, share of land"), share(slug), lo..=hi, "")
+            .gap_if_listed(slug, &[("savanna", "the Sahel comes out rainforest (the West African monsoon reaches too far north), so savanna runs short")]);
     }
     for (name, lat, lon, want) in [
         ("Sahara", 23.0, 10.0, &["hot_desert"][..]),

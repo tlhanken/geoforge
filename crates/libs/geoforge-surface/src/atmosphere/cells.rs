@@ -18,6 +18,9 @@ const LAND_ITCZ_SHIFT: f64 = 0.5;
 /// while January's convergence reaches the Chaco.
 const RAIN_LAG: f64 = 0.7;
 
+/// Extra pull of a summer heat low per km of ground height.
+const ELEVATED_HEATING: f64 = 0.4;
+
 /// Hadley, Ferrel and polar cells of one season.
 #[derive(Debug, Clone, Copy)]
 pub struct Cells {
@@ -236,10 +239,13 @@ pub fn monsoon_flow(a: &Atmo, season: &Season, monsoon: f64) -> Vec<(f64, f64)> 
         return vec![(0.0, 0.0); g.len()];
     }
     let rad = (12.0 / g.res).round().max(1.0) as usize;
+    // High ground heats the air higher up, so summer lows sit over plateaus and high deserts
+    // (Tibet, the Mexican and Colorado plateaus, Iran), not over the middle of a continent.
     let heated: Vec<f64> = (0..g.len())
         .map(|i| {
             let lat = g.lat(i / g.w) * season.sign;
-            a.land[i] * (0.35 + 0.65 * (-((lat - 25.0) / 15.0).powi(2)).exp())
+            let lift = 1.0 + ELEVATED_HEATING * (a.elev[i].max(0.0) / 1000.0).min(4.0);
+            a.land[i] * (0.35 + 0.65 * (-((lat - 25.0) / 15.0).powi(2)).exp()) * lift
         })
         .collect();
     let summer_low = g.blur(&heated, rad);

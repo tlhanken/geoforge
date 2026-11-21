@@ -28,6 +28,10 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
+/// Island arcs: the submarine ridge, the tallest volcanoes on it (m), and their spacing (km).
+const ARC_RIDGE_M: f64 = -1800.0;
+const ARC_PEAK_M: f64 = 1200.0;
+const ARC_VOLCANO_SPACING_KM: f64 = 70.0;
 /// An orogenic plateau rises to full height over this far in from its outer edges, km.
 const PLATEAU_EDGE_KM: f64 = 120.0;
 
@@ -73,7 +77,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 3;
+    const VERSION: u32 = 4;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -233,7 +237,8 @@ impl Generator for Elevation {
                     }
                     G::VolcanicArc => {
                         if ocean {
-                            z = z.max(-900.0 + 1300.0 * prov.intensity);
+                            // The submarine ridge an island arc's volcanoes stand on (step 3).
+                            z = z.max(ARC_RIDGE_M + 600.0 * prov.intensity);
                         } else {
                             z = base_cont + 1600.0 + 1400.0 * prov.intensity;
                         }
@@ -356,11 +361,17 @@ impl Generator for Elevation {
                         Some(G::CollisionOrogen) => 2600.0 * prov.map_or(0.0, |p| 0.5 + 0.5 * p.intensity),
                         // Ranges and basins across the plateau (Tibet's ~1 km internal relief).
                         Some(G::OrogenicPlateau) => 1100.0,
-                        Some(G::VolcanicArc) => if crust[i] == CrustType::Oceanic { 1200.0 } else { 1800.0 },
+                        Some(G::VolcanicArc) => if crust[i] == CrustType::Oceanic { 300.0 } else { 1800.0 },
                         Some(G::PaleoOrogen) => 700.0,
                         _ => 500.0,
                     };
                     z += rs * mountain_amp * (ridges - 0.35);
+                }
+                // An island arc is a chain of volcanoes, ~70 km apart, on its ridge: a few reach
+                // the surface (the Marianas, Tonga, the Aleutians), not one smooth ridge.
+                if kind == Some(G::VolcanicArc) && crust[i] == CrustType::Oceanic {
+                    let cone = smoothstep(0.1, 0.55, noise.fbm(pt, r / ARC_VOLCANO_SPACING_KM, 2));
+                    z += rs * (ARC_PEAK_M - ARC_RIDGE_M) * cone * prov.map_or(0.6, |p| 0.6 + 0.4 * p.intensity);
                 }
                 if matches!(kind, Some(G::OceanicHotspotTrack)) {
                     z += rs * 900.0 * (noise.ridged(pt, freq * 8.0, 3) - 0.5);
