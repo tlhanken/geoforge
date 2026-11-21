@@ -117,6 +117,8 @@ fn plateau_warming(t_sea_level: f64, broad_elevation_m: f64) -> f64 {
     PLATEAU_WARMING_C_PER_KM * ((t_sea_level + 5.0) / 15.0).clamp(0.0, 1.0) * broad_elevation_m.max(0.0) / 1000.0
 }
 
+/// How far inland air chilled over cold water keeps its chill, km.
+const COLD_AIR_REACH_KM: f64 = 300.0;
 /// Extra summer warmth of land under fully sinking air (the moisture model's view of a
 /// desert summer), °C.
 const DESERT_SUMMER_C: f64 = 8.0;
@@ -169,7 +171,15 @@ impl Climate {
         // 2–4. Continentality and current-warmed air from annual-mean winds.
         let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let mar = carry(&atmo, &wind_annual, p.maritime_reach_km, r, &vec![1.0; g.len()]);
-        let sst_air = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &sst);
+        // Air over warm currents is warmed deep and carries it far inland (Europe); air over
+        // cold upwelling is chilled in a shallow marine layer that the first hills stop.
+        let warm: Vec<f64> = sst.iter().map(|v| v.max(0.0)).collect();
+        let cold: Vec<f64> = sst.iter().map(|v| v.min(0.0)).collect();
+        let sst_air: Vec<f64> = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &warm)
+            .iter()
+            .zip(carry(&atmo, &wind_annual, COLD_AIR_REACH_KM, r, &cold))
+            .map(|(w, c)| w + c)
+            .collect();
         let broad = g.blur(&atmo.elev, 3);
         let mut t_sl = vec![0.0; g.len()];
         let mut swing = vec![0.0; g.len()];

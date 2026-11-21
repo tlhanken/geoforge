@@ -109,7 +109,7 @@ const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Gr
 const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
 const ARABIA: &str = "the summer rain belt reaches into Arabia (600 mm at 22°N 47°E, all of it in summer), which cools it";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
-const ICELAND: &str = "cold East Greenland water chills the air reaching Iceland: Reykjavik is 8 °C cold and gets a fifth of its rain";
+const ICELAND: &str = "cold East Greenland water chills the air reaching Iceland: Reykjavik is 7 °C cold";
 const KAZAKHSTAN: &str = "the Kazakh steppe is three times too wet and less continental than observed (990 mm, range 22 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
 const TIBET: &str = "Tibetan summers too warm (warmest month 16 °C at 4900 m, observed ~7) and the monsoon does not climb the plateau";
 const ANTARCTICA: &str = "the Antarctic plateau is ~17 °C too warm";
@@ -130,9 +130,7 @@ const RANGE_GAPS: &[(&str, &str)] = &[];
 const RAIN_GAPS: &[(&str, &str)] = &[
     ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
     ("Yakutsk", "the Siberian interior gets an eighth of its rain"),
-    ("Reykjavik", ICELAND),
     ("Phoenix", SOUTHWEST),
-    ("Cape Town", "the Cape's winter fronts bring 40% of their rain"),
     ("Timbuktu", WEST_AFRICA),
     ("Tehran", "the Alborz's rain spreads to its dry southern foot (485–700 mm in the cells around Tehran)"),
     ("Astana", KAZAKHSTAN),
@@ -140,6 +138,7 @@ const RAIN_GAPS: &[(&str, &str)] = &[
     ("Lhasa", TIBET),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
+    ("Siberian taiga", "central Siberia is too dry for taiga (230 mm at 60°N 100°E, observed ~400–500)"),
     ("Arabia", ARABIA),
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
     ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
