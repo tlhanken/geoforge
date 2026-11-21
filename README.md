@@ -9,7 +9,7 @@
 >
 > ```bash
 > cargo build --release -p geoforge-cli
-> ./target/release/geoforge-v2 new worlds/demo --seed 42
+> ./target/release/geoforge-v2 new worlds/demo --seed 42 --habitable
 > ./target/release/geoforge-v2 generate worlds/demo --render
 > ```
 >

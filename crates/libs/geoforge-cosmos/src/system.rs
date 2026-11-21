@@ -2,8 +2,9 @@
 //! belts in the gaps, and moons.
 
 use crate::draw::{name, Draw};
+use crate::stars::spectral_class;
 use geoforge_core::body::{
-    BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, SystemRoot, AU_KM,
+    BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, AU_KM,
     EARTH_MASS_KG, EARTH_RADIUS_KM,
 };
 use geoforge_core::derived::{effective_temperature_k, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius, orbital_period_days};
@@ -11,29 +12,16 @@ use geoforge_core::key::{Key, KeyAllocator};
 use geoforge_core::seed::Seed;
 
 /// A generated system and the key of its focus world.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Generated {
     pub system: SolarSystem,
     pub focus: Key,
 }
 
-const ROMAN: [&str; 12] = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-
-fn spectral_class(teff: f64) -> String {
-    let (letter, lo, hi) = match teff {
-        t if t >= 30_000.0 => ("O", 30_000.0, 50_000.0),
-        t if t >= 10_000.0 => ("B", 10_000.0, 30_000.0),
-        t if t >= 7_500.0 => ("A", 7_500.0, 10_000.0),
-        t if t >= 6_000.0 => ("F", 6_000.0, 7_500.0),
-        t if t >= 5_200.0 => ("G", 5_200.0, 6_000.0),
-        t if t >= 3_700.0 => ("K", 3_700.0, 5_200.0),
-        _ => ("M", 2_400.0, 3_700.0),
-    };
-    let sub = ((hi - teff) / (hi - lo) * 10.0).clamp(0.0, 9.0) as u32;
-    format!("{letter}{sub}V")
-}
+pub(crate) const ROMAN: [&str; 12] = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
 /// Radius of a solid body of `mass_kg` and mean density `density_g_cc`, km.
-fn solid_radius_km(mass_kg: f64, density_g_cc: f64) -> f64 {
+pub(crate) fn solid_radius_km(mass_kg: f64, density_g_cc: f64) -> f64 {
     (3.0 * mass_kg / (4.0 * std::f64::consts::PI * density_g_cc * 1000.0)).cbrt() / 1000.0
 }
 
@@ -53,7 +41,7 @@ pub fn generate_system(seed: Seed) -> Generated {
     let r = main_sequence_radius(m);
     let teff = effective_temperature_k(l, r);
     let age = d.range(2.5, 7.5).min(10.0 * m.powf(-2.5) * 0.9);
-    let star = Star { mass_solar: m, luminosity_solar: l, radius_solar: r, temperature_k: teff, age_gyr: age, metallicity_dex: d.normal(0.0, 0.18).clamp(-0.6, 0.4), spectral_class: spectral_class(teff) };
+    let star = Star { mass_solar: m, luminosity_solar: l, radius_solar: r, temperature_k: teff, age_gyr: age, metallicity_dex: d.normal(0.0, 0.18).clamp(-0.6, 0.4), spectral_class: spectral_class(teff), stage: StellarStage::MainSequence, initial_mass_solar: None };
     let star_key = keys.fresh();
     let mut nodes = vec![OrbitalNode { key: star_key, name: sys_name.clone(), parent: None, node: NodeKind::Star(star), elements: None }];
 
@@ -101,11 +89,7 @@ pub fn generate_system(seed: Seed) -> Generated {
         if class == BodyClass::Terrestrial {
             last_rock_a = last_rock_a.max(a);
         }
-        let radius_e = match class {
-            BodyClass::Terrestrial | BodyClass::SmallBody => mass_e.powf(0.27),
-            BodyClass::IceGiant => 3.9 * (mass_e / 17.0).powf(0.25),
-            BodyClass::GasGiant => 11.2 * (mass_e / 318.0).powf(-0.04),
-        };
+        let radius_e = planet_radius_earth(class, mass_e);
         let ext = BodyExterior {
             class,
             mass_kg: mass_e * EARTH_MASS_KG,
@@ -194,12 +178,21 @@ pub fn generate_system(seed: Seed) -> Generated {
         nodes.extend(moons);
     }
 
-    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None };
+    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: None };
     Generated { system: SolarSystem { root, nodes }, focus }
 }
 
+/// Radius (Earth radii) of a planet of `class` and `mass_e` Earth masses.
+pub(crate) fn planet_radius_earth(class: BodyClass, mass_e: f64) -> f64 {
+    match class {
+        BodyClass::Terrestrial | BodyClass::SmallBody => mass_e.powf(0.27),
+        BodyClass::IceGiant => 3.9 * (mass_e / 17.0).powf(0.25),
+        BodyClass::GasGiant => 11.2 * (mass_e / 318.0).powf(-0.04),
+    }
+}
+
 /// `count` moons sharing `mass_share` of the planet's mass, on a widening ladder of orbits.
-fn moon_system(d: &mut Draw, keys: &mut KeyAllocator, parent: Key, parent_name: &str, p: &BodyExterior, count: usize, mass_share: f64) -> Vec<OrbitalNode> {
+pub(crate) fn moon_system(d: &mut Draw, keys: &mut KeyAllocator, parent: Key, parent_name: &str, p: &BodyExterior, count: usize, mass_share: f64) -> Vec<OrbitalNode> {
     let weights: Vec<f64> = (0..count).map(|_| d.range(0.3, 1.0)).collect();
     let total: f64 = weights.iter().sum();
     let budget = p.mass_kg * mass_share * d.range(0.5, 1.5);
@@ -218,17 +211,17 @@ fn moon_system(d: &mut Draw, keys: &mut KeyAllocator, parent: Key, parent_name: 
 }
 
 /// A moon to place.
-struct MoonSpec {
-    name: String,
-    mass_kg: f64,
+pub(crate) struct MoonSpec {
+    pub name: String,
+    pub mass_kg: f64,
     /// Orbit radius, km.
-    a_km: f64,
+    pub a_km: f64,
     /// Bulk density: ~1.9 for ice-rich moons, ~3.3 for rocky ones.
-    density_g_cc: f64,
+    pub density_g_cc: f64,
 }
 
 /// A moon on a near-circular orbit, spinning once per orbit (tidally locked).
-fn moon(d: &mut Draw, key: Key, parent: Key, parent_mass_kg: f64, spec: MoonSpec) -> OrbitalNode {
+pub(crate) fn moon(d: &mut Draw, key: Key, parent: Key, parent_mass_kg: f64, spec: MoonSpec) -> OrbitalNode {
     let MoonSpec { name, mass_kg, a_km, density_g_cc } = spec;
     let a_au = a_km / AU_KM;
     let class = if mass_kg >= 5e-5 * EARTH_MASS_KG { BodyClass::Terrestrial } else { BodyClass::SmallBody };

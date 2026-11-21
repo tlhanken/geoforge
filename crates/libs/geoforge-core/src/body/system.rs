@@ -23,6 +23,18 @@ pub struct SystemRoot {
     /// Filled when the system is attached to a galaxy sector. Never affects seeds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placement: Option<Address>,
+    /// The stellar population the system was drawn from, when it was drawn from a galaxy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<GalacticSite>,
+}
+
+/// Where in a galaxy's population a system was drawn: the roster's "location".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GalacticSite {
+    /// The galaxy model's name, e.g. "Milky Way".
+    pub galaxy: String,
+    /// Distance from the galaxy's centre, kpc (the Sun: 8.2).
+    pub radius_kpc: f64,
 }
 
 /// Keplerian orbital elements. The period is derived from `a_au` and the parent's mass.
@@ -36,6 +48,8 @@ pub struct Elements {
     pub m0_deg: f64,
 }
 
+/// A star as it is now. A remnant (white dwarf, neutron star, black hole) is a star here too:
+/// it is what the system's bodies orbit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Star {
     pub mass_solar: f64,
@@ -45,6 +59,65 @@ pub struct Star {
     pub age_gyr: f64,
     pub metallicity_dex: f64,
     pub spectral_class: String,
+    #[serde(default, skip_serializing_if = "StellarStage::is_main_sequence")]
+    pub stage: StellarStage,
+    /// Mass on the zero-age main sequence, M☉. `None`: the star has lost no mass to speak of
+    /// and this is `mass_solar`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_mass_solar: Option<f64>,
+}
+
+impl Star {
+    /// Mass on the zero-age main sequence, M☉.
+    #[must_use]
+    pub fn initial_mass(&self) -> f64 {
+        self.initial_mass_solar.unwrap_or(self.mass_solar)
+    }
+}
+
+/// Where a star is in its life.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StellarStage {
+    /// Burning hydrogen in its core: a dwarf (luminosity class V).
+    #[default]
+    MainSequence,
+    /// Core hydrogen spent, swelling toward a giant (IV).
+    Subgiant,
+    /// A red giant: burning hydrogen in a shell, then helium (III).
+    Giant,
+    /// A massive star after the main sequence, blue to red (I).
+    Supergiant,
+    /// The carbon–oxygen core left by a star under ~8 M☉, cooling.
+    WhiteDwarf,
+    /// Left by a core-collapse supernova of a star of ~8–20 M☉.
+    NeutronStar,
+    /// Left by the collapse of a star over ~20 M☉.
+    BlackHole,
+}
+
+impl StellarStage {
+    #[must_use]
+    pub fn is_main_sequence(&self) -> bool {
+        *self == Self::MainSequence
+    }
+    /// A white dwarf, neutron star or black hole.
+    #[must_use]
+    pub fn is_remnant(&self) -> bool {
+        matches!(self, Self::WhiteDwarf | Self::NeutronStar | Self::BlackHole)
+    }
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::MainSequence => "main-sequence star",
+            Self::Subgiant => "subgiant",
+            Self::Giant => "red giant",
+            Self::Supergiant => "supergiant",
+            Self::WhiteDwarf => "white dwarf",
+            Self::NeutronStar => "neutron star",
+            Self::BlackHole => "black hole",
+        }
+    }
 }
 
 /// Physical class of a body. "Moon" is a role (its parent is a body), not a class.

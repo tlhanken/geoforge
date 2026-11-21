@@ -5,22 +5,68 @@
 //! produce a [`BodyContext`](geoforge_core::BodyContext) for any of its bodies; the surface
 //! pipeline never sees this crate.
 //!
+//! Two recipes make a system ([`Recipe`]): the habitable one, a Sun-like star with an
+//! Earth-like world ([`generate_system`]), and a draw from a galaxy's stellar population, any
+//! star alive or dead with whatever planets it kept ([`galactic_system`]).
+//!
 //! | Module | Concern |
 //! |---|---|
-//! | [`system`] | the orbital tree: star, planets, belts, moons |
+//! | [`galaxy`] | galaxy models: initial mass function, star formation history, metals |
+//! | [`population`] | a system's phenotype drawn from a galaxy: site, age, metals, stars at birth |
+//! | [`stars`] | stellar evolution: main sequence, giants, white dwarfs, neutron stars, black holes |
+//! | `planets` | planets for any star at birth, and what survives the star's death |
+//! | [`galactic`] | the orbital tree of a drawn system, and its focus |
+//! | [`census`] | statistics of many drawn systems, with example seeds |
+//! | [`system`] | the habitable recipe's orbital tree: star, planets, belts, moons |
 //! | [`worlds`] | what each body is made of: shells, air, water, regime; the CO₂ thermostat |
 //! | [`context`] | the handoff for a body, belt members on demand, lookup by name |
 
 mod draw;
 
+pub mod census;
 pub mod context;
+pub mod galactic;
+pub mod galaxy;
+mod planets;
+pub mod population;
+pub mod stars;
 pub mod system;
 pub mod worlds;
 
-pub use context::{belt_member, body_context, find_body};
+pub use context::{any_body, belt_member, body_context, find_body};
+pub use galactic::{galactic_system, Barren};
+pub use galaxy::{Galaxy, GalaxyPreset};
 pub use draw::name;
 pub use system::{generate_system, Generated};
 pub use worlds::{describe, interior_for, regulate_co2, Setting};
+
+/// How a system is made.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Recipe {
+    /// A Sun-like star with an Earth-like world in its habitable zone ([`generate_system`]).
+    Habitable,
+    /// A system drawn from a galaxy's stellar population ([`galactic_system`]).
+    Galaxy(Galaxy),
+}
+
+impl Default for Recipe {
+    fn default() -> Self {
+        Self::Galaxy(Galaxy::milky_way())
+    }
+}
+
+impl Recipe {
+    /// The system of `seed`.
+    ///
+    /// # Errors
+    /// When a drawn system has no solid body to focus on.
+    pub fn generate(&self, seed: geoforge_core::seed::Seed) -> Result<Generated, Barren> {
+        match self {
+            Self::Habitable => Ok(generate_system(seed)),
+            Self::Galaxy(g) => galactic_system(seed, g),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

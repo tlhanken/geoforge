@@ -277,6 +277,34 @@ median arc–trench gap is 260 km (Earth 150–300).
 - Mars, Venus, the Moon and Mercury: relief ranges, Venus's narrow hypsometry, Mars's
   dichotomy and volcanic rises, mean temperatures of Mars and Venus.
 
+### Star systems
+
+`geoforge-cosmos`'s unit tests check systems drawn from the Milky Way model against the
+Galaxy's census (`census` prints the same numbers for any galaxy and range of seeds):
+
+| Check | Model | Milky Way |
+|---|---|---|
+| Red dwarfs among stars | 75% | ~75% of stars (61% of stars and brown dwarfs within 10 pc, Reylé et al. 2021) |
+| White dwarfs | 6.1% | 4.8×10⁻³ pc⁻³ of ~0.08 stars pc⁻³ (Holberg et al. 2016) |
+| Neutron stars, black holes | 0.55%, 0.17% | 10⁸–10⁹ of each among 1–4×10¹¹ stars |
+| Multiples | 25% of red dwarfs, 46% of Sun-like stars | 23–27% (Winters et al. 2019), 46% (Raghavan et al. 2010) |
+| Metallicity near the Sun | mean −0.1, 0.2 dex wide | peak −0.15 to 0 (Gilmore 2007; Haywood 2001) |
+| Small planets per red dwarf within 200 days | 1.5–3.5 | 2.5 (Dressing & Charbonneau 2015) |
+| Sun-like stars with giant planets; hot Jupiters | 10–18%; 0.3–2% | ~14%; ~1% |
+| Pulsars with planets | 0.5% | under 0.5% (Nițu et al. 2022) |
+
+Their gaps:
+
+- No brown dwarfs, and no binary evolution: mass transfer, mergers and X-ray binaries are
+  missing, and a supernova that blows off half a pair's mass always unbinds it (in fact
+  ~8% of black holes keep a companion).
+- Only the primary (or a close pair) has planets; companions' own planets are not made.
+- A giant's light turns its rocky planets into Venuses, but icy moons do not thaw: icy
+  interiors ignore starlight.
+- Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping
+  and no water lost while the young star was bright.
+- A pulsar's wind does not heat its planets.
+
 ## Known gaps
 
 1. **Generated worlds now run dry.** Hot desert is 0.05–0.34 of land vs 0.14, land drier

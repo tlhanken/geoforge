@@ -54,6 +54,9 @@ pub const CODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct NewWorld {
     pub seed: Seed,
     pub grid: GridSpec,
+    /// How to make the solar system: drawn from a galaxy (the default, the Milky Way), or the
+    /// habitable recipe, a Sun-like star with an Earth-like world.
+    pub recipe: geoforge_cosmos::Recipe,
     /// Use this body instead of generating a solar system.
     pub body: Option<BodyContext>,
     /// Focus on this body of the generated system instead of its habitable world: a body's
@@ -64,16 +67,17 @@ pub struct NewWorld {
 /// Create a world: a generated solar system and its focus body, or a hand-written body.
 ///
 /// # Errors
-/// If the directory already holds a world or the grid is invalid.
+/// If the directory already holds a world, the grid is invalid, the focus name is unknown, or
+/// a system drawn from a galaxy has nothing solid in it.
 pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
     opts.grid.build()?;
     let (system, body) = match &opts.body {
         Some(b) => (None, b.clone()),
         None => {
-            let g = geoforge_cosmos::generate_system(opts.seed);
+            let g = opts.recipe.generate(opts.seed).map_err(|b| PipelineError::Invalid(format!("{b}; try another seed (`census` lists some), or the habitable recipe")))?;
             let body = match &opts.focus {
                 Some(name) => geoforge_cosmos::find_body(&g.system, name).ok_or_else(|| PipelineError::Invalid(format!("no body named '{name}' in the system")))?,
-                None => geoforge_cosmos::body_context(&g.system, g.focus).expect("the focus is a body"),
+                None => geoforge_cosmos::any_body(&g.system, g.focus).expect("the focus is a body"),
             };
             (Some(g.system), body)
         }

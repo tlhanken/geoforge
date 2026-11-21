@@ -3,7 +3,9 @@
 use clap::{Parser, Subcommand};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{LayerId, ProductId};
+use geoforge_core::body::{NodeKind, Star, StellarStage};
 use geoforge_core::{BodyContext, Seed};
+use geoforge_cosmos::{GalaxyPreset, Recipe};
 use geoforge_pipeline::{self as pipe, GenerateOptions, LayerAction, NewWorld, State};
 use geoforge_store::World;
 use std::path::{Path, PathBuf};
@@ -18,11 +20,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Create a world: a generated solar system and its focus body (or your own body file).
+    /// Create a world: a solar system drawn from a galaxy and its most Earth-like body (or
+    /// the habitable recipe, a real body, or your own body file).
     New {
         dir: PathBuf,
         #[arg(long, default_value_t = 42)]
         seed: u64,
+        /// The galaxy to draw the system from: milky-way, elliptical, dwarf, starburst.
+        #[arg(long, default_value = "milky-way", value_parser = parse_galaxy)]
+        galaxy: GalaxyPreset,
+        /// Force a habitable system: a Sun-like star (F8–K5) with an Earth-like world in its
+        /// habitable zone, whatever the galaxy would draw.
+        #[arg(long, conflicts_with_all = ["body", "archetype"])]
+        habitable: bool,
         /// Grid width in cells (height is half).
         #[arg(long, default_value_t = 2048)]
         width: u32,
@@ -97,6 +107,21 @@ enum Cmd {
     },
     /// Summary statistics of stored products (for checking realism).
     Stats { dir: PathBuf },
+    /// Draw many systems from a galaxy and count them: star kinds, planets, wet worlds, and
+    /// example seeds of each kind for `new`.
+    Census {
+        #[arg(long, default_value = "milky-way", value_parser = parse_galaxy)]
+        galaxy: GalaxyPreset,
+        /// How many seeds, and the first.
+        #[arg(long, default_value_t = 10_000)]
+        count: u64,
+        #[arg(long, default_value_t = 0)]
+        from: u64,
+    },
+}
+
+fn parse_galaxy(name: &str) -> Result<GalaxyPreset, String> {
+    GalaxyPreset::from_name(name).ok_or_else(|| format!("unknown galaxy `{name}` (one of: {})", GalaxyPreset::ALL.map(GalaxyPreset::name).join(", ")))
 }
 
 fn main() -> ExitCode {
@@ -141,7 +166,7 @@ fn read_body(path: &Path) -> R<BodyContext> {
 
 fn run(cli: Cli) -> R<()> {
     match cli.cmd {
-        Cmd::New { dir, seed, width, body, archetype, focus } => {
+        Cmd::New { dir, seed, galaxy, habitable, width, body, archetype, focus } => {
             if seed > i64::MAX as u64 {
                 return Err("seed must be at most 9223372036854775807".into());
             }
@@ -149,7 +174,8 @@ fn run(cli: Cli) -> R<()> {
             if let Some(a) = archetype {
                 body = Some(a.context(geoforge_core::Key(1), a.name()));
             }
-            let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), grid: GridSpec::Equirect { width, height: width / 2 }, body, focus })?;
+            let recipe = if habitable { Recipe::Habitable } else { Recipe::Galaxy(galaxy.galaxy()) };
+            let w = pipe::create_world(&dir, &NewWorld { seed: Seed(seed), recipe, grid: GridSpec::Equirect { width, height: width / 2 }, body, focus })?;
             show(&w)?;
             println!("\ncreated {} — next: geoforge-v2 generate {}", dir.display(), dir.display());
         }
@@ -256,6 +282,7 @@ fn run(cli: Cli) -> R<()> {
             let key = owner.map_or(w.manifest.focus, geoforge_core::Key);
             println!("{}", w.manifest.root_seed.for_product(p, key).0);
         }
+        Cmd::Census { galaxy, count, from } => print_census(&geoforge_cosmos::census::census(&galaxy.galaxy(), from..from.saturating_add(count))),
         Cmd::Stats { dir } => {
             let w = World::open(&dir)?;
             let products = pipe::load_all(&w)?;
@@ -271,16 +298,20 @@ fn run(cli: Cli) -> R<()> {
 fn show(w: &World) -> R<()> {
     let body = w.load_body()?;
     if let Some(sys) = w.load_system()? {
-        println!("system {} (seed {})", sys.root.name, w.manifest.root_seed.0);
+        println!("system {} (seed {}), {:.2} Gyr old", sys.root.name, w.manifest.root_seed.0, sys.root.epoch.system_age_gyr);
+        if let Some(site) = &sys.root.site {
+            println!("  drawn from the {}, {:.1} kpc from its centre", site.galaxy, site.radius_kpc);
+        }
         for n in &sys.nodes {
             let a = n.elements.map_or(String::new(), |e| format!("  a={:.4} AU e={:.3}", e.a_au, e.e));
             let kind = match &n.node {
-                geoforge_core::body::NodeKind::Star(s) => format!("star {} {:.2} M☉ {:.0} K", s.spectral_class, s.mass_solar, s.temperature_k),
-                geoforge_core::body::NodeKind::Body(b) => {
+                NodeKind::Star(s) => describe_star(s),
+                NodeKind::Body(b) => {
                     let what = geoforge_cosmos::body_context(&sys, n.key).map_or(String::new(), |c| geoforge_cosmos::describe(&c));
                     format!("{:?} {:.3} M⊕ {:.0} km — {what}", b.class, b.mass_kg / geoforge_core::body::EARTH_MASS_KG, b.radius_km)
                 }
-                other => format!("{other:?}").split('(').next().unwrap_or("").split(' ').next().unwrap_or("").to_string(),
+                NodeKind::Barycenter => "barycentre of the pair".into(),
+                NodeKind::Belt(p) | NodeKind::Ring(p) => format!("belt {:.2}–{:.2} AU", p.inner_au, p.outer_au),
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };
             println!("  {:<14} {kind} {a}{mark}", n.name);
@@ -302,4 +333,50 @@ fn show(w: &World) -> R<()> {
         println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
     }
     Ok(())
+}
+
+/// "white dwarf DA8, 0.59 M☉, 6300 K, 2.1e-4 L☉, [Fe/H] −0.12 (born 1.80 M☉)".
+fn describe_star(s: &Star) -> String {
+    let lum = if s.luminosity_solar >= 0.01 { format!("{:.3} L☉", s.luminosity_solar) } else { format!("{:.1e} L☉", s.luminosity_solar) };
+    let born = match s.initial_mass_solar {
+        Some(m0) if (m0 - s.mass_solar).abs() > 0.01 => format!(" (born {m0:.2} M☉)"),
+        _ => String::new(),
+    };
+    let body = if s.stage == StellarStage::BlackHole { String::new() } else { format!(", {:.0} K, {lum}", s.temperature_k) };
+    format!("{} {}, {:.2} M☉{body}, [Fe/H] {:+.2}{born}", s.stage.label(), s.spectral_class, s.mass_solar, s.metallicity_dex)
+}
+
+fn print_census(c: &geoforge_cosmos::census::Census) {
+    let n = c.systems().max(1) as f64;
+    let pct = |x: u64, of: u64| if of == 0 { "-".to_string() } else { format!("{:.0}%", 100.0 * x as f64 / of as f64) };
+    let per = |x: u64, of: u64| if of == 0 { "-".to_string() } else { format!("{:.2}", x as f64 / of as f64) };
+    let seeds = |v: &[u64]| v.iter().map(u64::to_string).collect::<Vec<_>>().join(" ");
+    println!("{} systems drawn from the {} (seeds {}..{})\n", c.systems(), c.galaxy, c.seeds.start, c.seeds.end);
+    println!("{:<13} {:>7} {:>6} {:>6} {:>6} {:>6} {:>7} {:>5} {:>7}  {:<20} wet examples", "primary", "share", "multi", "rocky", "giant", "ice", "barren", "wet", "locked", "examples");
+    for k in c.kinds.iter().filter(|k| k.systems > 0) {
+        let solid = k.systems - k.barren;
+        println!(
+            "{:<13} {:>7} {:>6} {:>6} {:>6} {:>6} {:>7} {:>5} {:>7}  {:<20} {}",
+            k.name,
+            format!("{:.2}%", 100.0 * k.systems as f64 / n),
+            pct(k.multiples, k.systems),
+            per(k.rocky, solid),
+            per(k.giants, solid),
+            per(k.ice_giants, solid),
+            pct(k.barren, k.systems),
+            pct(k.wet, k.systems),
+            pct(k.locked, solid),
+            seeds(&k.examples),
+            seeds(&k.wet_examples)
+        );
+    }
+    println!(
+        "\nbarren {} (no solid body: `new` fails for these seeds), wet focus {}, planets per system with any: rocky {}, giant {}, ice {}",
+        pct(c.total(|k| k.barren), c.systems()),
+        pct(c.total(|k| k.wet), c.systems()),
+        per(c.total(|k| k.rocky), c.systems() - c.total(|k| k.barren)),
+        per(c.total(|k| k.giants), c.systems() - c.total(|k| k.barren)),
+        per(c.total(|k| k.ice_giants), c.systems() - c.total(|k| k.barren)),
+    );
+    println!("columns: multi = more than one star; rocky/giant/ice = planets per system with a solid body; wet = focus has surface water; locked = focus tidally locked to its star");
 }

@@ -9,7 +9,7 @@ use geoforge_pipeline::{self as pipe, GenerateOptions, Implementation as I, NewW
 fn world(name: &str, body: Option<geoforge_core::BodyContext>, focus: Option<&str>) -> geoforge_store::World {
     let dir = std::env::temp_dir().join(format!("geoforge-types-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    pipe::create_world(&dir, &NewWorld { seed: Seed(11), grid: GridSpec::Equirect { width: 128, height: 64 }, body, focus: focus.map(str::to_string) }).unwrap()
+    pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 128, height: 64 }, body, focus: focus.map(str::to_string) }).unwrap()
 }
 
 /// The implementation filling each layer, `None` where the layer does not apply.
@@ -63,6 +63,6 @@ fn any_body_of_a_system_can_be_the_focus() {
         assert_eq!(reports.len(), LayerId::ALL.len());
     }
     let dir = std::env::temp_dir().join(format!("geoforge-types-nobody-{}", std::process::id()));
-    let err = pipe::create_world(&dir, &NewWorld { seed: Seed(11), grid: GridSpec::Equirect { width: 64, height: 32 }, body: None, focus: Some("Nowhere".into()) });
+    let err = pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 64, height: 32 }, body: None, focus: Some("Nowhere".into()) });
     assert!(err.is_err());
 }

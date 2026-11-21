@@ -18,12 +18,20 @@ what it has (air, surface water) decide which generator fills it, or that it doe
 ```bash
 cargo build --release -p geoforge-cli          # binary: target/release/geoforge-v2
 
-geoforge-v2 new worlds/demo --seed 42          # a solar system and its focus world
+geoforge-v2 new worlds/demo --seed 42 --habitable   # a Sun-like star and its Earth-like world
 geoforge-v2 generate worlds/demo --render      # ~40 s at 2048×1024; previews in worlds/demo/renders
 geoforge-v2 stats worlds/demo                  # summary numbers next to Earth's
 ```
 
 Other starting points:
+
+- `new --seed 42` without `--habitable` draws the system from the Milky Way's stellar
+  population: three in four are red dwarfs, one in sixteen a white dwarf, a few in a thousand
+  a giant, a blue star or a neutron star. The focus is the system's most Earth-like solid
+  body (often a tidally locked planet of a red dwarf); about one seed in six has nothing
+  solid (a lone black hole, say) and `new` says so. `--galaxy elliptical|dwarf|starburst`
+  draws from another population. `census` counts thousands of seeds and lists example
+  seeds of each kind of star.
 
 - `new --archetype mars` starts from a real body instead of a generated system: `earth`,
   `mars`, `venus`, `mercury`, `moon`, `titan`, `europa`, `gas_giant`, `ice_giant` (real
@@ -38,7 +46,7 @@ Other starting points:
 
 | Command | What it does |
 |---|---|
-| `new <dir> --seed N [--width 2048] [--archetype NAME \| --focus BODY \| --body file]` | Create a world |
+| `new <dir> --seed N [--habitable \| --galaxy NAME] [--width 2048] [--archetype NAME \| --focus BODY \| --body file]` | Create a world |
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
 | `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |
@@ -49,6 +57,7 @@ Other starting points:
 | `show <dir>` | The solar system (each body with its regime, air and water) and the focus |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
+| `census [--galaxy NAME] [--count N] [--from SEED]` | Draw many systems: kinds of star, planets, wet worlds, example seeds |
 
 ## The world directory
 
@@ -187,8 +196,28 @@ product's randomness. `seed <dir> <product>` prints it.
 
 ## Models (short)
 
-- **Solar system**: an F8–K5 star; planets on a geometric ladder through the habitable zone
-  with the focus world in it; belts in the gaps; 2–5 large moons per gas giant, 0–2 per ice
+- **Solar system, drawn from a galaxy** (the default): the galaxy is a population model
+  (Milky Way: Kroupa 2001 initial mass function; stars forming at a constant rate for
+  11 Gyr; [Fe/H] solar for young stars at the Sun's radius, −0.02 dex per Gyr of age,
+  −0.06 dex/kpc outward, 0.2 dex scatter; an exponential disk of 2.6 kpc). A draw gives a
+  site, an age, a metallicity and stars at birth: singles, binaries and triples by primary
+  mass (25% of red dwarfs, 46% of Sun-like stars and 90% of O stars have companions;
+  log-normal periods, flat mass ratios). Each star is evolved to the present: main
+  sequence brightening (the Sun 0.72 → 1 → 2 L☉), subgiant, red giant or supergiant, then
+  a white dwarf (Cummings et al. 2018 masses, Mestel cooling), a neutron star (8–20 M☉) or
+  a black hole (over 20 M☉); a supernova that loses half a pair's mass unbinds it. Planets
+  form on a ladder from a few days out, at Kepler-era rates by host mass and metallicity
+  (giants ∝ M·10^(1.2[Fe/H]), Johnson et al. 2010; many small planets around red dwarfs,
+  Dressing & Charbonneau 2015), stunted by close companions (Moe & Kratter 2021) and kept
+  to stable orbits (Holman & Wiegert 1999); giants swallow what is within three of their
+  radii, white dwarfs keep only what formed beyond ~2 AU, on widened orbits, neutron stars
+  only rare second-generation planets (PSR B1257+12), black holes nothing. Planets within
+  0.35 AU·M^(1/3) of their star are tidally locked. The focus is the most Earth-like solid
+  body (surface water first, then plates and air, then starlight and mass near Earth's).
+  Against the Milky Way near the Sun: 75% red dwarfs, 6% white dwarfs, 0.5% neutron stars,
+  0.2% black holes, 25% of red dwarfs and 46% of Sun-like stars multiple.
+- **Solar system, habitable recipe** (`--habitable`): an F8–K5 star; planets on a geometric
+  ladder through the habitable zone with the focus world in it; belts in the gaps; 2–5 large moons per gas giant, 0–2 per ice
   giant, sometimes a large moon for the focus. What each body is follows from its mass,
   starlight and where it formed: airless rock (Mercury, the Moon), runaway greenhouse (Venus:
   ~90 bar CO₂, episodic lid), ocean and plate tectonics (Earth), thin CO₂ (Mars); icy bodies
