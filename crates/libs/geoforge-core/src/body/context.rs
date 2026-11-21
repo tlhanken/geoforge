@@ -53,6 +53,13 @@ impl BodyContext {
     pub fn gravity_m_s2(&self) -> f64 {
         crate::derived::surface_gravity_m_s2(self.exterior.mass_kg, self.exterior.radius_km)
     }
+    /// Turns once per orbit (to within 1%), keeping one face to its star. A moon locked to
+    /// its planet is not: it still turns relative to the star.
+    #[must_use]
+    pub fn is_tidally_locked(&self) -> bool {
+        let year_h = self.irradiance.year_days * 24.0;
+        year_h > 0.0 && (self.exterior.rotation_h / year_h - 1.0).abs() < 0.01
+    }
     #[must_use]
     pub fn surface_area_km2(&self) -> f64 {
         4.0 * std::f64::consts::PI * self.exterior.radius_km.powi(2)

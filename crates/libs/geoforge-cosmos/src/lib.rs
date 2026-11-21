@@ -86,7 +86,8 @@ mod tests {
             assert_eq!(ctx.interior.regime, TectonicRegime::Plates);
             assert!(ctx.interior.has_lithosphere() && ctx.interior.surface_ocean_gel_km() > 1.0);
             let t = balance_temperature_c(&ctx);
-            assert!((10.0..26.0).contains(&t), "seed {s}: balance temperature {t}");
+            // The thermostat holds weathering, not the mean: fast spinners run colder overall.
+            assert!((5.0..26.0).contains(&t), "seed {s}: balance temperature {t}");
             assert!((5.0..15.0).contains(&ctx.gravity_m_s2()), "gravity {}", ctx.gravity_m_s2());
             assert!((50.0..1000.0).contains(&ctx.irradiance.year_days), "year {}", ctx.irradiance.year_days);
             // Every body of the tree has a context.

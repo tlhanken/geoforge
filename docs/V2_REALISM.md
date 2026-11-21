@@ -51,8 +51,13 @@ biomes v3).
 
 The generated worlds are not Earth: most get 0.88–0.93× Earth's starlight and differ in
 size, air pressure, day length and tilt. The carbonate–silicate thermostat (set in the solar
-system step) cancels about 75% of the starlight difference, so they run 4–6 °C cooler, and
-more at high latitudes where ice brightens the ground. Thick air damps the seasons (s99,
+system step) cancels about 75% of the difference in weathering, so they run a few degrees
+cooler, and more at high latitudes where ice brightens the ground. It balances weathering,
+which runs on warm unfrozen ground, not the mean temperature, using the same latitude-band
+energy balance as the climate (heat transport ∝ day^(2/3), Kaspi & Showman 2015): a 6-hour
+day keeps about Earth's CO₂ but runs 7 °C colder with poles at −38 °C; a tidally locked
+Earth, weathering only by day (Edson et al. 2012), builds up ~6000 ppm with 38 °C under the
+star. Thick air damps the seasons (s99,
 1.46 bar: 20 °C land range at 40–60°); thin air widens them.
 
 Drainage networks: on the Earth-like world at 1024×512, the exponent of the drainage-area
@@ -310,8 +315,10 @@ Their gaps:
 - Cells beyond Earth's three are a pattern, not a simulation: very fast rotators (5–7 cells)
   show thin row-by-row streaks in ocean rain, and the ocean gyres still follow one jet.
 - Tidally locked worlds: the substellar point is always at 0°E; ocean currents do not carry
-  heat to the night side (the SST anomaly is left out), and the CO₂ thermostat still tunes
-  the air for a turning world, so locked worlds come out cooler than geology would leave them.
+  heat to the night side (the SST anomaly is left out).
+- The thermostat assumes land is spread evenly; a continent under the star would weather
+  more and hold less CO₂ (Edson et al. 2012), and Kite et al. (2011)'s runaway substellar
+  weathering is not modelled.
 - Giants' bands are drawn from the wind profile, not simulated: no polar hexagon or
   cyclone clusters, storms do not drift, and colour is a palette by class (no chemistry).
 

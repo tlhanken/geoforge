@@ -72,7 +72,7 @@ impl Default for ClimateParams {
             resolution_deg: 1.0,
             lapse_rate_c_per_km: None,
             greenhouse_offset_c: 0.0,
-            heat_transport: 3.2,
+            heat_transport: geoforge_core::energy_balance::EARTH_HEAT_TRANSPORT,
             global_precip_mm: None,
             maritime_reach_km: 2500.0,
             rainout: 0.06,

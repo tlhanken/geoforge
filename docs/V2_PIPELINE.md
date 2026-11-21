@@ -270,8 +270,9 @@ product's randomness. `seed <dir> <product>` prints it.
   giants and ~250 on ice giants (Jupiter 6, Saturn 5, Uranus and Neptune 1); gas giants
   superrotate at the equator, ice giants run retrograde there with a jet near 70°; zones
   bright where the shear is anticyclonic, belts dark where cyclonic, contrast fading toward
-  the poles; wavy band edges, white ovals in the zones and one great storm in the widest
-  subtropical zone (a dark red spot on gas giants, a dark spot on ice giants).
+  the poles; wavy band edges, white ovals in the zones and, on half of giants, one great
+  storm in the widest subtropical zone (a dark red spot on gas giants, a dark spot on ice
+  giants; `great_storm_chance`).
 - **Climate**: zonal energy balance on the body's own atmosphere (on a locked world, by
   angle from the substellar point, with no seasons, a convective cloud deck under the star
   on wet worlds (Yang et al. 2013) and 1.6× the heat transport: Earth locked would be ~30 °C

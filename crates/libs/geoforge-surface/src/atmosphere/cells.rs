@@ -248,8 +248,7 @@ impl Substellar {
     /// `Some` when the body turns once per orbit (to within 1%).
     #[must_use]
     pub fn for_body(body: &BodyContext) -> Option<Self> {
-        let year_h = body.irradiance.year_days * 24.0;
-        let locked = year_h > 0.0 && (body.exterior.rotation_h / year_h - 1.0).abs() < 0.01;
+        let locked = body.is_tidally_locked();
         let period_days = body.exterior.rotation_h / 24.0;
         locked.then(|| Self { lon: SUBSTELLAR_LON, superrotation: 0.4 * ((20.0 - period_days) / 15.0).clamp(0.0, 1.0) })
     }

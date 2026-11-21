@@ -12,8 +12,9 @@
 //! Ice giants show the same pattern faintly, under clear methane-blue air.
 //!
 //! **Weather.** Band edges are wavy (festoons and chevrons where the jets are unstable), and
-//! long-lived anticyclones sit in the zones: white ovals, a few per jet, the largest as wide
-//! as its zone (the Great Red Spot); on ice giants, dark spots (Neptune's Great Dark Spot).
+//! long-lived anticyclones sit in the zones: white ovals, a few per jet. Half of giants also
+//! have one great storm as wide as its zone (Jupiter's Great Red Spot; Saturn has none that
+//! lasts; on ice giants, a dark spot like Neptune's, which come and go).
 //!
 //! Products: `zonal_wind` (m/s, eastward) and `cloud_bands` (cloud-top brightness, 0 for the
 //! darkest belt to 1 for the brightest zone or oval).
@@ -38,11 +39,15 @@ pub struct BandsParams {
     pub storms_per_jet: f64,
     /// How wavy the band edges are (0 = smooth).
     pub turbulence: f64,
+    /// Chance of one great storm, as wide as its zone. Jupiter has kept its Great Red Spot
+    /// since at least 1830; Saturn has none that lasts (a Great White Spot erupts about once a
+    /// Saturn year and fades); Neptune's dark spots come and go within years. So: a coin toss.
+    pub great_storm_chance: f64,
 }
 
 impl Default for BandsParams {
     fn default() -> Self {
-        Self { jet_speed_m_s: None, storms_per_jet: 1.5, turbulence: 1.0 }
+        Self { jet_speed_m_s: None, storms_per_jet: 1.5, turbulence: 1.0, great_storm_chance: 0.5 }
     }
 }
 
@@ -153,12 +158,13 @@ fn storms(d: &mut Draws, profile: &Profile, p: &BandsParams) -> Vec<Oval> {
         })
         .collect();
     let mut out = Vec::new();
-    // One great storm in the widest subtropical zone: a dark red oval on a gas giant (the
-    // Great Red Spot), a dark spot on an ice giant.
+    // Perhaps one great storm in the widest subtropical zone: a dark red oval on a gas giant
+    // (the Great Red Spot), a dark spot on an ice giant.
+    let has_great = d.u() < p.great_storm_chance;
     let great = zones.iter().filter(|z| (12.0..45.0).contains(&z.0.abs())).max_by(|a, b| a.1.total_cmp(&b.1)).copied();
     // Ice giants' faint bands may have no subtropical zone: the spot sits anywhere at 15–35°.
     let great = great.or_else(|| Some((d.range(15.0, 35.0) * if d.u() < 0.5 { -1.0 } else { 1.0 }, 5.0)));
-    if let Some((lat, width)) = great {
+    if let (true, Some((lat, width))) = (has_great, great) {
         let half_lat = (0.9 * width).max(4.0);
         out.push(Oval { lat, lon: d.range(-180.0, 180.0), half_lat, half_lon: half_lat * 1.9 / lat.to_radians().cos(), value: if profile.ice { 0.08 } else { 0.22 } });
     }
@@ -265,6 +271,16 @@ mod tests {
         assert!(bands.windows(2).filter(|w| w[0] != w[1]).count() >= 8, "zones and belts");
         let neptune = Profile { jets: 1, speed: 250.0, ice: true };
         assert!(neptune.wind(0.0) < -350.0 && neptune.wind(70.0) > 200.0 && neptune.wind(90.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn great_storms_are_a_coin_toss() {
+        let profile = Profile { jets: 6, speed: 60.0, ice: false };
+        let p = BandsParams::default();
+        let great = (0..200)
+            .filter(|&k| storms(&mut Draws { seed: Seed(k), n: 0 }, &profile, &p).iter().any(|o| o.value < 0.5))
+            .count();
+        assert!((60..140).contains(&great), "{great} of 200 with a great storm");
     }
 
     #[test]
