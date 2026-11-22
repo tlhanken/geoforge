@@ -459,8 +459,11 @@ Their gaps:
    less broken up than Earth's, and runoff is somewhat high.
 3. **Drainage networks branch less than Earth's** (0.54 vs ~0.44); longer erosion flattens
    the land without improving it, so the remaining gap is likely resolution.
-4. **Some worlds are very high** (s2837: 76% of land above 1000 m): a broad plateau term can
-   lift a whole large continent. `plateau_m` controls it.
+4. **Some worlds are very high** (s2837: ~60% of land above 1000 m), mostly where little
+   water leaves the continents standing high. Interiors far behind any active margin, on
+   slow plates, are lifted by dynamic topography (`plateau_m`); on Earth's real plates that
+   gives 39% of land above 500 m (ETOPO1 39%) and 11% above 1 km (20%), with Africa high
+   and the Amazon, Mesopotamia and Australia low.
 5. **Ocean currents are a diagnostic gyre model**, not a simulation.
 6. **Closed basins depend on terrain** (endorheic land 0–15% vs Earth's 18%).
 7. **The gray greenhouse warms the tropics more than the poles** for added CO₂ (real CO₂

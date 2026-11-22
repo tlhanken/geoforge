@@ -26,15 +26,39 @@ use geoforge_core::grid::{distance_field, Cell, Grid};
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
 use geoforge_core::shapes::{Field, Partition};
 use geoforge_core::surface::{CrustType, GeologicProvince, GeologicProvince as G, Province};
-use geoforge_core::{BodyContext, Error};
+use geoforge_core::{BodyContext, Error, UnitVec3};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
 /// Island arcs: the submarine ridge, the tallest volcanoes on it (m), and their spacing (km).
 const ARC_RIDGE_M: f64 = -1800.0;
-const ARC_PEAK_M: f64 = 1200.0;
+/// Peaks of an island arc's strongest stretches: the Aleutians' reach 2.9 km, the Lesser
+/// Antilles' 1.5 km, the Marianas' 1 km.
+const ARC_PEAK_M: f64 = 2400.0;
+/// A plume under a continent lifts a dome this high and this wide (1/e radius): Ethiopia's
+/// and East Africa's are 1.5–2 km over ~1,000 km, the Hoggar's and Tibesti's ~1 km.
+const PLUME_DOME_M: f64 = 1500.0;
+const PLUME_DOME_RADIUS_KM: f64 = 650.0;
 const ARC_VOLCANO_SPACING_KM: f64 = 70.0;
+/// Length of the stretches an arc's height varies over.
+const ARC_SEGMENT_KM: f64 = 900.0;
+/// Flood basalts younger than this still sit on their plume's dome (Ethiopia's are 30 Ma).
+const PLUME_HEAD_MAX_AGE_MA: f64 = 45.0;
+/// Dynamic topography: continents are lowest within the first distance behind an active
+/// margin's arc or orogen and highest beyond the second, km; `DYNAMIC_LOW_SHARE` of the swell is below
+/// the base; and smooth noise adds or takes this much, m.
+const DYNAMIC_NEAR_KM: f64 = 1000.0;
+const DYNAMIC_FAR_KM: f64 = 3500.0;
+const DYNAMIC_LOW_SHARE: f64 = 0.0;
+const DYNAMIC_NOISE_M: f64 = 300.0;
+/// The broad swell under orogens and arcs, m.
+const OROGEN_SWELL_M: f64 = 600.0;
+/// Plates faster than the first speed lose swell, up to `DYNAMIC_FAST_CUT` of it at the
+/// second, cm/yr (Australia moves 7 cm/yr, Africa 2).
+const DYNAMIC_SLOW_CM_YR: f64 = 3.0;
+const DYNAMIC_FAST_CM_YR: f64 = 7.0;
+const DYNAMIC_FAST_CUT: f64 = 0.7;
 /// An orogenic plateau rises to full height over this far in from its outer edges, km.
 const PLATEAU_EDGE_KM: f64 = 120.0;
 /// Within this distance of a convergent boundary coastlines are not roughened: an active
@@ -48,7 +72,10 @@ pub struct ElevationParams {
     pub continental_base_m: f64,
     /// Scale of terrain noise (1 = Earth-like relief).
     pub roughness_scale: f64,
-    /// Height of broad continental plateaus (dynamic topography, old uplifts), m.
+    /// Dynamic topography: how much higher a continent stands far from every convergent
+    /// boundary than right behind one, m (mantle flow drags continents down above sinking
+    /// slabs and lifts them far from any: Africa and Brazil's highlands stand high, the
+    /// Amazon and Mesopotamia low).
     pub plateau_m: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
@@ -57,7 +84,7 @@ pub struct ElevationParams {
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 600.0, slope_width_km: 130.0, boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 1800.0, slope_width_km: 130.0, boundaries: BoundaryParams::default() }
     }
 }
 
@@ -82,7 +109,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 7;
+    const VERSION: u32 = 8;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -121,6 +148,17 @@ impl Generator for Elevation {
         let segments = inputs.plates().map(|pl| boundaries::analyze(grid, pl, r, &p.boundaries)).unwrap_or_default();
         let convergent: Vec<Cell> = segments.iter().filter(|s| s.kind == geoforge_core::surface::BoundaryKind::Convergent).flat_map(|s| s.cells.iter().copied()).collect();
         let near_trench = sparse_dist(grid, &convergent, STRAIGHT_COAST_KM / r);
+        // Distance behind the nearest active margin's upper plate (its arc or orogen), where
+        // the sinking slab drags the surface down, and how fast each cell's plate moves.
+        let upper: Vec<Cell> = grid.cells().filter(|&c| provinces.row_at(c).is_some_and(|p| matches!(p.kind, G::VolcanicArc | G::CollisionOrogen | G::OrogenicPlateau))).collect();
+        let behind_margin_km: Vec<f64> =
+            if upper.is_empty() { vec![DYNAMIC_FAR_KM; n] } else { distance_field(grid, upper, 1.05 * DYNAMIC_FAR_KM / r, |_| true).into_iter().map(|d| (d * r).min(DYNAMIC_FAR_KM)).collect() };
+        let plate_speed_cm_yr: Vec<f64> = match inputs.plates() {
+            Some(pl) => {
+                grid.cells().map(|c| pl.table.get(geoforge_core::key::Key(u64::from(pl.owner.values[c as usize]))).map_or(0.0, |p| p.velocity_km_per_myr(grid.center(c), r).norm() / 10.0)).collect()
+            }
+            None => vec![0.0; n],
+        };
         let coast_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0xC0A57);
         let edge_km: Vec<f64> = grid
             .cells()
@@ -184,6 +222,20 @@ impl Generator for Elevation {
             pc::Collision { range_m: c.range_m * relief, plateau_m: c.plateau_m * relief, foreland_m: c.foreland_m * relief, ..c }
         };
 
+        // Arcs rise and fall along their length, in stretches of several hundred km: the
+        // central Andes stand 2 km above the northern; volcano-free gaps open where the
+        // factor is lowest.
+        let along_arc = |pt: UnitVec3| (0.85 + 1.4 * plateau_noise.fbm(pt, r / ARC_SEGMENT_KM, 2)).clamp(0.35, 1.3);
+        // Plume domes: under every active continental hotspot and young flood basalt.
+        let plumes: Vec<UnitVec3> = provinces
+            .table
+            .rows
+            .values()
+            .filter(|p| p.kind == G::ContinentalHotspotTrack || (p.kind == G::ContinentalFloodBasalt && p.age_ma < PLUME_HEAD_MAX_AGE_MA))
+            .filter_map(|p| p.anchor)
+            .collect();
+        let dome = |pt: UnitVec3| plumes.iter().map(|a| (-(a.angle_to(pt) * r / PLUME_DOME_RADIUS_KM).powi(2)).exp()).fold(0.0, f64::max);
+
         // 1. Base + province relief (smooth part).
         let mut e: Vec<f64> = (0..n as Cell)
             .into_par_iter()
@@ -191,7 +243,24 @@ impl Generator for Elevation {
                 let i = c as usize;
                 let ocean = crust[i] == CrustType::Oceanic;
                 // Broad plateaus lift every continental province alike (Africa, Iran, Tibet).
-                let base_cont = if ocean { base_cont } else { base_cont + p.plateau_m * smoothstep(0.0, 0.3, plateau_noise.fbm(grid.center(c), 1.1, 2)) };
+                let kind = provinces.row_at(c).map(|p| p.kind);
+                let base_cont = if ocean {
+                    base_cont
+                } else if matches!(kind, Some(G::CollisionOrogen | G::OrogenicPlateau | G::VolcanicArc)) {
+                    // Orogens and arcs stand on their own crustal roots; only a broad, smooth
+                    // swell lifts some of them further (calibrated with their heights).
+                    base_cont + OROGEN_SWELL_M * smoothstep(0.0, 0.3, plateau_noise.fbm(grid.center(c), 1.1, 2))
+                } else {
+                    // Far from any slab and slow over the mantle (Africa) stands high; behind an
+                    // active margin (the Amazon) or racing over old slabs (Australia, India), low.
+                    let far = smoothstep(DYNAMIC_NEAR_KM, DYNAMIC_FAR_KM, behind_margin_km[i]);
+                    let slow = 1.0 - DYNAMIC_FAST_CUT * smoothstep(DYNAMIC_SLOW_CM_YR, DYNAMIC_FAST_CM_YR, plate_speed_cm_yr[i]);
+                    // Upwellings are patchy: the swell covers part of a far, slow interior
+                    // (southern and eastern Africa, not the Sahara).
+                    let up = (0.65 + 0.45 * plateau_noise.fbm(grid.center(c), 1.1, 3) / 0.3).clamp(0.3, 1.0);
+                    let swell = (plateau_noise.fbm(grid.center(c), 2.3, 3) / 0.3).clamp(-0.2, 1.5);
+                    base_cont + p.plateau_m * (far * slow * up - DYNAMIC_LOW_SHARE) + DYNAMIC_NOISE_M * swell
+                };
                 let mut z = if ocean {
                     // Sediment fill (isostatically compensated) thickens with age and toward
                     // continents (the continental rise).
@@ -200,7 +269,7 @@ impl Generator for Elevation {
                     -gdh1_depth_m(a) + sediment
                 } else {
                     let pt = grid.center(c);
-                    base_cont + 650.0 * noise.fbm(pt, 1.6, 3) + 280.0 * noise.fbm(pt, 5.0, 3)
+                    base_cont + 650.0 * noise.fbm(pt, 1.6, 3) + 280.0 * noise.fbm(pt, 5.0, 3) + relief * PLUME_DOME_M * dome(pt)
                 };
                 let Some(key) = provinces.owner_of(c) else { return z };
                 let Some(prov) = provinces.table.get(key) else { return z };
@@ -229,14 +298,17 @@ impl Generator for Elevation {
                         z = base_cont - shape.foreland_m * (1.0 - smoothstep(0.0, shape.foreland_km, d));
                     }
                     G::VolcanicArc => {
+                        let seg = along_arc(grid.center(c));
                         if ocean {
-                            // The submarine ridge an island arc's volcanoes stand on (step 3).
-                            z = z.max(ARC_RIDGE_M + 600.0 * prov.intensity);
+                            // The submarine ridge an island arc's volcanoes stand on (step 3);
+                            // its strongest stretches have thickened into larger islands.
+                            z = z.max(ARC_RIDGE_M + 600.0 * prov.intensity + 1600.0 * smoothstep(0.9, 1.3, seg));
                         } else {
                             // A continental cordillera: ~1.5 km on a slow margin (the
                             // Cascades), ~4 km where convergence is fast (the Andes).
+                            // Cordilleras vary less along strike than island arcs (±20%).
                             let fast = smoothstep(2.0, 8.0, prov.convergence_rate_cm_yr);
-                            z = base_cont + relief * (1000.0 + 3000.0 * fast);
+                            z = base_cont + relief * (1000.0 + 3000.0 * fast) * (1.0 + 0.6 * (seg - 0.85)).clamp(0.75, 1.15);
                         }
                     }
                     G::AccretionaryWedge => {
@@ -382,7 +454,9 @@ impl Generator for Elevation {
                 // the surface (the Marianas, Tonga, the Aleutians), not one smooth ridge.
                 if kind == Some(G::VolcanicArc) && crust[i] == CrustType::Oceanic {
                     let cone = smoothstep(0.1, 0.55, noise.fbm(pt, r / ARC_VOLCANO_SPACING_KM, 2));
-                    z += rs * (ARC_PEAK_M - ARC_RIDGE_M) * cone * prov.map_or(0.6, |p| 0.6 + 0.4 * p.intensity);
+                    // Stretches with few or no volcanoes where the arc is weakest.
+                    let seg = smoothstep(0.45, 1.2, along_arc(pt));
+                    z += rs * (ARC_PEAK_M - ARC_RIDGE_M) * cone * seg * prov.map_or(0.6, |p| 0.6 + 0.4 * p.intensity);
                 }
                 if matches!(kind, Some(G::OceanicHotspotTrack)) {
                     z += rs * 900.0 * (noise.ridged(pt, freq * 8.0, 3) - 0.5);

@@ -161,7 +161,8 @@ pub const HOTSPOT_PROBABILITY_MEDIUM_PLATE: f64 = 0.10;
 pub const HOTSPOT_MIN_PLATE_AREA_KM2: f64 = 2_000_000.0;
 pub const HOTSPOT_LARGE_PLATE_THRESHOLD_KM2: f64 = 10_000_000.0;
 pub const HOTSPOT_OCEANIC_MAX_LENGTH_KM: f64 = 2_400.0;
-pub const HOTSPOT_CONTINENTAL_MAX_LENGTH_KM: f64 = 400.0;
+/// Yellowstone's track, the Snake River Plain, runs ~800 km.
+pub const HOTSPOT_CONTINENTAL_MAX_LENGTH_KM: f64 = 800.0;
 /// Half-widths (v1 expanded these on each side).
 pub const HOTSPOT_OCEANIC_HALF_WIDTH_KM: f64 = 50.0;
 pub const HOTSPOT_CONTINENTAL_HALF_WIDTH_KM: f64 = 100.0;

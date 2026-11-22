@@ -385,18 +385,20 @@ reproduce on the ETOPO-forced run or a generated Earth-like world.
   pinch, vary in height along their length, thin out at their ends, and never cross a
   craton or each other (the X across Australia is gone). Open: one craton per continent,
   so no sutures *between* cratons (the Urals, the Trans-Hudson).
-- **Arcs vary along strike.** Width and height are now one value per boundary segment, set
-  by its convergence rate. Vary them every few hundred km with slab age and dip; leave
-  volcanic gaps over flat slabs and where ridges or young slab subduct. The volcanic front's
-  distance from the trench stays regular (above the slab's ~100 km depth contour).
-  [Peru and Pampean gaps, Altiplano, Cascades vs Andes.]
+- **Arcs vary along strike** — partly done: cordilleras ±20% and island arcs more in
+  ~900 km stretches, with volcano-free gaps and larger islands on the strongest stretches
+  (peaks to 2.4 km). Open: tie the variation to slab age and dip rather than noise.
+- **Dynamic topography** — done: continents far behind any active margin's arc or orogen
+  and on slow plates stand high in patchy swells (Africa, Brazil); those just behind an arc
+  (the Amazon) or on fast plates (Australia, India) stay low. On Earth's real plates land
+  height now correlates 0.57 with ETOPO1 (0.27 before) and 39% of land is above 500 m
+  (ETOPO1 39%, before 13%).
 - **Flat slabs lift land far inland.** A flat-slab stretch of an Andean margin gets a broad
   basement uplift 500–1,500 km behind the trench, with no volcanoes. [The Rockies' Laramide
   uplift; the Sierras Pampeanas today.]
-- **Plume domes.** An active plume under a continent raises a dome of 1–2.5 km over
-  ~1,000 km, with flood basalt and a rift on top (flood basalt is done; the dome is not).
-  Continental hotspot tracks are capped at 400 km; Yellowstone's is ~800. [Ethiopian
-  highlands, East African plateau.]
+- **Plume domes** — done for generated worlds: every continental hotspot and flood basalt
+  under 45 Ma sits on a 1.5 km dome ~650 km across; continental tracks run to 800 km.
+  Earth's real plumes (Afar, Kenya) are not inputs to the real-plates run.
 - **Island arcs.** Peaks are capped at 1.2 km; mature arcs reach 2–2.5 km and build bigger
   islands as their crust thickens with age. Back-arc rifting can split a continental sliver
   off an Andean margin. [Aleutians vs Marianas; Japan as a rifted sliver.]
