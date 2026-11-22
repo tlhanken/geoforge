@@ -64,6 +64,9 @@ pub struct NewWorld {
     pub recipe: geoforge_cosmos::Recipe,
     /// Use this body instead of generating a solar system.
     pub body: Option<BodyContext>,
+    /// The system `body` belongs to, when it has one (an archetype's real Solar System); the
+    /// body's key must be one of its nodes.
+    pub system: Option<geoforge_core::SolarSystem>,
     /// Focus on this body of the generated system instead of its habitable world: a body's
     /// name, or `"<belt name> #<n>"` for the n-th largest member of a belt.
     pub focus: Option<String>,
@@ -77,7 +80,14 @@ pub struct NewWorld {
 pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
     opts.grid.build()?;
     let (system, body) = match &opts.body {
-        Some(b) => (None, b.clone()),
+        Some(b) => {
+            if let Some(sys) = &opts.system {
+                if sys.node(b.key).is_none() {
+                    return Err(PipelineError::Invalid(format!("{} is not in the system {}", b.name, sys.root.name)));
+                }
+            }
+            (opts.system.clone(), b.clone())
+        }
         None => {
             let g = opts.recipe.generate(opts.seed).map_err(|b| PipelineError::Invalid(format!("{b}; try another seed (`census` lists some), or the habitable recipe")))?;
             let body = match &opts.focus {

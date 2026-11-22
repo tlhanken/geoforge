@@ -102,12 +102,13 @@ fn compass(deg: f64) -> &'static str {
 /// The sky on `day`, printed, and with `to` charted and catalogued.
 pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
     use geoforge_almanac::sky::Kind;
-    let sys = w.load_system()?.ok_or("this world has no solar system (an archetype or hand-made body)")?;
+    let sys = w.load_system()?.ok_or("this world has no solar system (a hand-made body)")?;
     let body = w.load_body()?;
     let calendar = calendar_of(&body);
     let s = geoforge_almanac::sky::sky(&sys, w.manifest.focus, day, calendar.year_days)?;
     let (year, local) = calendar.date(day);
-    println!("The sky of {} on day {day} (year {year}, day {local:.1}): {} naked-eye stars; {} {:.1} kpc from its centre", body.name, s.stars.len(), s.galaxy, s.radius_kpc);
+    let date = |t: f64| geoforge_almanac::ephemeris::real_date(&sys, t).map_or(String::new(), |d| format!(", {d}"));
+    println!("The sky of {} on day {day} (year {year}, day {local:.1}{}): {} naked-eye stars; {} {:.1} kpc from its centre", body.name, date(day), s.stars.len(), s.galaxy, s.radius_kpc);
     let radec = |o: &geoforge_almanac::sky::Object| format!("RA {:>5.1}° Dec {:>+5.1}°", o.ra_deg, o.dec_deg);
     println!("Brightest stars:");
     for o in s.stars.iter().take(12) {
@@ -140,8 +141,9 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
         for e in &s.eclipses {
             let (y, d) = calendar.date(e.day);
             println!(
-                "  day {:>8.2} (year {y}, day {d:.1}): {:?} {:?} eclipse of {} by {}, magnitude {:.2}",
+                "  day {:>8.2} (year {y}, day {d:.1}{}): {:?} {:?} eclipse of {} by {}, magnitude {:.2}",
                 e.day,
+                date(e.day),
                 e.coverage,
                 e.kind,
                 if e.kind == geoforge_almanac::ephemeris::EclipseKind::Solar { &e.star } else { &e.body },

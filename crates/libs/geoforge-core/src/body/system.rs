@@ -26,6 +26,10 @@ pub struct SystemRoot {
     /// The stellar population the system was drawn from, when it was drawn from a galaxy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub site: Option<GalacticSite>,
+    /// The present as a Julian date (Terrestrial Time), for a system with a real calendar
+    /// (the Solar System).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub present_jd_tt: Option<f64>,
 }
 
 /// Where in a galaxy's population a system was drawn: the roster's "location".
@@ -46,6 +50,38 @@ pub struct Elements {
     pub lan_deg: f64,
     pub argp_deg: f64,
     pub m0_deg: f64,
+}
+
+impl Elements {
+    /// These elements `t_days` later under `p`: the node and periapsis turned, the mean
+    /// anomaly held back by the periapsis's advance so the mean longitude keeps its pace.
+    #[must_use]
+    pub fn precessed(&self, p: Precession, t_days: f64) -> Self {
+        let (node, peri) = (p.node_deg_day * t_days, p.periapsis_deg_day * t_days);
+        Self { lan_deg: self.lan_deg + node, argp_deg: self.argp_deg + peri - node, m0_deg: self.m0_deg - peri, ..*self }
+    }
+
+    /// Position relative to the parent at mean anomaly `mean_deg`, in `a_au`'s units, in the
+    /// plane the elements are measured from (x toward the reference direction).
+    #[must_use]
+    pub fn position_at(&self, mean_deg: f64) -> [f64; 3] {
+        let mean = mean_deg.to_radians().rem_euclid(std::f64::consts::TAU);
+        let ecc = self.e.clamp(0.0, 0.99);
+        // Kepler's equation, E − e·sin E = M, by Newton's method.
+        let mut big_e = if ecc > 0.8 { std::f64::consts::PI } else { mean };
+        for _ in 0..50 {
+            let step = (big_e - ecc * big_e.sin() - mean) / (1.0 - ecc * big_e.cos());
+            big_e -= step;
+            if step.abs() < 1e-13 {
+                break;
+            }
+        }
+        let nu = 2.0 * ((1.0 + ecc).sqrt() * (big_e / 2.0).sin()).atan2((1.0 - ecc).sqrt() * (big_e / 2.0).cos());
+        let r = self.a_au * (1.0 - ecc * big_e.cos());
+        let u = self.argp_deg.to_radians() + nu;
+        let (node, inc) = (self.lan_deg.to_radians(), self.i_deg.to_radians());
+        [r * (node.cos() * u.cos() - node.sin() * u.sin() * inc.cos()), r * (node.sin() * u.cos() + node.cos() * u.sin() * inc.cos()), r * u.sin() * inc.sin()]
+    }
 }
 
 /// A star as it is now. A remnant (white dwarf, neutron star, black hole) is a star here too:
@@ -180,6 +216,18 @@ pub struct OrbitalNode {
     pub node: NodeKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub elements: Option<Elements>,
+    /// How the orbit turns, when it does enough to matter (the Moon's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precession: Option<Precession>,
+}
+
+/// An orbit turning at steady rates, degrees per day: its node (negative: regressing, as the
+/// Moon's does once in 18.6 years under the Sun's pull) and its periapsis longitude. The
+/// mean longitude keeps the sidereal period.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Precession {
+    pub node_deg_day: f64,
+    pub periapsis_deg_day: f64,
 }
 
 /// `system.json`: the root plus the orbital tree (exteriors only).

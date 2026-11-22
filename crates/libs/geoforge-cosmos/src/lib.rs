@@ -18,6 +18,7 @@
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
 //! | [`sky`] | the naked-eye stars around a system and its galaxy's glow |
+//! | [`sol`] | the real Solar System from published elements, at a moment of its calendar |
 //! | [`system`] | the habitable recipe's orbital tree: star, planets, belts, moons |
 //! | [`worlds`] | what each body is made of: shells, air, water, regime; the CO₂ thermostat |
 //! | [`context`] | the handoff for a body, belt members on demand, lookup by name |
@@ -32,6 +33,7 @@ pub mod galaxy;
 mod planets;
 pub mod population;
 pub mod sky;
+pub mod sol;
 pub mod stars;
 pub mod system;
 pub mod worlds;

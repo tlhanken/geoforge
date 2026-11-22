@@ -58,9 +58,13 @@ fn planet_level(system: &SolarSystem, key: Key) -> Option<&OrbitalNode> {
     None
 }
 
-/// The context of body `key`, or `None` if it is not a body orbiting in this system.
+/// The context of body `key`, or `None` if it is not a body orbiting in this system. A body of
+/// the real Solar System that has an archetype is that archetype, measured, not drawn.
 #[must_use]
 pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
+    if let Some(known) = crate::sol::known_context(system, key) {
+        return Some(known);
+    }
     let node = system.node(key)?;
     let NodeKind::Body(ext) = node.node else { return None };
     let orbit = node.elements?;

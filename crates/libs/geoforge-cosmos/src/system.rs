@@ -55,7 +55,7 @@ pub fn generate_system(seed: Seed) -> Generated {
         initial_mass_solar: None,
     };
     let star_key = keys.fresh();
-    let mut nodes = vec![OrbitalNode { key: star_key, name: sys_name.clone(), parent: None, node: NodeKind::Star(star), elements: None }];
+    let mut nodes = vec![OrbitalNode { key: star_key, name: sys_name.clone(), parent: None, node: NodeKind::Star(star), elements: None, precession: None }];
 
     // Orbits: a geometric ladder through the habitable zone. The focus receives 0.85–1.15×
     // Earth's starlight: inside the habitable zone, toward its warm edge, as Earth does.
@@ -121,7 +121,7 @@ pub fn generate_system(seed: Seed) -> Generated {
         let key = keys.fresh();
         let nm = format!("{sys_name} {}", ROMAN.get(i).copied().unwrap_or("+"));
         let el = Elements { a_au: draft.orbit.a_au, e: draft.orbit.e, ..draft.el };
-        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(draft.ext), elements: Some(el) });
+        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(draft.ext), elements: Some(el), precession: None });
         planets.push((key, nm, draft.ext, draft.orbit.a_au));
         if (draft.orbit.a_au - focus_a).abs() < 1e-12 {
             focus = key;
@@ -144,6 +144,7 @@ pub fn generate_system(seed: Seed) -> Generated {
                 composition: Composition::from_weights(&[(Species::Silicate, 0.75), (Species::Iron, 0.15), (Species::Ice, 0.10)]),
             }),
             elements: None,
+            precession: None,
         });
     }
     // An outer icy belt: the outermost giant's 3:2 to 2:1 resonances, else beyond the planets.
@@ -161,6 +162,7 @@ pub fn generate_system(seed: Seed) -> Generated {
             composition: Composition::from_weights(&[(Species::Ice, 0.6), (Species::Silicate, 0.4)]),
         }),
         elements: None,
+        precession: None,
     });
 
     // Moons, inside each planet's Hill sphere.
@@ -191,7 +193,7 @@ pub fn generate_system(seed: Seed) -> Generated {
         nodes.extend(moons.into_iter().filter(|n| n.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
-    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: None };
+    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: None, present_jd_tt: None };
     Generated { system: SolarSystem { root, nodes }, focus }
 }
 
@@ -279,5 +281,5 @@ pub(crate) fn moon(d: &mut Draw, key: Key, parent: Key, parent_mass_kg: f64, spe
     let class = if mass_kg >= 5e-5 * EARTH_MASS_KG { BodyClass::Terrestrial } else { BodyClass::SmallBody };
     let ext = BodyExterior { class, mass_kg, radius_km: solid_radius_km(mass_kg, density_g_cc), rotation_h: orbital_period_days(a_au, parent_mass_kg) * 24.0, obliquity_deg: d.range(0.0, 2.0) };
     let el = Elements { a_au, e: d.range(0.0, 0.03), i_deg: d.range(0.0, 2.0), lan_deg: d.range(0.0, 360.0), argp_deg: d.range(0.0, 360.0), m0_deg: d.range(0.0, 360.0) };
-    OrbitalNode { key, name, parent: Some(parent), node: NodeKind::Body(ext), elements: Some(el) }
+    OrbitalNode { key, name, parent: Some(parent), node: NodeKind::Body(ext), elements: Some(el), precession: None }
 }

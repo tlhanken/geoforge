@@ -13,6 +13,9 @@ pub fn show(w: &World) -> R<()> {
     let body = w.load_body()?;
     if let Some(sys) = w.load_system()? {
         println!("system {} (seed {}), {:.2} Gyr old", sys.root.name, w.manifest.root_seed.0, sys.root.epoch.system_age_gyr);
+        if let Some(jd) = sys.root.present_jd_tt {
+            println!("  the present: {} (its real calendar)", geoforge_almanac::ephemeris::utc_date(jd));
+        }
         if let Some(site) = &sys.root.site {
             println!("  drawn from the {}, {:.1} kpc from its centre", site.galaxy, site.radius_kpc);
         }
@@ -21,11 +24,14 @@ pub fn show(w: &World) -> R<()> {
             let kind = match &n.node {
                 NodeKind::Star(s) => describe_star(s),
                 NodeKind::Body(b) => {
-                    let what = geoforge_cosmos::body_context(&sys, n.key).map_or(String::new(), |c| geoforge_cosmos::describe(&c));
+                    // A real body without an archetype is not described from a drawn interior.
+                    let context = if sys.root.present_jd_tt.is_some() { geoforge_cosmos::sol::known_context(&sys, n.key) } else { geoforge_cosmos::body_context(&sys, n.key) };
+                    let what = context.map_or_else(|| "measured orbit and size".into(), |c| geoforge_cosmos::describe(&c));
                     format!("{:?} {:.3} M⊕ {:.0} km — {what}", b.class, b.mass_kg / geoforge_core::body::EARTH_MASS_KG, b.radius_km)
                 }
                 NodeKind::Barycenter => "barycentre of the pair".into(),
-                NodeKind::Belt(p) | NodeKind::Ring(p) => format!("belt {:.2}–{:.2} AU", p.inner_au, p.outer_au),
+                NodeKind::Belt(p) => format!("belt {:.2}–{:.2} AU", p.inner_au, p.outer_au),
+                NodeKind::Ring(p) => format!("rings {:.0}–{:.0} km", p.inner_au * geoforge_core::body::AU_KM, p.outer_au * geoforge_core::body::AU_KM),
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };
             println!("  {:<14} {kind} {a}{mark}", n.name);
@@ -167,7 +173,7 @@ fn describe_calendar(c: &Calendar) -> String {
 
 /// Positions on `day`, printed and optionally written as JSON.
 pub fn positions(w: &World, day: f64, to: Option<&Path>) -> R<()> {
-    let sys = w.load_system()?.ok_or("this world has no solar system (an archetype or hand-made body)")?;
+    let sys = w.load_system()?.ok_or("this world has no solar system (a hand-made body)")?;
     let body = w.load_body()?;
     let calendar = calendar_of(&body);
     let (year, local) = calendar.date(day);

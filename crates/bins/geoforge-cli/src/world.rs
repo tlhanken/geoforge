@@ -17,11 +17,14 @@ pub fn new_world(dir: &Path, seed: u64, galaxy: GalaxyPreset, habitable: bool, w
         return Err("seed must be at most 9223372036854775807".into());
     }
     let mut body = body.as_deref().map(read_body).transpose()?;
+    // An archetype is a real body: it comes with the real Solar System at its present.
+    let mut system = None;
     if let Some(a) = archetype {
-        body = Some(a.context(geoforge_core::Key(1), a.name()));
+        let (sys, b) = geoforge_cosmos::sol::archetype(Seed(seed), a);
+        (system, body) = (Some(sys), Some(b));
     }
     let recipe = if habitable { Recipe::Habitable } else { Recipe::Galaxy(galaxy.galaxy()) };
-    let w = pipe::create_world(dir, &NewWorld { seed: Seed(seed), recipe, grid: GridSpec::Equirect { width, height: width / 2 }, body, focus })?;
+    let w = pipe::create_world(dir, &NewWorld { seed: Seed(seed), recipe, grid: GridSpec::Equirect { width, height: width / 2 }, body, system, focus })?;
     show(&w)?;
     println!("\ncreated {} — next: geoforge generate {}", dir.display(), dir.display());
     Ok(())

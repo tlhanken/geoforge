@@ -251,9 +251,20 @@ phases (`positions`), and for any date (`sky`, `weather`):
 Also done: a global storm field (lows with fronts, tropical cyclones) that the daily
 weather follows, and a weather map for any date (`weather-map`).
 
+Also done: **the real Solar System** for archetype worlds (`geoforge_cosmos::sol`): the
+Sun, eight planets and Pluto from JPL's approximate-position elements, the Moon from
+Meeus's mean elements with its node and perigee turning, 20 major moons from JPL's mean
+elements, the main and Kuiper belts and Saturn's rings, set at the body's northern spring
+equinox (Earth: 2026-03-20 14:46 UTC) with real dates in `show` and `sky`. Checked against
+the 2026–27 almanac (`known_solar_system`): the five eclipses from February 2026 to
+February 2027 with the right kinds, within 4 hours (the Moon's periodic terms are left
+out); six conjunctions and oppositions of 2026 within 2 hours; Earth's equinox from the
+elements within 13 minutes and Mars Year 38's start within half a day. The neighbourhood
+stars are still drawn from the galaxy model, not a catalogue.
+
 Open: constellations (named asterisms from the brightest stars); sunrise, sunset and day
-length by place; tides by date; the Moon's nodal precession (eclipse seasons drift);
-seasonal phenomena on a date (cyclone season, monsoon onset, meteor showers); a check
+length by place; tides by date; the Moon's periodic terms (evection, variation) for
+eclipses to the minute; drawn moons' precession; seasonal phenomena on a date (cyclone season, monsoon onset, meteor showers); a check
 that no supernova progenitor lies within ~10 pc; the Gould Belt (the Sun's sky has 9,110
 naked-eye stars, a smooth disk gives ~6,500: its young B and A stars are a local
 excess); proper motions.
@@ -350,6 +361,55 @@ falling with age; nearby OB associations by the local young-star density); put i
 clusters, nebulae (emission, reflection, dark clouds) and supernova remnants into the sky
 chart and catalogue; let it raise the sky's young-star count (the Gould Belt gap) and the
 supernova risk.
+
+## 8e. Mountains, gyres and the weak climates — todo
+
+From the Thumi pulse (November 2026). The Earth checks in brackets are what each item should
+reproduce on the ETOPO-forced run or a generated Earth-like world.
+
+**Mountains** (none needs a full history; the mock-history case is the Appalachians):
+
+- **Paleo-orogens as sutures.** Today they are bowed lines between two random continental
+  points, one width and height end to end, and they can cross. Place them where blocks
+  collided instead: around craton margins, and parallel to passive margins a few hundred km
+  inland (oceans reopen along old sutures, the Wilson cycle); curved, segmented, never
+  crossing. Length is fine as is (Urals ~2,500 km, Appalachians ~2,400, Transantarctic
+  ~3,500). [Appalachians, Urals, Caledonides.]
+- **Arcs vary along strike.** Width and height are now one value per boundary segment, set
+  by its convergence rate. Vary them every few hundred km with slab age and dip; leave
+  volcanic gaps over flat slabs and where ridges or young slab subduct. The volcanic front's
+  distance from the trench stays regular (above the slab's ~100 km depth contour).
+  [Peru and Pampean gaps, Altiplano, Cascades vs Andes.]
+- **Flat slabs lift land far inland.** A flat-slab stretch of an Andean margin gets a broad
+  basement uplift 500–1,500 km behind the trench, with no volcanoes. [The Rockies' Laramide
+  uplift; the Sierras Pampeanas today.]
+- **Plume domes.** An active plume under a continent raises a dome of 1–2.5 km over
+  ~1,000 km, with flood basalt and a rift on top (flood basalt is done; the dome is not).
+  Continental hotspot tracks are capped at 400 km; Yellowstone's is ~800. [Ethiopian
+  highlands, East African plateau.]
+- **Island arcs.** Peaks are capped at 1.2 km; mature arcs reach 2–2.5 km and build bigger
+  islands as their crust thickens with age. Back-arc rifting can split a continental sliver
+  off an Andean margin. [Aleutians vs Marianas; Japan as a rifted sliver.]
+- **Great escarpments** on rifted margins (optional). [Drakensberg, Western Ghats, Serra
+  do Mar.]
+
+**Oceans**: the interior flow is right to be mostly zonal, but the gyres do not visibly
+close. Western boundary currents show as small patches and the cold eastern legs barely
+show. Strengthen and widen the eastern boundary currents and their upwelling, and add the
+equatorial SST tilt the trades set up (warm pool west, cold tongue east).
+
+**Weak climates** (causes are hypotheses until the layer-by-layer Earth A/B isolates them):
+
+| Miss | Likely cause | Fix to try |
+|---|---|---|
+| West-coast deserts wet (Lima 1,021 mm vs 15, Phoenix 1,011 vs 200) | weak cold current and upwelling; 1° grid smears mountain rain onto the coast | stronger eastern legs; rain on the windward cell only; test with real SST |
+| Siberian winters mild | sea air carried too far inland in winter; no snow-cover cooling or inversion | longer winter decay of maritime reach; snow cooling (Yakutsk −39 °C in January) |
+| Indian monsoon July jet a third of real | no cross-equatorial jet along the East African highlands; Tibet not an elevated heat source | elevated heating; let the cross-equatorial flow form a jet against the highlands |
+| West Pacific too cool | no warm pile-up from the trades | equatorial SST tilt tied to trade strength |
+| Rivers blocked by gorges | gorges below grid scale; basins filled, not breached | breach the lowest pass through a barrier |
+
+**Sky**: neighbourhood stars are drawn from the galaxy's statistics, not its systems; tie
+the brightest ones to systems that can be generated and visited.
 
 ## 9. Deep-time tectonics — later
 

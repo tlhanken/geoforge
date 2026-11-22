@@ -8,8 +8,9 @@
 //! Eclipses are found by stepping the geometry as seen from the world's centre: a moon (or,
 //! for a moon, its planet) crossing a star's disc is a solar eclipse, seen from part of the
 //! world when the separation is within the two discs plus the parallax of the world's own
-//! radius; a moon passing through the world's umbra is a lunar eclipse. Orbits are fixed, so
-//! eclipse seasons do not drift as the Moon's do over its 18.6-year nodal cycle.
+//! radius; a moon passing through the world's umbra is a lunar eclipse. Orbits are fixed
+//! unless a node says how it turns (the real Moon's node and perigee do, so its eclipse
+//! seasons drift over the 18.6-year nodal cycle; drawn moons' orbits stay fixed).
 //!
 //! A world's solar day follows from its spin and its year, 1/day = 1/spin − 1/year (plus for
 //! a retrograde spinner such as Venus, whose tilt is over 90°); a world locked to its star has
@@ -20,7 +21,6 @@ use geoforge_core::derived::orbital_period_days;
 use geoforge_core::key::Key;
 use geoforge_core::{BodyContext, Elements};
 use std::collections::BTreeMap;
-use std::f64::consts::TAU;
 
 /// A node's place at a moment.
 #[derive(Debug, Clone, PartialEq)]
@@ -56,22 +56,7 @@ pub fn period_days(system: &SolarSystem, key: Key) -> Option<f64> {
 /// Position relative to the parent `t` days after the present, AU.
 #[must_use]
 pub fn relative_position(e: &Elements, period_days: f64, t_days: f64) -> [f64; 3] {
-    let mean = (e.m0_deg.to_radians() + TAU * t_days / period_days).rem_euclid(TAU);
-    let ecc = e.e.clamp(0.0, 0.99);
-    // Kepler's equation, E − e·sin E = M, by Newton's method.
-    let mut big_e = if ecc > 0.8 { std::f64::consts::PI } else { mean };
-    for _ in 0..50 {
-        let step = (big_e - ecc * big_e.sin() - mean) / (1.0 - ecc * big_e.cos());
-        big_e -= step;
-        if step.abs() < 1e-13 {
-            break;
-        }
-    }
-    let nu = 2.0 * ((1.0 + ecc).sqrt() * (big_e / 2.0).sin()).atan2((1.0 - ecc).sqrt() * (big_e / 2.0).cos());
-    let r = e.a_au * (1.0 - ecc * big_e.cos());
-    let u = e.argp_deg.to_radians() + nu;
-    let (node, inc) = (e.lan_deg.to_radians(), e.i_deg.to_radians());
-    [r * (node.cos() * u.cos() - node.sin() * u.sin() * inc.cos()), r * (node.sin() * u.cos() + node.cos() * u.sin() * inc.cos()), r * u.sin() * inc.sin()]
+    e.position_at(e.m0_deg + 360.0 * t_days / period_days)
 }
 
 /// Every star and body `t` days after the present (belts and rings have no single place).
@@ -84,7 +69,7 @@ pub fn positions(system: &SolarSystem, t_days: f64) -> Vec<Placed> {
             continue;
         }
         let pos = place(system, n.key, t_days, &mut at);
-        let (rel, period) = match (n.elements, period_days(system, n.key)) {
+        let (rel, period) = match (orbit_at(n, t_days), period_days(system, n.key)) {
             (Some(e), Some(p)) => (relative_position(&e, p, t_days), p),
             _ => ([0.0; 3], 0.0),
         };
@@ -98,7 +83,7 @@ fn place(system: &SolarSystem, key: Key, t: f64, at: &mut BTreeMap<Key, [f64; 3]
         return p;
     }
     let node = system.node(key).expect("a node of the system");
-    let pos = match (node.parent, node.elements, period_days(system, key)) {
+    let pos = match (node.parent, orbit_at(node, t), period_days(system, key)) {
         (Some(parent), Some(e), Some(period)) => {
             let base = place(system, parent, t, at);
             let rel = relative_position(&e, period, t);
@@ -111,6 +96,11 @@ fn place(system: &SolarSystem, key: Key, t: f64, at: &mut BTreeMap<Key, [f64; 3]
     pos
 }
 
+/// A node's elements `t` days after the present, turned by its precession.
+fn orbit_at(node: &geoforge_core::body::OrbitalNode, t: f64) -> Option<Elements> {
+    node.elements.map(|e| node.precession.map_or(e, |p| e.precessed(p, t)))
+}
+
 fn norm(v: [f64; 3]) -> f64 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
@@ -119,6 +109,37 @@ fn norm(v: [f64; 3]) -> f64 {
 #[must_use]
 pub fn position_of(system: &SolarSystem, key: Key, t_days: f64) -> [f64; 3] {
     place(system, key, t_days, &mut BTreeMap::new())
+}
+
+/// TT − UTC since 2017 (32.184 s plus 37 leap seconds), days.
+const TT_MINUS_UTC_DAYS: f64 = 69.184 / 86_400.0;
+
+/// A Julian date (TT) as a UTC calendar date and time, "2026-03-20 14:46 UTC" (Meeus,
+/// *Astronomical Algorithms*, ch. 7).
+#[must_use]
+pub fn utc_date(jd_tt: f64) -> String {
+    let jd = jd_tt - TT_MINUS_UTC_DAYS + 0.5;
+    let (z, f) = (jd.floor(), jd.fract());
+    let alpha = ((z - 1_867_216.25) / 36_524.25).floor();
+    let a = if z < 2_299_161.0 { z } else { z + 1.0 + alpha - (alpha / 4.0).floor() };
+    let b = a + 1524.0;
+    let c = ((b - 122.1) / 365.25).floor();
+    let d = (365.25 * c).floor();
+    let e = ((b - d) / 30.6001).floor();
+    let day = b - d - (30.6001 * e).floor();
+    let month = if e < 14.0 { e - 1.0 } else { e - 13.0 };
+    let year = if month > 2.0 { c - 4716.0 } else { c - 4715.0 };
+    let minutes = (f * 1440.0).round() as i64;
+    // Rounding to the minute can carry into the next day; days are whole here, so carry it.
+    let (day, minutes) = if minutes == 1440 { (day + 1.0, 0) } else { (day, minutes) };
+    format!("{year:.0}-{month:02.0}-{day:02.0} {:02}:{:02} UTC", minutes / 60, minutes % 60)
+}
+
+/// The real calendar date `t_days` after the present, for a system that keeps one (the Solar
+/// System).
+#[must_use]
+pub fn real_date(system: &SolarSystem, t_days: f64) -> Option<String> {
+    system.root.present_jd_tt.map(|jd| utc_date(jd + t_days))
 }
 
 /// What a world's seasons follow: the nearest star or barycentre up the tree.
@@ -402,6 +423,12 @@ impl Calendar {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn julian_dates_read_as_calendar_dates() {
+        assert_eq!(utc_date(2_451_545.0 + TT_MINUS_UTC_DAYS), "2000-01-01 12:00 UTC");
+        assert_eq!(utc_date(2_461_120.116_08), "2026-03-20 14:46 UTC");
+    }
+
     use super::*;
     use geoforge_core::{Archetype, Key};
 

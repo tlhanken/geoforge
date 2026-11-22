@@ -57,6 +57,17 @@ impl Archetype {
         }
     }
 
+    /// The Solar System body the archetype's numbers are (the gas giant is Jupiter, the ice
+    /// giant Neptune).
+    #[must_use]
+    pub fn real_body(self) -> &'static str {
+        match self {
+            Self::GasGiant => "Jupiter",
+            Self::IceGiant => "Neptune",
+            other => other.name(),
+        }
+    }
+
     /// The body as a full context named `name`.
     #[must_use]
     pub fn context(self, key: Key, name: &str) -> BodyContext {

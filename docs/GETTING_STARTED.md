@@ -31,8 +31,10 @@ Or in one go: `just world 42` (makes `worlds/world-42`).
 - `--habitable` forces a Sun-like star with an Earth-like world; `--galaxy elliptical`
   (or `dwarf`, `starburst`) draws from another kind of galaxy; `geoforge census` lists
   seeds by what they give.
-- `--archetype earth` (or `mars`, `titan`, …) starts from a real body; `--body my.toml`
-  from your own description of one.
+- `--archetype earth` (or `mars`, `titan`, …) starts from a real body, in the real Solar
+  System at its last northern spring equinox (Earth's: 2026-03-20 14:46 UTC), so `sky`
+  shows the real planets and eclipses with dates; `--body my.toml` from your own
+  description of one.
 - `--width 1024` makes a smaller, faster grid (the default is 2048 × 1024 cells).
 
 The previews in `renders/` show each layer (elevation, biomes, climate, rivers, plates …)

@@ -83,7 +83,7 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     if let (true, Some((b, c))) = (close, &companion) {
         // A barycentre with both stars around it.
         host_key = keys.fresh();
-        nodes.push(OrbitalNode { key: host_key, name: sys_name.clone(), parent: None, node: NodeKind::Barycenter, elements: None });
+        nodes.push(OrbitalNode { key: host_key, name: sys_name.clone(), parent: None, node: NodeKind::Barycenter, elements: None, precession: None });
         let a = c.a_au * pair_birth / pair_now;
         let share_b = b.mass_solar / pair_now;
         // One orbit seen from the barycentre: B mirrors A, opposite it at every moment.
@@ -118,7 +118,7 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
         let nm = format!("{sys_name} {}", ROMAN.get(i).copied().unwrap_or("+"));
         let ext = planet(&mut d, p, host_now, age);
         let el = Elements { a_au: p.a_au, e: p.e, i_deg: d.range(0.0, 3.5), lan_deg: d.range(0.0, 360.0), argp_deg: d.range(0.0, 360.0), m0_deg: d.range(0.0, 360.0) };
-        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(host_key), node: NodeKind::Body(ext), elements: Some(el) });
+        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(host_key), node: NodeKind::Body(ext), elements: Some(el), precession: None });
         planets.push((key, nm, ext, p.a_au));
     }
     nodes.extend(belts(&mut d, &mut keys, host_key, &sys_name, &arch));
@@ -149,7 +149,7 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
         nodes.extend(moons.into_iter().filter(|m| m.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
-    let root = SystemRoot { key: root_key, seed, name: sys_name.clone(), epoch: Epoch { system_age_gyr: age }, placement: None, site: Some(ph.site.clone()) };
+    let root = SystemRoot { key: root_key, seed, name: sys_name.clone(), epoch: Epoch { system_age_gyr: age }, placement: None, site: Some(ph.site.clone()), present_jd_tt: None };
     let system = SolarSystem { root, nodes };
     match focus(&system) {
         Some(focus) => Ok(Generated { system, focus }),
@@ -172,7 +172,7 @@ pub fn describe_star(s: &Star) -> String {
 }
 
 fn star_node(key: Key, name: String, parent: Option<Key>, star: Star, elements: Option<Elements>) -> OrbitalNode {
-    OrbitalNode { key, name, parent, node: NodeKind::Star(star), elements }
+    OrbitalNode { key, name, parent, node: NodeKind::Star(star), elements, precession: None }
 }
 
 fn orbit(d: &mut Draw, a_au: f64, e: f64) -> Elements {
@@ -237,6 +237,7 @@ fn belts(d: &mut Draw, keys: &mut KeyAllocator, host: Key, sys_name: &str, arch:
         parent: Some(host),
         node: NodeKind::Belt(Population { inner_au: inner, outer_au: outer, ..pop }),
         elements: None,
+        precession: None,
     };
     let mut out = Vec::new();
     if let Some(b) = arch.asteroid_belt {
