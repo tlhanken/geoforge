@@ -200,11 +200,15 @@ Open:
 - Obliquity stability: a big moon steadies the tilt; without one, a wider tilt draw
   (debated: Laskar 1993 vs Lissauer et al. 2012).
 - Trojans at the giants' L4/L5 points.
-- A **positions** export: every planet and moon's place at a date (Kepler orbits).
 
-## 6. Sky, calendar and almanac — next
+Also done: the `positions` command and export (every star, planet and moon's place at a
+date, by Kepler orbits), and close binaries now share one orbit about their barycentre
+(each star had drawn its own tilt and phase).
 
-A world clock (epoch, year, day, months from the moons, a calendar) and, for any date:
+## 6. Sky, calendar and almanac — calendar done; the rest next
+
+Done: the focus's solar day, year and synodic months (`show`), its local date for any day
+and its moons' phases (`positions`). Next, for any date:
 
 - the star and moons in the sky: angular sizes, phases, eclipse type (total, annular,
   none), **eclipses** (new or full moon near a node, with the nodes precessing);

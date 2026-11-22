@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{LayerId, ProductId};
 use geoforge_core::body::{NodeKind, Star, StellarStage};
+use geoforge_core::ephemeris::Calendar;
 use geoforge_core::magnetism::MagneticField;
 use geoforge_core::{BodyContext, Seed};
 use geoforge_cosmos::{GalaxyPreset, Recipe};
@@ -100,6 +101,16 @@ enum Cmd {
     },
     /// Describe the system and the focus body.
     Show { dir: PathBuf },
+    /// Where every star, planet and moon is on a day (Earth days from the present), the
+    /// focus's date on its own calendar, and how lit its moons are.
+    Positions {
+        dir: PathBuf,
+        #[arg(long, default_value_t = 0.0)]
+        day: f64,
+        /// Also write them as JSON.
+        #[arg(long)]
+        to: Option<PathBuf>,
+    },
     /// Print the seed a product (or a product's entity) is generated from.
     Seed {
         dir: PathBuf,
@@ -291,6 +302,7 @@ fn run(cli: Cli) -> R<()> {
             }
         }
         Cmd::Show { dir } => show(&World::open(&dir)?)?,
+        Cmd::Positions { dir, day, to } => positions(&World::open(&dir)?, day, to.as_deref())?,
         Cmd::Seed { dir, product: name, owner } => {
             let w = World::open(&dir)?;
             let p = product(&name)?;
@@ -363,6 +375,7 @@ fn show(w: &World) -> R<()> {
     if !body.tides.is_empty() {
         println!("tides: {}", describe_tides(&body));
     }
+    println!("calendar: {}", describe_calendar(&calendar_of(&body)));
     if let GridSpec::Equirect { width, height } = w.manifest.grid {
         println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
     }
@@ -443,6 +456,78 @@ fn describe_tides(body: &BodyContext) -> String {
         out += "; the star's is a fixed bulge (the world is locked to it)";
     }
     out
+}
+
+/// The focus's calendar; its moons are the tidal partners lighter than it.
+fn calendar_of(body: &BodyContext) -> Calendar {
+    let moons: Vec<(String, f64)> = body
+        .tides
+        .iter()
+        .filter(|t| t.mass_kg < body.exterior.mass_kg)
+        .map(|t| (t.name.clone(), geoforge_core::derived::orbital_period_days(t.distance_km / geoforge_core::body::AU_KM, body.exterior.mass_kg + t.mass_kg)))
+        .collect();
+    Calendar::new(body, &moons)
+}
+
+/// "solar day 24.0 h; year 365.3 days, 365.2 local days; month (Moon) 29.5 days, 12.4 a year".
+fn describe_calendar(c: &Calendar) -> String {
+    let mut out = match (c.solar_day_h, c.days_per_year()) {
+        (Some(day), Some(n)) if day < 72.0 => format!("solar day {day:.1} h; year {:.1} days, {n:.1} local days", c.year_days),
+        (Some(day), Some(n)) => format!("solar day {:.1} days; year {:.1} days, {n:.2} local days", day / 24.0, c.year_days),
+        _ => format!("no days (one face to the star); year {:.1} days", c.year_days),
+    };
+    for (name, m) in &c.months {
+        out += &format!("; month ({name}) {m:.1} days, {:.1} a year", c.year_days / m);
+    }
+    out
+}
+
+/// Positions on `day`, printed and optionally written as JSON.
+fn positions(w: &World, day: f64, to: Option<&Path>) -> R<()> {
+    let sys = w.load_system()?.ok_or("this world has no solar system (an archetype or hand-made body)")?;
+    let body = w.load_body()?;
+    let calendar = calendar_of(&body);
+    let (year, local) = calendar.date(day);
+    let unit = if calendar.solar_day_h.is_some() { "local day" } else { "day" };
+    println!("day {day} (Earth days from the present): {}, year {year}, {unit} {local:.2}", body.name);
+    let placed = geoforge_core::ephemeris::positions(&sys, day);
+    let at = |k: geoforge_core::Key| placed.iter().find(|p| p.key == k).map(|p| p.position_au);
+    println!("  {:<16} {:>11} {:>11} {:>11} {:>13} {:>11}", "", "x AU", "y AU", "z AU", "from parent", "period d");
+    for p in &placed {
+        let (from, period) = match p.period_days {
+            0.0 => ("—".to_string(), "—".to_string()),
+            d if p.distance_au < 0.01 => (format!("{:.0} km", p.distance_au * geoforge_core::body::AU_KM), format!("{d:.2}")),
+            d => (format!("{:.4} AU", p.distance_au), format!("{d:.2}")),
+        };
+        let [x, y, z] = p.position_au;
+        println!("  {:<16} {x:>11.5} {y:>11.5} {z:>11.5} {from:>13} {period:>11}", p.name);
+    }
+    // The star (or the pair's barycentre) the focus's planet orbits sits at the root.
+    let star = [0.0; 3];
+    let focus = at(w.manifest.focus).ok_or("the focus is not in the system")?;
+    let mut lit = Vec::new();
+    for m in sys.children(w.manifest.focus) {
+        if let Some(pos) = at(m.key) {
+            let f = geoforge_core::ephemeris::lit_fraction(pos, focus, star);
+            println!("  {} is {:.0}% lit", m.name, 100.0 * f);
+            lit.push(serde_json::json!({ "name": m.name, "lit": f }));
+        }
+    }
+    if let Some(path) = to {
+        let bodies: Vec<serde_json::Value> = placed
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "key": p.key.0, "name": p.name, "parent": p.parent.map(|k| k.0),
+                    "position_au": p.position_au, "distance_from_parent_au": p.distance_au, "period_days": p.period_days,
+                })
+            })
+            .collect();
+        let doc = serde_json::json!({ "day": day, "focus": body.name, "date": { "year": year, "day": local, "unit": unit }, "moons": lit, "bodies": bodies });
+        std::fs::write(path, serde_json::to_string_pretty(&doc)?)?;
+        println!("written to {}", path.display());
+    }
+    Ok(())
 }
 
 /// "white dwarf DA8, 0.59 M☉, 6300 K, 2.1e-4 L☉, [Fe/H] −0.12 (born 1.80 M☉)".

@@ -86,20 +86,23 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
         nodes.push(OrbitalNode { key: host_key, name: sys_name.clone(), parent: None, node: NodeKind::Barycenter, elements: None });
         let a = c.a_au * pair_birth / pair_now;
         let share_b = b.mass_solar / pair_now;
-        nodes.push(star_node(a_key, lettered("A"), Some(host_key), primary.clone(), Some(orbit(&mut d, a * share_b, c.e, 0.0))));
-        nodes.push(star_node(keys.fresh(), lettered("B"), Some(host_key), b.clone(), Some(orbit(&mut d, a * (1.0 - share_b), c.e, 180.0))));
+        // One orbit seen from the barycentre: B mirrors A, opposite it at every moment.
+        let orbit_a = orbit(&mut d, a * share_b, c.e);
+        let orbit_b = Elements { a_au: a * (1.0 - share_b), argp_deg: (orbit_a.argp_deg + 180.0) % 360.0, ..orbit_a };
+        nodes.push(star_node(a_key, lettered("A"), Some(host_key), primary.clone(), Some(orbit_a)));
+        nodes.push(star_node(keys.fresh(), lettered("B"), Some(host_key), b.clone(), Some(orbit_b)));
     } else {
         host_key = a_key;
         nodes.push(star_node(a_key, lettered("A"), None, primary.clone(), None));
         if let Some((b, c)) = &companion {
-            nodes.push(star_node(keys.fresh(), lettered("B"), Some(a_key), b.clone(), Some(orbit(&mut d, c.a_au * pair_birth / pair_now, c.e, 0.0))));
+            nodes.push(star_node(keys.fresh(), lettered("B"), Some(a_key), b.clone(), Some(orbit(&mut d, c.a_au * pair_birth / pair_now, c.e))));
         }
     }
     let total_birth = pair_birth + ph.companions.get(1).map_or(0.0, |c| c.initial_mass);
     let total_now = pair_now + outer.as_ref().map_or(0.0, |o| o.0.mass_solar);
     let outer = outer.filter(|(s, _)| companion.is_some() && bound(&[&primary, s], total_birth, total_now));
     if let Some((c_star, c)) = &outer {
-        nodes.push(star_node(keys.fresh(), lettered("C"), Some(host_key), c_star.clone(), Some(orbit(&mut d, c.a_au * total_birth / total_now, c.e, 0.0))));
+        nodes.push(star_node(keys.fresh(), lettered("C"), Some(host_key), c_star.clone(), Some(orbit(&mut d, c.a_au * total_birth / total_now, c.e))));
     }
 
     // Planets form around the host as it was born, then live through what its star became.
@@ -172,9 +175,8 @@ fn star_node(key: Key, name: String, parent: Option<Key>, star: Star, elements: 
     OrbitalNode { key, name, parent, node: NodeKind::Star(star), elements }
 }
 
-fn orbit(d: &mut Draw, a_au: f64, e: f64, argp_offset: f64) -> Elements {
-    let argp = d.range(0.0, 180.0) + argp_offset;
-    Elements { a_au, e, i_deg: d.range(0.0, 10.0), lan_deg: 0.0, argp_deg: argp, m0_deg: argp_offset }
+fn orbit(d: &mut Draw, a_au: f64, e: f64) -> Elements {
+    Elements { a_au, e, i_deg: d.range(0.0, 10.0), lan_deg: 0.0, argp_deg: d.range(0.0, 360.0), m0_deg: d.range(0.0, 360.0) }
 }
 
 /// The disk the planets formed in: around the primary inside a wide companion's reach, or

@@ -54,7 +54,8 @@ Other starting points:
 | `import <dir> <product> [--from DIR] [--authored]` | Bring an edit back as a patch, or as authored data |
 | `reset <dir> <product>` | Drop a product's edits |
 | `render <dir> [products\|layers\|views] [--to DIR]` | Preview PNGs (all by default) |
-| `show <dir>` | The solar system (each body with its regime, air and water) and the focus |
+| `show <dir>` | The solar system (each body with its regime, air and water) and the focus: circulation, magnetic field, breathability, tides, calendar |
+| `positions <dir> [--day T] [--to FILE.json]` | Where every star, planet and moon is T Earth days from the present (Kepler orbits), the focus's local date, and how lit its moons are |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
 | `census [--galaxy NAME] [--count N] [--from SEED]` | Draw many systems: kinds of star, planets, wet worlds, example seeds |
@@ -246,6 +247,11 @@ product's randomness. `seed <dir> <product>` prints it.
   else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
   where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
   build up CO₂ and run a few degrees cooler, bright ones draw it down.
+- **Positions and calendar** (`geoforge_core::ephemeris`): each node on a fixed Kepler
+  orbit about its parent from its elements (no mutual perturbations); a pair's stars turn
+  about their barycentre, opposite each other. Solar day 1/(1/spin − 1/year) (+ for a
+  retrograde spinner: Venus 116.75 days), none for a world locked to its star; months are
+  synodic, 1/(1/orbit − 1/year).
 - **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's
   dynamo lasts 10 Gyr·√M with plates, 1.5 Gyr·√M under a stagnant lid, 1 Gyr·√M under an
   episodic one (Mars's stopped ~4.1 Gyr ago); giants always have one. Surface field 30

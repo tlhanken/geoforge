@@ -1,0 +1,160 @@
+{
+  "root": {
+    "key": 1,
+    "seed": 7,
+    "name": "Lisano",
+    "epoch": {
+      "system_age_gyr": 2.701999554371266
+    },
+    "site": {
+      "galaxy": "Milky Way",
+      "radius_kpc": 1.9126764652613242
+    }
+  },
+  "nodes": [
+    {
+      "key": 3,
+      "name": "Lisano",
+      "node": {
+        "kind": "barycenter"
+      }
+    },
+    {
+      "key": 2,
+      "name": "Lisano A",
+      "parent": 3,
+      "node": {
+        "kind": "star",
+        "mass_solar": 0.3941678426639509,
+        "luminosity_solar": 0.019489351047444967,
+        "radius_solar": 0.4098700778873451,
+        "temperature_k": 3368.624165761485,
+        "age_gyr": 2.701999554371266,
+        "metallicity_dex": 0.3241287105531715,
+        "spectral_class": "M2V",
+        "initial_mass_solar": 0.3941678426639509
+      },
+      "elements": {
+        "a_au": 0.13855911253509362,
+        "e": 0.2491011461365507,
+        "i_deg": 4.827902527444786,
+        "lan_deg": 0.0,
+        "argp_deg": 266.9899430261521,
+        "m0_deg": 358.64781433085477
+      }
+    },
+    {
+      "key": 4,
+      "name": "Lisano B",
+      "parent": 3,
+      "node": {
+        "kind": "star",
+        "mass_solar": 0.3804246018422425,
+        "luminosity_solar": 0.01796003357915329,
+        "radius_solar": 0.39838003824692897,
+        "temperature_k": 3347.7600619150753,
+        "age_gyr": 2.701999554371266,
+        "metallicity_dex": 0.3241287105531715,
+        "spectral_class": "M2V",
+        "initial_mass_solar": 0.3804246018422425
+      },
+      "elements": {
+        "a_au": 0.14356470692197204,
+        "e": 0.2491011461365507,
+        "i_deg": 4.827902527444786,
+        "lan_deg": 0.0,
+        "argp_deg": 86.9899430261521,
+        "m0_deg": 358.64781433085477
+      }
+    },
+    {
+      "key": 5,
+      "name": "Lisano I",
+      "parent": 3,
+      "node": {
+        "kind": "body",
+        "class": "ice_giant",
+        "mass_kg": 1.0210792460092445e+26,
+        "radius_km": 24882.550505459327,
+        "rotation_h": 9.909081061605173,
+        "obliquity_deg": 16.525138333180564
+      },
+      "elements": {
+        "a_au": 5.066793805271762,
+        "e": 0.04194345537774337,
+        "i_deg": 3.023341209639884,
+        "lan_deg": 282.75129360583685,
+        "argp_deg": 98.00230970827909,
+        "m0_deg": 347.93765700212333
+      }
+    },
+    {
+      "key": 6,
+      "name": "Lisano Outer Belt",
+      "parent": 3,
+      "node": {
+        "kind": "belt",
+        "inner_au": 6.639378130698458,
+        "outer_au": 8.04303381659435,
+        "count_estimate": 416529774.6406237,
+        "size_law": {
+          "min_km": 1.0,
+          "max_km": 1786.4101929148599,
+          "exponent": 3.0
+        },
+        "composition": [
+          [
+            "silicate",
+            0.4
+          ],
+          [
+            "ice",
+            0.6
+          ]
+        ]
+      }
+    },
+    {
+      "key": 7,
+      "name": "Lisano I a",
+      "parent": 5,
+      "node": {
+        "kind": "body",
+        "class": "terrestrial",
+        "mass_kg": 3.426629778632377e+21,
+        "radius_km": 755.1067018833224,
+        "rotation_h": 48.1455488204531,
+        "obliquity_deg": 0.27951574897013365
+      },
+      "elements": {
+        "a_au": 0.0011570412123104127,
+        "e": 0.02837878730359397,
+        "i_deg": 1.3127028223857267,
+        "lan_deg": 153.73974405701443,
+        "argp_deg": 343.1384609833796,
+        "m0_deg": 227.0582137780505
+      }
+    },
+    {
+      "key": 8,
+      "name": "Lisano I b",
+      "parent": 5,
+      "node": {
+        "kind": "body",
+        "class": "terrestrial",
+        "mass_kg": 5.827174475672365e+21,
+        "radius_km": 901.3053255338953,
+        "rotation_h": 135.1892733027325,
+        "obliquity_deg": 0.4878255030696712
+      },
+      "elements": {
+        "a_au": 0.0023028883856645965,
+        "e": 0.0006186852988710456,
+        "i_deg": 1.077765157405331,
+        "lan_deg": 63.938063777189214,
+        "argp_deg": 135.50076567591867,
+        "m0_deg": 350.943681530011
+      }
+    }
+  ]
+}
