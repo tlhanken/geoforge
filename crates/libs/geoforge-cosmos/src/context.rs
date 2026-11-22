@@ -7,9 +7,6 @@ use geoforge_core::body::{BodyClass, BodyContext, BodyExterior, Elements, Irradi
 use geoforge_core::derived::{flux_w_m2, frost_line_au, main_sequence_luminosity, orbital_period_days};
 use geoforge_core::key::Key;
 
-/// Share of a forcing difference from Earth that weathering cancels on Earth-like worlds.
-pub const WEATHERING_FEEDBACK: f64 = 0.75;
-
 /// A moon this close to its planet (in planet radii) is tidally heated.
 const TIDAL_HEATING_RADII: f64 = 12.0;
 
@@ -110,7 +107,7 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
         tides,
         epoch: system.root.epoch,
     };
-    regulate_co2(&mut ctx, WEATHERING_FEEDBACK);
+    regulate_co2(&mut ctx);
     Some(ctx)
 }
 

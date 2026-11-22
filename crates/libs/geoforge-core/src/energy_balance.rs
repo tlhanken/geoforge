@@ -37,7 +37,7 @@ pub const EARTH_HEAT_TRANSPORT: f64 = 3.2;
 const EARTH_DAY_H: f64 = 23.934;
 /// Silicate weathering speeds up e-fold per this many kelvin (Walker et al. 1981's
 /// temperature dependence, as used by Abbot et al. 2012).
-const WEATHERING_E_FOLD_K: f64 = 13.7;
+pub const WEATHERING_E_FOLD_K: f64 = 13.7;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Radiation {
@@ -145,8 +145,10 @@ impl Radiation {
     /// belt. A world frozen over counts as −75 °C.
     #[must_use]
     pub fn weathering_temperature_c(&self, locked: bool) -> f64 {
-        // Ten-degree bands, solved to a hundredth of a degree: the thermostat calls this often.
-        let lats: Vec<f64> = (0..18).map(|i| -85.0 + 10.0 * f64::from(i)).collect();
+        // Five-degree bands, solved to a hundredth of a degree: the thermostat calls this often.
+        // Ten-degree bands are too coarse near the ice-albedo tipping point, where they hold
+        // partly frozen states that finer bands (and the climate layer) collapse to snowball.
+        let lats: Vec<f64> = (0..36).map(|i| -87.5 + 5.0 * f64::from(i)).collect();
         let (t, _) = if locked { self.substellar_balance(&lats, 0.01) } else { self.zonal_balance(&lats, 0.01) };
         let area: f64 = lats.iter().map(|l| l.to_radians().cos()).sum();
         let rate: f64 = lats.iter().zip(&t).filter(|(_, &ti)| ti > 0.0).map(|(l, &ti)| l.to_radians().cos() * ((ti - 15.0) / WEATHERING_E_FOLD_K).exp()).sum::<f64>() / area;

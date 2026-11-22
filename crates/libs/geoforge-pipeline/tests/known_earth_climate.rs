@@ -13,6 +13,7 @@ use geoforge_core::grid::AnyGrid;
 use geoforge_core::product::{LayerId, Products};
 use geoforge_core::{Archetype, Cell, Field, Grid, Key};
 use geoforge_surface::biomes::{classify, BiomesParams, CellClimate};
+use geoforge_surface::koppen::{self, Koppen, KoppenRules};
 use known::{cells_in, mean, near, Scorecard};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
@@ -154,39 +155,36 @@ const CLASSIFIER_GAPS: &[(&str, &str)] = &[
     ("Nairobi", "tropical highlands read as temperate: the tropical classes need an 18 °C coldest month"),
 ];
 
-/// Köppen major group (B split into BW and BS), Kottek et al. (2006) thresholds.
-fn koppen_group(t: f64, range: f64, precip: f64, warm_share: f64) -> &'static str {
-    let (warm, cold) = (t + range / 2.0, t - range / 2.0);
-    let pth = 10.0
-        * (2.0 * t
-            + if warm_share >= 2.0 / 3.0 {
-                28.0
-            } else if warm_share <= 1.0 / 3.0 {
-                0.0
-            } else {
-                14.0
-            });
-    if warm < 10.0 {
-        "E"
-    } else if precip < pth / 2.0 {
-        "BW"
-    } else if precip < pth {
-        "BS"
-    } else if cold >= 18.0 {
-        "A"
-    } else if cold > -3.0 {
-        "C"
-    } else {
-        "D"
-    }
+/// The modelled climate puts 13 of 31 stations in their full class; fewer is a regression.
+const FULL_CLASS_FLOOR: f64 = 0.38;
+// Köppen from station normals. The rebuilt months are sinusoids in phase with each other, the
+// coldest month is the mean less half the range, and many stations sit on a line.
+const ON_THE_LINE: &str = "on a class line with these rounded normals";
+const KOPPEN_CLASSIFIER_GAPS: &[(&str, &str)] = &[
+    ("Yakutsk", "the coldest month comes out −37.8 °C, just over the −38 °C line for d"),
+    ("Beijing", "the coldest month is taken as the mean less half the range (−2.1 °C); Beijing's January is −3.1"),
+    ("Vancouver", "a 37 mm driest summer month is under Peel's 40 mm for s; Vancouver is often classed Csb"),
+    ("Los Angeles", ON_THE_LINE),
+    ("Alice Springs", ON_THE_LINE),
+    ("Tehran", ON_THE_LINE),
+    ("Dodge City", ON_THE_LINE),
+    ("Ulaanbaatar", "270 mm against a 272 mm aridity line; Ulaanbaatar is often classed BSk"),
+    ("Astana", ON_THE_LINE),
+    ("Lhasa", "430 mm against a 440 mm aridity line; Lhasa is often classed BSk"),
+    ("Mumbai", "Am needs a 12 mm driest month at 2200 mm and Mumbai's dry season has none; it is often classed Aw"),
+    ("Kinshasa", "the June–August dry season is only part of the cold half-year, which the in-phase rain curve spreads over all of it"),
+    ("Nairobi", "two rainy seasons, which an annual sinusoid cannot show"),
+];
+
+/// The stations' classes follow Köppen's −3 °C boundary between C and D (Lhasa is Cwb).
+const KOPPEN_RULES: KoppenRules = KoppenRules { cold_boundary_c: -3.0 };
+
+fn koppen_of(t: f64, range: f64, precip: f64, warm_share: f64) -> Koppen {
+    koppen::classify(t, range, precip, warm_share, &KOPPEN_RULES)
 }
 
-fn observed_group(k: &str) -> &str {
-    if k.starts_with('B') {
-        &k[..2]
-    } else {
-        &k[..1]
-    }
+fn observed(st: &Station) -> Koppen {
+    Koppen::from_code(st.koppen).expect("a Köppen code")
 }
 
 /// Earth's climate on its real topography, with the fields the cases read.
@@ -574,22 +572,19 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
         "mm",
     );
 
-    let matches = STATIONS
+    let modelled: Vec<Koppen> = STATIONS
         .iter()
-        .filter(|st| {
+        .map(|st| {
             let c = e.station_cell(st);
-            koppen_group(e.t[c], e.t_range[c], e.precip[c], e.warm_share[c])
-                == observed_group(st.koppen)
+            koppen_of(e.t[c], e.t_range[c], e.precip[c], e.warm_share[c])
         })
-        .count();
-    s.range(
-        "climate class",
-        "stations in their Köppen group",
-        matches as f64 / STATIONS.len() as f64,
-        0.65..=1.0,
-        "",
-    )
-    .gap("follows the station misses above");
+        .collect();
+    let share = |same: fn(Koppen, Koppen) -> bool| {
+        STATIONS.iter().zip(&modelled).filter(|(st, &k)| same(k, observed(st))).count() as f64 / STATIONS.len() as f64
+    };
+    s.range("climate class", "stations in their Köppen group", share(|a, b| a.group() == b.group()), 0.65..=1.0, "")
+        .gap("follows the station misses above");
+    s.range("climate class", "stations in their full Köppen class", share(|a, b| a == b), FULL_CLASS_FLOOR..=1.0, "");
 }
 
 fn hydrology(s: &mut Scorecard, e: &Earth) {
@@ -713,6 +708,8 @@ fn classifier(s: &mut Scorecard) {
             st.biomes,
         )
         .gap_if_listed(st.name, CLASSIFIER_GAPS);
+        s.one_of("classifier", format!("{} Köppen from its normals", st.name), koppen_of(st.t, st.range, st.precip, st.warm_share).code(), &[st.koppen])
+            .gap_if_listed(st.name, KOPPEN_CLASSIFIER_GAPS);
     }
 }
 
@@ -724,6 +721,13 @@ fn scorecard() -> &'static Scorecard {
         known::dump("climate_precipitation", e.precip.iter().copied());
         known::dump("climate_warm_share", e.warm_share.iter().copied());
         known::dump("climate_t_range", e.t_range.iter().copied());
+        known::dump(
+            "climate_koppen",
+            (0..e.t.len()).map(|c| match e.elev[c] < 0.0 {
+                true => -1.0,
+                false => Koppen::ALL.iter().position(|&k| k == koppen_of(e.t[c], e.t_range[c], e.precip[c], e.warm_share[c])).unwrap() as f64,
+            }),
+        );
         known::dump("circulation_sst_anomaly", e.p.sst_anomaly().unwrap().values.iter().map(|&v| f64::from(v)));
         let (jul, jan) = (e.p.wind_jul().unwrap(), e.p.wind_jan().unwrap());
         known::dump("circulation_wind_jul", jul.values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));

@@ -152,17 +152,22 @@ fn equirect(grid: GridSpec) -> Result<(u32, u32)> {
     }
 }
 
-fn write_georef(dir: &Path, p: ProductId, grid: GridSpec, body_name: &str, radius_km: f64) -> Result<()> {
+/// Write the world file (`<stem>.pgw`) and projection (`<stem>.prj`) that place an
+/// equirectangular PNG on the body's sphere.
+///
+/// # Errors
+/// On IO errors, or for grids without a raster form.
+pub fn write_georef(dir: &Path, stem: &str, grid: GridSpec, body: &BodyRef) -> Result<()> {
     let (w, h) = equirect(grid)?;
     let (dx, dy) = (360.0 / f64::from(w), 180.0 / f64::from(h));
     let pgw = format!("{dx:.12}\n0.0\n0.0\n{:.12}\n{:.12}\n{:.12}\n", -dy, -180.0 + dx / 2.0, 90.0 - dy / 2.0);
-    std::fs::write(dir.join(format!("{}.pgw", p.name())), pgw)?;
-    let n = body_name.replace('"', "");
+    std::fs::write(dir.join(format!("{stem}.pgw")), pgw)?;
+    let n = body.name.replace('"', "");
     let prj = format!(
         "GEOGCS[\"{n} sphere\",DATUM[\"D_{n}\",SPHEROID[\"{n}\",{:.1},0]],PRIMEM[\"Reference_Meridian\",0],UNIT[\"Degree\",0.0174532925199433]]",
-        radius_km * 1000.0
+        body.radius_km * 1000.0
     );
-    std::fs::write(dir.join(format!("{}.prj", p.name())), prj)?;
+    std::fs::write(dir.join(format!("{stem}.prj")), prj)?;
     Ok(())
 }
 
@@ -226,7 +231,7 @@ pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef) -> Result<Vec
     if p.shape() == Shape::Partition {
         files.push(format!("{name}.table.json"));
     }
-    write_georef(dir, p, grid, &body.name, body.radius_km)?;
+    write_georef(dir, p.name(), grid, body)?;
     files.push(format!("{name}.pgw"));
     files.push(format!("{name}.prj"));
     let side = Sidecar { product: p, grid, encoding, note };

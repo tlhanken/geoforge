@@ -50,10 +50,10 @@ Other starting points:
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
 | `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |
-| `export <dir> [products\|layers\|all] [--to DIR]` | Write edit views (default `<dir>/edit`) |
+| `export <dir> [products\|layers\|views\|all] [--to DIR]` | Write edit views (default `<dir>/edit`); derived views as PNG + legend + world file |
 | `import <dir> <product> [--from DIR] [--authored]` | Bring an edit back as a patch, or as authored data |
 | `reset <dir> <product>` | Drop a product's edits |
-| `render <dir> [products] [--to DIR]` | Preview PNGs |
+| `render <dir> [products\|layers\|views] [--to DIR]` | Preview PNGs (all by default) |
 | `show <dir>` | The solar system (each body with its regime, air and water) and the focus |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
@@ -112,6 +112,20 @@ new kind of body is a new `Generator` registered in `geoforge-pipeline/src/regis
 | bands | `zonal_wind` (m/s, eastward), `cloud_bands` (cloud-top brightness, 0 darkest belt – 1 brightest zone or oval) | fields |
 
 Derived values (plate boundaries, slope, sea level, flow directions) are recomputed, not stored.
+
+**Derived views** are maps that are pure functions of stored products. They are worked out
+when rendered or exported, never stored, so they cannot go stale and are not edited (edit
+the products they read instead):
+
+| View | Reads | Export |
+|---|---|---|
+| `koppen` | `temperature`, `temperature_range`, `precipitation`, `precipitation_warm_share` | `koppen.png` (exact class colours, Beck et al. 2018's palette), `koppen.legend.json` (code, name, colour, share of land), `.pgw`, `.prj` |
+
+The Köppen–Geiger view has 30 classes by Peel et al. (2007)'s rules: arid (B) first, then
+polar, tropical, and temperate or continental at a 0 °C coldest month
+(`KoppenRules::cold_boundary_c`; Köppen's −3 °C is the alternative). Monthly figures are
+rebuilt from the stored ones, with temperature and rain as sinusoids in phase. The rain
+curve's amplitude gives the stored warm-half share.
 
 ## Editing a layer
 
@@ -225,8 +239,9 @@ product's randomness. `seed <dir> <product>` prints it.
   starlight and where it formed: airless rock (Mercury, the Moon), runaway greenhouse (Venus:
   ~90 bar CO₂, episodic lid), ocean and plate tectonics (Earth), thin CO₂ (Mars); icy bodies
   with an ice shell over an ocean when tidally heated (Europa), sometimes N₂–CH₄ air (Titan),
-  else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂ so
-  ~75% of a starlight difference from Earth is compensated.
+  else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
+  where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
+  build up CO₂ and run a few degrees cooler, bright ones draw it down.
 - **Tectonics**: v1's electrostatic plate seeding (power-law charges), now with each cell
   assigned by distance ÷ charge^0.22 so a seed's charge sets its plate's size
   (`size_weighting = 0` gives v1's plates exactly); domain warp and island removal;

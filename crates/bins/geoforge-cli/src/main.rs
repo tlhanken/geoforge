@@ -6,7 +6,7 @@ use geoforge_core::product::{LayerId, ProductId};
 use geoforge_core::body::{NodeKind, Star, StellarStage};
 use geoforge_core::{BodyContext, Seed};
 use geoforge_cosmos::{GalaxyPreset, Recipe};
-use geoforge_pipeline::{self as pipe, GenerateOptions, LayerAction, NewWorld, State};
+use geoforge_pipeline::{self as pipe, GenerateOptions, LayerAction, NewWorld, State, View};
 use geoforge_store::World;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -68,10 +68,11 @@ enum Cmd {
     Plan { dir: PathBuf },
     /// Sources and states of every product.
     Status { dir: PathBuf },
-    /// Write edit views (PNG + world file + sidecar) of products for editing elsewhere.
+    /// Write edit views (PNG + world file + sidecar) of products for editing elsewhere, and
+    /// derived views (koppen) as PNG + legend + world file.
     Export {
         dir: PathBuf,
-        /// Product names, layer names, or "all".
+        /// Product names, layer names, view names, or "all".
         what: Vec<String>,
         #[arg(long)]
         to: Option<PathBuf>,
@@ -88,9 +89,10 @@ enum Cmd {
     },
     /// Discard a product's edits; it is generated again.
     Reset { dir: PathBuf, product: String },
-    /// Write preview renders of stored products.
+    /// Write preview renders of stored products and derived views (koppen).
     Render {
         dir: PathBuf,
+        /// Product names, layer names, view names, or "all" (the default).
         what: Vec<String>,
         #[arg(long)]
         to: Option<PathBuf>,
@@ -136,23 +138,29 @@ fn main() -> ExitCode {
 
 type R<T> = Result<T, Box<dyn std::error::Error>>;
 
-fn parse_products(what: &[String]) -> R<Vec<ProductId>> {
+/// Products and derived views by name (or a layer's products); everything for "all" or none.
+fn parse_targets(what: &[String]) -> R<(Vec<ProductId>, Vec<View>)> {
     if what.is_empty() || what.iter().any(|w| w == "all") {
-        return Ok(ProductId::ALL.to_vec());
+        return Ok((ProductId::ALL.to_vec(), View::ALL.to_vec()));
     }
-    let mut out = Vec::new();
+    let (mut ps, mut vs) = (Vec::new(), Vec::new());
     for w in what {
         if let Some(p) = ProductId::from_name(w) {
-            out.push(p);
+            ps.push(p);
         } else if let Some(l) = LayerId::from_name(w) {
-            out.extend(l.products());
+            ps.extend(l.products());
+        } else if let Some(v) = View::from_name(w) {
+            vs.push(v);
         } else {
-            return Err(format!("unknown product or layer `{w}` (products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
+            let views = View::ALL.map(View::name).join(", ");
+            return Err(format!("unknown product, layer or view `{w}` (views: {views}; products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
         }
     }
-    out.sort();
-    out.dedup();
-    Ok(out)
+    ps.sort();
+    ps.dedup();
+    vs.sort();
+    vs.dedup();
+    Ok((ps, vs))
 }
 
 fn product(name: &str) -> R<ProductId> {
@@ -195,7 +203,7 @@ fn run(cli: Cli) -> R<()> {
                 }
             })?;
             if render {
-                let files = pipe::render_all(&w, &products, &w.root.join("renders"), &[])?;
+                let files = pipe::render_all(&w, &products, &w.root.join("renders"), &ProductId::ALL, &View::ALL)?;
                 println!("renders: {} files in {}", files.len(), w.root.join("renders").display());
             }
         }
@@ -245,11 +253,17 @@ fn run(cli: Cli) -> R<()> {
         Cmd::Export { dir, what, to } => {
             let w = World::open(&dir)?;
             let to = to.unwrap_or_else(|| pipe::edit_folder(&w));
-            let ps: Vec<ProductId> = parse_products(&what)?.into_iter().filter(|p| w.has_product(*p)).collect();
+            let (ps, vs) = parse_targets(&what)?;
+            let ps: Vec<ProductId> = ps.into_iter().filter(|p| w.has_product(*p)).collect();
             for (p, files) in pipe::export(&w, &ps, &to)? {
                 println!("{:<18} {}", p.name(), files.join(" "));
             }
-            println!("edit views in {} — edit, then: geoforge-v2 import {} <product>", to.display(), dir.display());
+            for (v, files) in pipe::export_views(&w, &vs, &to)? {
+                println!("{:<18} {} (derived; not imported)", v.name(), files.join(" "));
+            }
+            if !ps.is_empty() {
+                println!("edit views in {} — edit, then: geoforge-v2 import {} <product>", to.display(), dir.display());
+            }
         }
         Cmd::Import { dir, product: name, from, authored } => {
             let mut w = World::open(&dir)?;
@@ -269,9 +283,9 @@ fn run(cli: Cli) -> R<()> {
         Cmd::Render { dir, what, to } => {
             let w = World::open(&dir)?;
             let products = pipe::load_all(&w)?;
-            let only = if what.is_empty() { Vec::new() } else { parse_products(&what)? };
+            let (ps, vs) = parse_targets(&what)?;
             let to = to.unwrap_or_else(|| w.root.join("renders"));
-            for f in pipe::render_all(&w, &products, &to, &only)? {
+            for f in pipe::render_all(&w, &products, &to, &ps, &vs)? {
                 println!("{}", f.display());
             }
         }

@@ -51,13 +51,20 @@ biomes v3).
 
 The generated worlds are not Earth: most get 0.88–0.93× Earth's starlight and differ in
 size, air pressure, day length and tilt. The carbonate–silicate thermostat (set in the solar
-system step) cancels about 75% of the difference in weathering, so they run a few degrees
-cooler, and more at high latitudes where ice brightens the ground. It balances weathering,
-which runs on warm unfrozen ground, not the mean temperature, using the same latitude-band
-energy balance as the climate (heat transport ∝ day^(2/3), Kaspi & Showman 2015): a 6-hour
-day keeps about Earth's CO₂ but runs 7 °C colder with poles at −38 °C; a tidally locked
-Earth, weathering only by day (Edson et al. 2012), builds up ~6000 ppm with 38 °C under the
-star. Thick air damps the seasons (s99,
+system step) puts CO₂ where the world weathers as fast as Earth with Earth's outgassing
+(Walker, Hays & Kasting 1981: rate ∝ pCO₂^0.3·e^(ΔT/13.7 K)), so dim worlds build up CO₂
+and run a few degrees cooler, bright ones draw it down and run warmer. At Earth's spin:
+0.8× Earth's light, 7300 ppm and a 5 °C mean; 0.88×, 2800 ppm and 8 °C; 1.1×, 50 ppm and
+24 °C. It balances weathering, which runs on warm unfrozen ground, not the mean
+temperature, using the same latitude-band energy balance as the climate (heat transport ∝
+day^(2/3), Kaspi & Showman 2015): a 6-hour day keeps about Earth's CO₂ (350 ppm) but runs
+8 °C colder with poles at −39 °C; a tidally locked Earth, weathering only by day (Edson et
+al. 2012), builds up ~2700 ppm with 32 °C under the star. Where weathering jumps at the
+ice-albedo tipping point the thermostat settles on the warm side. (Until this check it
+cancelled a fixed 75% of the weathering difference from Earth, which fails across the
+tipping point: seed 42's world, at 0.88× Earth's light, sat on it and froze over, a −41 °C
+snowball; it now runs at 7 °C. The balance it solves also used 10° bands, which hold partly
+frozen states that the climate's finer bands do not; it now uses 5°.) Thick air damps the seasons (s99,
 1.46 bar: 20 °C land range at 40–60°); thin air widens them.
 
 Drainage networks: on the Earth-like world at 1024×512, the exponent of the drainage-area
@@ -195,7 +202,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 48 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups; closed basins and the Nile; biome shares and 20 places; the classifier fed station normals directly | 173 | 35 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly | 205 | 48 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -281,6 +288,23 @@ median arc–trench gap is 260 km (Earth 150–300).
   tropical rainforest belt; the ice sheets.
 - Mars, Venus, the Moon and Mercury: relief ranges, Venus's narrow hypsometry, Mars's
   dichotomy and volcanic rises, mean temperatures of Mars and Venus.
+
+### Köppen view
+
+The Köppen–Geiger view (a derived view, `render <dir> koppen`) classifies the stored
+climate by Peel et al. (2007)'s rules. On the one-degree Earth run, land outside
+Antarctica splits A 19%, B 36%, C 20%, D 15%, E 11%; Peel et al.'s map gives A 19.0, B
+30.2, C 13.4, D 24.6, E 12.8. Hot desert (BWh) is 18% (observed 14.2%), savanna (Aw) 10%
+(11.5%). D is short because Siberia and Canada come out dry and partly winter-dry: Dw is 9%
+of land, where Earth's Dw is mostly East Asia. The Siberian dryness is a listed climate gap.
+The model puts 13 of 31 stations in their full class.
+
+Fed station normals directly, the classifier gets 18 of 31. Of the 13 misses, 9 sit on a
+class line with rounded normals (Lhasa's 430 mm against a 440 mm aridity line, Mumbai's
+dry season against Am's 12 mm). The other 4 show what the rebuilt months cannot hold. The
+climate stores means, ranges and half-year rain shares, so months are sinusoids in phase.
+That cannot show two rainy seasons (Nairobi), a short tropical dry season (Kinshasa), or a
+January colder than the mean less half the range (Beijing).
 
 ### Star systems
 

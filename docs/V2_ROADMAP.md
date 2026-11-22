@@ -5,8 +5,8 @@ comparison with Artifexian's *Worldbuilder's Log* series (Logs 0–48), from two
 summaries of it (fact-checked below). Each item says what it adds, what it reads, what it
 writes, and which Logs it follows.
 
-Status: **next** (agreed, not started), **later** (agreed, not scheduled), **open** (a gap in
-what exists).
+Status: **done**, **next** (agreed, not started), **later** (agreed, not scheduled), **open**
+(a gap in what exists).
 
 ## Principles
 
@@ -17,46 +17,46 @@ what exists).
   computed on export or render, never stored, never stale, never edited.
 - **Checked against Earth** where Earth is the answer, as the known-case suites do now.
 
-## 1. Climate at a glance: Köppen–Geiger view — next
+## 1. Climate at a glance: Köppen–Geiger view — done
 
-Today the biome layer writes 16 classes (ocean, lake, ice sheet, tundra, boreal forest,
-temperate rainforest, temperate forest, temperate grassland, Mediterranean, cold and hot
-desert, savanna, tropical seasonal forest, tropical rainforest, alpine, wetland): a
-Whittaker-style vegetation map that borrows Köppen's thresholds where they are physical
-(the 10 °C warm-month tree line, the aridity threshold, dry summers).
+The `koppen` derived view: 30 classes by Peel et al. (2007)'s rules, worked out from
+`temperature`, `temperature_range`, `precipitation` and `precipitation_warm_share` (see
+`V2_PIPELINE.md`). The C/D boundary is a parameter, 0 °C by default as in Artifexian's
+Logs 36–40. Months are rebuilt as sinusoids, so two rainy seasons and short tropical dry
+seasons are smoothed out. Checked against Earth in `known_earth_climate`: Köppen groups, full
+classes, and the classifier fed station normals (`V2_REALISM.md`, Köppen view).
 
-Add the Köppen–Geiger climate classes (~30: Af/Am/Aw, BWh/BWk/BSh/BSk, Cs/Cw/Cf with
-a/b/c, Ds/Dw/Df with a/b/c/d, ET/EF) as a derived view from `temperature`,
-`temperature_range` (warmest and coldest month as mean ± range/2), `precipitation` and
-`precipitation_warm_share`.
+Artifexian (Log 40) decides B against D from a lookup table, because his rain is
+qualitative. We have rain in mm, so Köppen's own threshold applies directly.
 
-- Choose the C/D boundary on purpose: Köppen's −3 °C or the common modern 0 °C (Peel et
-  al. 2007). Make it a parameter; default 0 °C.
-- Use Köppen's own aridity threshold, which already scales with temperature (no separate
-  "cold places are not deserts" correction).
-- Gap to note: there are no monthly series, only half-year rain shares, so "driest month"
-  rules (Af vs Am, Cs vs Cf) are approximated from the warm/cold split.
-- Check against Earth: compare the ETOPO-forced Earth run with the Beck et al. (2018)
-  Köppen map, class by class (area shares and per-cell agreement).
+## 2. Derived views — mechanism done; pressure next
 
-## 2. Derived views — next
-
-The mechanism for item 1 and the pressure map: a view names the products it reads and
-renders (and exports) from them; `export` and `render` offer views alongside products.
+`views::View` names the products a view reads; `render` and `export` take view names
+beside products (`render <dir> koppen`). Categorical views export an exact-colour PNG, a
+legend with land shares, and world files.
 
 **Sea-level pressure (Jan, Jul), hPa**, from the circulation pattern and land heating:
 the equatorial trough (~1008–1010), subtropical highs (~1020–1025, strongest over cool
 ocean in summer), subpolar lows (~990–1000), polar highs; winter highs over cold
 continents (Siberia ~1035) and summer heat lows (~1000–1005). Rendered with isobars and
 H/L marks. Check: surface winds should cross isobars toward low pressure at 20–40° (as
-they do in the stored winds), and against ERA5's seasonal pressure maps.
+they do in the stored winds), and against ERA5's seasonal pressure maps. Artifexian (Logs
+29–32) draws pressure first and the winds from it: summer subtropical highs at ~35°,
+winter ones at ~25°, over the oceans toward the cold eastern currents. Continental winter
+highs and summer heat lows sit in the interiors, subpolar lows at ~60° in winter, and the
+ITCZ hugs the equator at sea but swings poleward over hot land. Our winds come from the
+cells, so the pressure view is drawn from them, and should land in the same places.
 
 ## 3. Resources and soils — next
 
-A new layer after biomes. Writes a **deposit catalog** (each deposit: kind, area, grade,
-size, depth/accessibility, age) and fields (soil class and fertility, timber, fishery
-productivity). Placement follows the geology, climate and history already stored, with
-probabilities rather than certainties.
+A new layer after biomes. Global maps cannot place individual mines, so the layer stores
+**prospectivity**. For each deposit kind it keeps an expected count per 10,000 km², λ,
+from the geology, climate and history already stored. Exported, that becomes a grayscale
+map of P = 1 − e^(−λ), the chance a region holds at least one deposit (0–255). When a
+region is zoomed into for local generation, deposits are drawn there as a Poisson process,
+seeded by place, so every zoom agrees. A few giant deposits per kind (the Pilbaras,
+Potosís, Zechsteins) are drawn globally and stored as a catalog: kind, place, grade,
+size, depth, age. Fields: soil class and fertility, timber, fishery productivity.
 
 Metals:
 
@@ -102,6 +102,24 @@ Needs a little history the pipeline does not have yet (when land plants arose, w
 basins were swamps or restricted seas); until item 9, ages come from province and rock
 ages.
 
+**Artifexian's placement rules (Logs 45–48)**, as NotebookLM gives them. They key on what
+we store, and on deep-time windows that must come from this world's own history, not
+Earth's dates:
+
+| Resource | Rule | Our inputs |
+|---|---|---|
+| Peat | subarctic, and non-dry-summer continental and temperate climates, on ground glaciated at the last glacial maximum | Köppen view; an ice-age extent (not stored: from today's ice and a cooling) |
+| Timber | below a tree line of 4000 m to 30° latitude, falling 130 m per degree to 50°, then 75 m per degree to sea level (~69°); none in B, ET or EF | elevation, Köppen view |
+| Coal | wet lowland basins at 0–45° latitude in a "Carboniferous" window (340–280 Ma on Earth), near eroding mountains. High grade where later folded into mountains, low grade in flat sandstone and carbonate. Destroyed under later flood basalts | rock age, lithology, provinces, LIPs |
+| Copper | basements of young and old orogens. Native copper in carbonates around flood basalts and hotspots (mostly poor). Enriched VMS in collisional belts, as sediment beside andesite and rhyolite, only where winters stay above 6 °C (snow stops the enrichment). Arsenical copper where copper belts cross coal basins and carbonates. Sedex in old back-arc basins later collided. Skarns where intrusions meet limestone. IOCG in rhyolitic cratonic shields | provinces, lithology, rock age, climate |
+| Tin | rhyolites of collisional orogens; placers downstream; natural tin-bronze where tin belts cross copper zones | provinces, lithology, rivers |
+| Iron | bog iron in wetlands downhill of metal belts (bogs in subarctic climates; riverbanks and marshes in wet tropical, subtropical and oceanic ones); skarns; laterites on basalt plateaus in tropical wet–dry climates; oolitic ironstone in warm shallow seas at 0–45° (290–120 Ma on Earth) fed by mountains; meteoric iron as rare single finds in deserts and tundra | wetlands, provinces, lithology, Köppen view |
+| Salt | sea salt on every shore (sun-dried where arid, boiled elsewhere); salt flats in arid basins with clastic rock (up to 10,000–43,000 km²); rock salt from evaporites laid at 20–33° in warm seas (290–120 Ma on Earth), later uplifted into domes | coasts, Köppen view, closed basins, lithology |
+
+NotebookLM mixes up fahlore with native copper here too; where its rules disagree with the
+deposit geology above (porphyry copper, the largest source, is missing from them), the
+geology wins.
+
 Check: Earth's own deposits by type and setting (USGS mineral resource data) against the
 ETOPO-forced Earth run: do porphyry belts sit on the Andes and Rockies, tin on the
 Southeast Asian and Cornish granites, banded iron on the Pilbara and Minas Gerais cratons,
@@ -130,10 +148,36 @@ region calculator**: the chance of each hazard in a window, P = 1 − e^(−λT)
 - **Auroras**: ovals at 65–75° magnetic latitude; needs a magnetic field model (dynamo
   from core size, rotation and age) — which would also matter for air loss.
 
+Artifexian's numbers (Logs 42–43), as NotebookLM gives them:
+
+- **Lightning**: four zones of influence: warm-month ≥ 18 °C (not deserts or polar), big
+  landmasses, low pressure, windward slopes. Under 1 flash/km²/yr outside them, 1–5 in
+  any, 5–15 where warm moist air blows onshore into one, over 15 where three or four
+  meet; none poleward of the 18 °C isotherm; one tier less in rain shadows.
+- **Tornado alleys**: summer only, 30–50° latitude, flat plains where dry air off a
+  plateau meets warm moist sea air under low pressure.
+- **Auroras**: the magnetic pole up to ~10° from the spin pole; the main oval 10–20° from
+  it, a sub-auroral band 20–30°, storm-only displays 30–40°.
+- **Fog**: upwelling and cold-water coasts, as winter, summer or year-round fog.
+- **Tropical cyclones**: summer, over sea above 27 °C, not within 5° of the equator; form
+  in the east of warm oceans, run west with the trades, recurve poleward, and die past the
+  18 °C sea isotherm; none in basins fed by polar currents (the South Atlantic).
+- **Winds**: gale corridors where open-ocean fetch hits coasts beyond 30°; katabatic
+  winds off ice sheets and high plateaus; föhn on the lee of ranges over 2000 m.
+- **Blizzards** in D and E climates in winter with strong wind; **sandstorms** on flat B
+  plains in summer; **dust storms** on dry flat plains outside B and E in summer.
+
 Check: Earth's earthquake catalog (USGS) by region and magnitude, IBTrACS cyclone tracks,
 the Smithsonian volcano list, against the ETOPO-forced Earth run.
 
 ## 5. Star system fixes — next
+
+Unstable systems: rather than simulate them, model what is left. Pairs closer than ~5
+mutual Hill radii scatter: the lighter planet is thrown out (or into the star), the
+survivor's orbit turns eccentric (e ~ 0.1–0.5), and some survivors end as hot or
+eccentric Jupiters. A **positions** export gives every planet and moon's place at a date
+(Kepler orbits).
+
 
 - **Orbit spacing by Hill radii.** A planet's Hill radius r_H = a·(m/3M)^(1/3) is where its
   gravity beats the star's tide (Earth 0.01 AU, Jupiter 0.36). Neighbours are measured in
@@ -157,7 +201,7 @@ the Smithsonian volcano list, against the ETOPO-forced Earth run.
   Trojans at the giants' L4/L5 points would follow naturally.
 - **Breathability** in `show`: O₂ partial pressure 0.16–0.5 atm, CO₂ under 5000 ppm,
   N₂ under ~3 atm (narcosis), gravity. Today a 0.7-bar Earth-like world gives 0.15 atm
-  of O₂, and a locked Earth 6200 ppm of CO₂.
+  of O₂, and a world at 0.8× Earth's light 7300 ppm of CO₂.
 - **Moons**: Roche-limit check; tidal range from moon and star; obliquity stability (a
   big moon steadies the tilt; without one, a wider tilt draw — debated: Laskar 1993 vs
   Lissauer et al. 2012).
@@ -176,6 +220,13 @@ A world clock (epoch, year, day, months from the moons, a calendar) and, for any
 - **weather on that day** at a place: a seeded weather generator (wet/dry spells,
   temperature anomalies, storms) consistent with the climate's means and seasons;
 - natural phenomena on that date: cyclone season, monsoon onset, auroras, meteor showers.
+
+Artifexian (Log 6): tides scale as the moon's mass over its distance cubed, plus the
+star's (spring and neap tides). The calendar comes from the year (Kepler), the day, and the
+synodic month, 1/P_syn = 1/P_orbit − 1/P_year. His neighbourhood (Log 3) is a 12-light-year
+sphere at 0.004 stars per cubic light year (34 stars, 20 systems), with Raghavan et al.
+(2010)'s multiplicity for Sun-like stars (56% single, 33% binary, 8% triple, 3% more). We
+already draw multiplicity by star mass, which matters because red dwarfs are mostly single.
 
 ## 7. Oceans — next
 
@@ -200,6 +251,16 @@ equirectangular image, import it back). To finish that:
 - a short guide to the Blender round trip.
 
 ## 9. Deep-time tectonics — later
+
+Artifexian's procedure (Logs 10–21), as NotebookLM gives it: a supercontinent of ~25% of
+the surface, round old cratons. Rifts start at triple junctions between cratons, never
+through them: two arms spread and the third fails (an aulacogen). Child plates split off
+by Euler poles; ridges make ocean floor in 10-Myr steps; subduction builds arcs and
+back-arc basins. Arcs, microcontinents and slivers ride until they hit a margin, where
+they are welded on as terranes. Failed rifts become lowlands that steer big rivers inland.
+Accreted arcs and sutures host the VMS, Sedex, tin and gold. Old cratonic sutures hold the
+greenstone belts whose tropical weathering makes gold laterites.
+
 
 Artifexian's core method: run the plates forward from a supercontinent (GPlates, 500–850
 Myr), so sutures, old orogens, failed rifts, accreted terranes and ocean ages come from a
@@ -242,17 +303,16 @@ Most of the summaries' numbers hold up; these do not:
 - Andean ranges "80–200 km wide": the central Andes with the Altiplano are ~700 km.
 - Debated rather than settled: super-Earths tending to stagnant lids; moonless worlds'
   chaotic tilt; plant and sky colours ("Panoptes-5" could not be traced).
-- Köppen's C/D boundary: summary 1 uses −3 °C, summary 2 uses 0 °C; both conventions exist.
+- Köppen's C/D boundary: the series uses 0 °C (Logs 36–40), as we do by default.
 
-## Questions out to NotebookLM
+NotebookLM's answers to our follow-up questions are folded into items 2, 3, 4, 6 and 9
+above. Their own checks:
 
-1. Logs 45–48: what inputs and numbers place each ore, coal, salt and peat.
-2. Logs 42–43: placement rules, with numbers, for cyclones, tornado alleys, fog, dust and
-   auroras.
-3. Logs 10–21: the supercontinent breakup steps, and how sutures, failed rifts and
-   terranes feed rivers and ores later.
-4. Logs 29–32: how the seasonal pressure maps are drawn before the winds.
-5. Logs 36–40: which Köppen convention (−3 or 0 °C), which aridity formula, and the
-   a/b/c/d subtype rules.
-6. Logs 6 and 3: the tide and calendar method; how the stellar neighbourhood is made.
-7. Where the 4.85·√L frost line, "Cowler" and "Panoptes-5" come from.
+- The 4.85·√L frost line is from *GURPS Space*, a tabletop game's rule.
+- "Cowler" is Kawaler: S. D. Kawaler (1988)'s magnetic-braking law for how stars spin
+  down. NotebookLM's "Benton R. Cowler" does not exist. So "Cowler's gravity relief law" in
+  summary 1 is probably garbled too.
+- Panoptes-5 is named as a web tool for sky and plant colours by spectral class and
+  pressure; not traced.
+- The 56/33/8/3% multiplicity split is for Sun-like stars only.
+- Artifexian's tree line, auroral rings and cyclone cutoffs match measured values well.

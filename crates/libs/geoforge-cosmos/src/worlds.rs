@@ -21,7 +21,7 @@
 use crate::draw::Draw;
 use geoforge_core::body::{Archetype, BodyClass, BodyContext, BodyExterior, BodyInterior, Composition, Phase, Shell, ShellKind, Species, TectonicRegime, EARTH_MASS_KG};
 use geoforge_core::derived::{MAXIMUM_GREENHOUSE_FLUX, RUNAWAY_GREENHOUSE_FLUX};
-use geoforge_core::energy_balance::{Radiation, EARTH_HEAT_TRANSPORT};
+use geoforge_core::energy_balance::{Radiation, EARTH_HEAT_TRANSPORT, WEATHERING_E_FOLD_K};
 use std::sync::OnceLock;
 use geoforge_core::seed::Seed;
 
@@ -128,47 +128,58 @@ fn small_body(ext: &BodyExterior, setting: &Setting) -> BodyInterior {
     }
 }
 
+/// Weathering also speeds up with CO₂ itself, as its partial pressure to this power (Walker,
+/// Hays & Kasting 1981).
+pub const WEATHERING_CO2_EXPONENT: f64 = 0.3;
+
+/// Earth's CO₂, bar: the reference the thermostat balances against.
+const EARTH_CO2_BAR: f64 = 4.2e-4;
+
 /// The carbonate–silicate thermostat: on a world with oceans and plate tectonics, weathering
-/// draws CO₂ down when it is warm and volcanoes build it up when it is cold. What it balances
-/// is weathering, which runs on the warm unfrozen ground: the weathering temperature of the
-/// latitude-band energy balance ([`Radiation::weathering_temperature_c`]). Over geological
-/// time the thermostat cancels `feedback` (0–1) of the difference between the weathering
-/// temperature the world would have with Earth's CO₂ and Earth's own.
+/// draws CO₂ down and volcanoes build it up until the two balance. With Earth's outgassing,
+/// CO₂ settles where the world weathers as fast as Earth (Walker, Hays & Kasting 1981):
+/// `(pCO₂/pCO₂⊕)^0.3 · e^((Tw − Tw⊕)/13.7 K) = 1`, with `Tw` the weathering temperature of
+/// the latitude-band energy balance ([`Radiation::weathering_temperature_c`]). Weathering
+/// runs on warm, unfrozen ground, so a dim world builds up CO₂ until it thaws, and settles
+/// somewhat colder than Earth (the extra CO₂ weathers faster too); a bright one draws CO₂
+/// down and runs warmer. At the ice-albedo tipping point weathering jumps; the thermostat
+/// settles on the warm side, as Earth's climbed out of its snowballs.
 ///
 /// So the way a world turns matters. A tidally locked world weathers only on its day side
-/// (Edson et al. 2012): with its night half frozen it builds up CO₂ (~6000 ppm at Earth's
-/// sunlight, substellar ground near 38 °C) before the day side weathers as much as Earth
-/// does. A fast spinner holds its heat near the equator: about the same CO₂, but colder
-/// poles and a colder mean (a 6-hour day: 8 °C, poles −38 °C); a slow one evens out.
-/// Assumes land everywhere alike: a continent under the star would draw CO₂ down further.
+/// (Edson et al. 2012): with its night half frozen it builds up CO₂ before the day side
+/// weathers as much as Earth does. A fast spinner holds its heat near the equator: about the
+/// same CO₂, but colder poles and a colder mean; a slow one evens out. Assumes land
+/// everywhere alike: a continent under the star would draw CO₂ down further.
 /// Sets the atmosphere's CO₂; other worlds are left alone.
-pub fn regulate_co2(body: &mut BodyContext, feedback: f64) {
+pub fn regulate_co2(body: &mut BodyContext) {
     let i = &body.interior;
     if i.regime != TectonicRegime::Plates || !i.has_surface_liquid_water() || !i.has_atmosphere() {
         return;
     }
     let locked = body.is_tidally_locked();
-    let weathering = |b: &BodyContext| Radiation::for_body(b, EARTH_HEAT_TRANSPORT, 0.0).weathering_temperature_c(locked);
     static EARTH: OnceLock<f64> = OnceLock::new();
     let earth = *EARTH.get_or_init(|| {
         let e = Archetype::Earth.context(body.key, "Earth");
         Radiation::for_body(&e, EARTH_HEAT_TRANSPORT, 0.0).weathering_temperature_c(false)
     });
-    set_co2(body, 4.2e-4);
-    let unregulated = weathering(body);
-    let target = earth + (1.0 - feedback.clamp(0.0, 1.0)) * (unregulated - earth);
-    // Weathering rises with CO₂: bisect on its logarithm between 1 ppm and 1 bar.
+    // Weathering relative to Earth's, in e-folds; it rises with CO₂, so bisect on CO₂'s
+    // logarithm between 1 ppm and 1 bar.
+    let excess = |b: &BodyContext, ln_co2: f64| {
+        let tw = Radiation::for_body(b, EARTH_HEAT_TRANSPORT, 0.0).weathering_temperature_c(locked);
+        (tw - earth) / WEATHERING_E_FOLD_K + WEATHERING_CO2_EXPONENT * (ln_co2 - EARTH_CO2_BAR.ln())
+    };
     let (mut lo, mut hi) = ((1e-6_f64).ln(), 0.0_f64);
     while hi - lo > 2e-3 {
         let mid = 0.5 * (lo + hi);
         set_co2(body, mid.exp());
-        if weathering(body) < target {
+        if excess(body, mid) < 0.0 {
             lo = mid;
         } else {
             hi = mid;
         }
     }
-    set_co2(body, (0.5 * (lo + hi)).exp());
+    // The upper end weathers at least as fast as Earth: across a jump, the warm side.
+    set_co2(body, hi.exp());
 }
 
 /// Put `p_bar` of CO₂ in the air, keeping the other gases' proportions and total pressure
@@ -260,7 +271,7 @@ mod tests {
             let mut b = Archetype::Earth.context(Key(1), "x");
             b.irradiance.flux_w_m2 = flux * 1361.0;
             b.exterior.rotation_h = rot.unwrap_or(b.irradiance.year_days * 24.0);
-            regulate_co2(&mut b, 0.75);
+            regulate_co2(&mut b);
             let lats: Vec<f64> = (0..36).map(|i| -87.5 + 5.0 * f64::from(i)).collect();
             let r = Radiation::for_body(&b, EARTH_HEAT_TRANSPORT, 0.0);
             let (t, mean) = if b.is_tidally_locked() { r.substellar_temperature(&lats) } else { r.zonal_temperature(&lats) };
@@ -276,27 +287,44 @@ mod tests {
         assert!(locked.0 > 5.0 * earth.0 && locked.2 > 30.0 && locked.3 < -20.0 && locked.1 < earth.1, "locked: {locked:?}");
     }
 
+    /// Dim worlds thaw: on the fine bands the climate layer uses, the regulated world is not
+    /// left frozen over, even near the ice-albedo tipping point.
+    #[test]
+    fn thermostat_thaws_dim_worlds() {
+        let lats: Vec<f64> = (0..180).map(|i| -89.5 + f64::from(i)).collect();
+        for flux in [0.8, 0.85, 0.88, 0.9, 0.95, 1.05, 1.1] {
+            let mut b = Archetype::Earth.context(Key(1), "x");
+            b.irradiance.flux_w_m2 = flux * 1361.0;
+            regulate_co2(&mut b);
+            let (t, mean) = Radiation::for_body(&b, EARTH_HEAT_TRANSPORT, 0.0).zonal_temperature(&lats);
+            let ppm = 1e6 * b.interior.partial_pressure_bar(Species::CarbonDioxide) / b.interior.surface_pressure_bar();
+            assert!(mean > 0.0 && t[90] > 15.0, "{flux}× Earth's light: mean {mean:.1} °C, equator {:.1}, {ppm:.0} ppm", t[90]);
+        }
+    }
+
     #[test]
     fn thermostat_compensates_starlight() {
         let mut dim = Archetype::Earth.context(Key(1), "Dim");
         dim.irradiance.flux_w_m2 = 0.9 * 1361.0;
         let w = |b: &BodyContext| Radiation::for_body(b, EARTH_HEAT_TRANSPORT, 0.0).weathering_temperature_c(b.is_tidally_locked());
         let cold = w(&dim);
-        regulate_co2(&mut dim, 0.75);
+        regulate_co2(&mut dim);
         let warmed = w(&dim);
         let earth = w(&Archetype::Earth.context(Key(1), "Earth"));
         assert!(warmed > cold + 5.0, "{cold} → {warmed}");
-        assert!((warmed - (earth + 0.25 * (cold - earth))).abs() < 0.5, "{warmed} vs target");
-        assert!(dim.interior.partial_pressure_bar(Species::CarbonDioxide) > 4.2e-4 * 1.5);
+        let co2 = dim.interior.partial_pressure_bar(Species::CarbonDioxide);
+        assert!(co2 > 4.2e-4 * 1.5 && warmed < earth, "{co2} bar, {warmed} vs Earth's {earth}");
+        let balance = (warmed - earth) / WEATHERING_E_FOLD_K + WEATHERING_CO2_EXPONENT * (co2 / 4.2e-4).ln();
+        assert!(balance.abs() < 0.02, "weathers as fast as Earth: {balance}");
         // Earth itself needs no change.
         let mut earth_body = Archetype::Earth.context(Key(1), "Earth");
-        regulate_co2(&mut earth_body, 0.75);
+        regulate_co2(&mut earth_body);
         let ppm = 1e6 * earth_body.interior.partial_pressure_bar(Species::CarbonDioxide) / earth_body.interior.surface_pressure_bar();
         assert!((ppm / 420.0 - 1.0).abs() < 0.05, "{ppm} ppm");
         // Not on a dry world.
         let mut venus = Archetype::Venus.context(Key(1), "Venus");
         let before = venus.clone();
-        regulate_co2(&mut venus, 0.75);
+        regulate_co2(&mut venus);
         assert_eq!(venus, before);
     }
 }

@@ -10,6 +10,7 @@ pub mod elevation;
 pub mod erosion;
 pub mod geology;
 pub mod hydrology;
+pub mod koppen;
 pub mod lid;
 pub mod noise;
 pub mod preconditions;

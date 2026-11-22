@@ -14,8 +14,10 @@
 
 pub mod registry;
 pub mod stats;
+pub mod views;
 
 pub use registry::Implementation;
+pub use views::View;
 
 use geoforge_core::grid::{AnyGrid, Cell, Grid, GridSpec};
 use geoforge_core::key::Key;
@@ -548,25 +550,53 @@ pub fn products_of(layers: &[LayerId]) -> Vec<ProductId> {
     ProductId::ALL.into_iter().filter(|p| set.is_empty() || set.contains(&p.layer())).collect()
 }
 
-/// Write preview renders of every stored raster product into `to`.
+/// Write preview renders of the stored raster `products` and derived `views` into `to`.
 ///
 /// # Errors
 /// On IO errors.
-pub fn render_all(world: &World, products: &Products, to: &Path, only: &[ProductId]) -> Result<Vec<PathBuf>> {
+pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[ProductId], views: &[View]) -> Result<Vec<PathBuf>> {
     std::fs::create_dir_all(to)?;
     let body = world.load_body()?;
     let grid = world.manifest.grid.build()?;
+    let (radius, sea) = (body.exterior.radius_km, body.interior.has_surface_liquid_water());
     let mut out = Vec::new();
-    for p in ProductId::ALL {
-        if !only.is_empty() && !only.contains(&p) {
-            continue;
-        }
-        if let Some(img) = geoforge_store::render::render(p, products, &grid, body.exterior.radius_km, body.interior.has_surface_liquid_water(), body.exterior.class)? {
+    for &p in products {
+        if let Some(img) = geoforge_store::render::render(p, stored, &grid, radius, sea, body.exterior.class)? {
             let f = to.join(format!("{}.png", p.name()));
             img.save(&f).map_err(geoforge_store::StoreError::from)?;
             out.push(f);
         }
     }
-    let _ = grid.len();
+    for &v in views {
+        if let Some(c) = views::classes(v, stored, &grid, sea) {
+            let f = to.join(format!("{}.png", v.name()));
+            geoforge_store::render::render_classes(&c.colors(), &grid, Some((stored, radius)))?.save(&f).map_err(geoforge_store::StoreError::from)?;
+            out.push(f);
+        }
+    }
+    Ok(out)
+}
+
+/// Export derived views: an exact-colour PNG, its legend (`<view>.legend.json`: code, name,
+/// colour and share of the land of each class present) and georeference files. Returns the
+/// files written per view; views whose products are missing are skipped.
+///
+/// # Errors
+/// On IO errors.
+pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(View, Vec<String>)>> {
+    std::fs::create_dir_all(to)?;
+    let body = world.load_body()?;
+    let grid = world.manifest.grid.build()?;
+    let stored = load_all(world)?;
+    let bref = BodyRef { name: body.name.clone(), radius_km: body.exterior.radius_km };
+    let mut out = Vec::new();
+    for &v in views {
+        let Some(c) = views::classes(v, &stored, &grid, body.interior.has_surface_liquid_water()) else { continue };
+        let name = v.name();
+        geoforge_store::render::render_classes(&c.colors(), &grid, None)?.save(to.join(format!("{name}.png"))).map_err(geoforge_store::StoreError::from)?;
+        std::fs::write(to.join(format!("{name}.legend.json")), serde_json::to_string_pretty(&c.legend)?)?;
+        edit::write_georef(to, name, world.manifest.grid, &bref)?;
+        out.push((v, ["png", "legend.json", "pgw", "prj"].map(|e| format!("{name}.{e}")).to_vec()));
+    }
     Ok(out)
 }

@@ -283,6 +283,24 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
     Ok(Some(img))
 }
 
+/// Sea in class maps.
+pub const CLASS_SEA: [u8; 3] = [225, 232, 240];
+
+/// An image of per-cell class colours, sea (`None`) in [`CLASS_SEA`]. With `relief` (the
+/// products and the body's radius) land is hillshaded by the heightmap, for previews; without
+/// it every pixel is its class's exact colour, for exports.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn render_classes(colors: &[Option<[u8; 3]>], grid: &AnyGrid, relief: Option<(&Products, f64)>) -> Result<RgbImage> {
+    let shading = relief.and_then(|(p, r)| p.elevation().or(p.rough_elevation()).map(|e| hillshade(grid, &e.values, r, 12.0)));
+    image_of(grid.spec(), |i| match (colors[i], &shading) {
+        (None, _) => CLASS_SEA,
+        (Some(c), Some(s)) => shade(c, s[i]),
+        (Some(c), None) => c,
+    })
+}
+
 /// Sparse direction arrows over a vector field.
 fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
     let Some(eq) = grid.as_equirect() else { return };
