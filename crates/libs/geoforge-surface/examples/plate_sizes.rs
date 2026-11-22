@@ -27,9 +27,6 @@ fn main() {
         let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         let mx = |v: &[f64]| v.iter().copied().fold(0.0, f64::max);
         let mn = |v: &[f64]| v.iter().copied().fold(1.0, f64::min);
-        println!(
-            "alpha {a:4.2}: largest {:.3} ({:.3}-{:.3})  top7 {:.3}  plates>=1% {:.1}  plates<0.2% {:.1}",
-            mean(&l), mn(&l), mx(&l), mean(&t7), mean(&n1), mean(&tiny)
-        );
+        println!("alpha {a:4.2}: largest {:.3} ({:.3}-{:.3})  top7 {:.3}  plates>=1% {:.1}  plates<0.2% {:.1}", mean(&l), mn(&l), mx(&l), mean(&t7), mean(&n1), mean(&tiny));
     }
 }

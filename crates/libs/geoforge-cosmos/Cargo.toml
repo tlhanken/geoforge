@@ -1,6 +1,6 @@
 [package]
 name = "geoforge-cosmos"
-description = "Geoforge v2 thin cosmology: one solar system as the world root, producing a BodyContext"
+description = "Geoforge cosmology: galaxies, stars, solar systems and their bodies, the BodyContext handoff"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true

@@ -90,11 +90,7 @@ fn embedded(grid: &dyn Grid, owner: &[u32], target: f64, oceanic_share: f64, see
         let bearing = geoforge_core::seed::range(s.child(b"bearing"), 0.0, 360.0);
         let off = geoforge_core::seed::range(s.child(b"offset"), 0.15, 0.5) * radius;
         let centre = mid.travel(bearing, off);
-        let mut scored: Vec<(f64, Cell)> = cs
-            .iter()
-            .zip(&pts)
-            .map(|(&c, p)| (p.angle_to(centre) / radius + 0.45 * noise.fbm(*p, 2.5, 4), c))
-            .collect();
+        let mut scored: Vec<(f64, Cell)> = cs.iter().zip(&pts).map(|(&c, p)| (p.angle_to(centre) / radius + 0.45 * noise.fbm(*p, 2.5, 4), c)).collect();
         scored.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         let goal = sh * plate_area[&k];
         let mut acc = 0.0;
@@ -140,7 +136,13 @@ pub fn plate_kinds(areas: &BTreeMap<u32, f64>, mode: CrustMode, seed: Seed) -> B
                     let u = geoforge_core::seed::unit(seed.child_u64(b"continent", u64::from(id)));
                     let frac = a / total;
                     // Prefer plates of 3–25% of the surface; tiny and huge plates rank lower.
-                    let size_pref = if frac < 0.03 { 0.5 } else if frac > 0.25 { 0.6 } else { 1.0 };
+                    let size_pref = if frac < 0.03 {
+                        0.5
+                    } else if frac > 0.25 {
+                        0.6
+                    } else {
+                        1.0
+                    };
                     (u * size_pref, id, a)
                 })
                 .collect();
@@ -187,13 +189,7 @@ pub const MAX_OCEANIC_AGE_MA: f64 = 180.0;
 /// ages from its plate's edges. Continental crust ages from ~400 Ma at plate edges to
 /// ~3000 Ma in plate cores.
 #[must_use]
-pub fn crust_age(
-    grid: &dyn Grid,
-    owner: &[u32],
-    crust: &[CrustType],
-    segments: &[BoundarySegment],
-    radius_km: f64,
-) -> (Vec<f32>, Vec<Option<usize>>) {
+pub fn crust_age(grid: &dyn Grid, owner: &[u32], crust: &[CrustType], segments: &[BoundarySegment], radius_km: f64) -> (Vec<f32>, Vec<Option<usize>>) {
     let n = grid.len();
     let mut age = vec![f64::INFINITY; n];
     let mut src = vec![None; n];
@@ -231,10 +227,7 @@ pub fn crust_age(
     }
 
     // Distance from plate edges, used for ridge-less oceans and for continents.
-    let edges: Vec<Cell> = grid
-        .cells()
-        .filter(|&c| grid.neighbors(c).iter().any(|nb| owner[nb as usize] != owner[c as usize]))
-        .collect();
+    let edges: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|nb| owner[nb as usize] != owner[c as usize])).collect();
     let edge_dist = geoforge_core::grid::distance_field(grid, edges, std::f64::consts::PI, |_| true);
     let mut max_edge: BTreeMap<u32, f64> = BTreeMap::new();
     for c in grid.cells() {
@@ -271,14 +264,7 @@ fn mid(grid: &dyn Grid, cells: &[Cell]) -> UnitVec3 {
 
 /// The tectonic timeline inferred from the present-day snapshot.
 #[must_use]
-pub fn infer_events(
-    grid: &dyn Grid,
-    owner: &[u32],
-    crust: &[CrustType],
-    age: &[f32],
-    age_src: &[Option<usize>],
-    segments: &[BoundarySegment],
-) -> Timeline {
+pub fn infer_events(grid: &dyn Grid, owner: &[u32], crust: &[CrustType], age: &[f32], age_src: &[Option<usize>], segments: &[BoundarySegment]) -> Timeline {
     let mut events = Table::new();
     let mut next = 0u64;
     let mut push = |e: Event, events: &mut Table<Event>| {
@@ -300,26 +286,13 @@ pub fn infer_events(
         let cont_frac = s.cells.iter().filter(|&&c| crust[c as usize] == CrustType::Continental).count() as f64 / s.cells.len() as f64;
         let rate_km_myr = (s.rate_cm_yr * 10.0).max(5.0);
         let (kind, t, note) = match s.kind {
-            BoundaryKind::Divergent if cont_frac > 0.5 => {
-                (EventKind::RiftOnset, (300.0 / rate_km_myr).clamp(2.0, 40.0), "continental rift opens")
-            }
-            BoundaryKind::Divergent => {
-                (EventKind::OceanOpening, ridge_max.get(&si).copied().unwrap_or(10.0).max(1.0), "spreading ridge begins")
-            }
-            BoundaryKind::Convergent if cont_frac > 0.9 => {
-                (EventKind::ContinentalCollision, (1500.0 / rate_km_myr).clamp(5.0, 80.0), "continents collide")
-            }
-            BoundaryKind::Convergent => {
-                (EventKind::SubductionOnset, (1500.0 / rate_km_myr).clamp(5.0, 120.0), "subduction begins")
-            }
-            BoundaryKind::Transform => {
-                (EventKind::TransformInitiation, (s.length_km * 0.3 / rate_km_myr).clamp(2.0, 60.0), "transform fault forms")
-            }
+            BoundaryKind::Divergent if cont_frac > 0.5 => (EventKind::RiftOnset, (300.0 / rate_km_myr).clamp(2.0, 40.0), "continental rift opens"),
+            BoundaryKind::Divergent => (EventKind::OceanOpening, ridge_max.get(&si).copied().unwrap_or(10.0).max(1.0), "spreading ridge begins"),
+            BoundaryKind::Convergent if cont_frac > 0.9 => (EventKind::ContinentalCollision, (1500.0 / rate_km_myr).clamp(5.0, 80.0), "continents collide"),
+            BoundaryKind::Convergent => (EventKind::SubductionOnset, (1500.0 / rate_km_myr).clamp(5.0, 120.0), "subduction begins"),
+            BoundaryKind::Transform => (EventKind::TransformInitiation, (s.length_km * 0.3 / rate_km_myr).clamp(2.0, 60.0), "transform fault forms"),
         };
-        push(
-            Event { t_ma: (t * 10.0).round() / 10.0, kind, at, magnitude: s.rate_cm_yr, causes: vec![], note: note.into() },
-            &mut events,
-        );
+        push(Event { t_ma: (t * 10.0).round() / 10.0, kind, at, magnitude: s.rate_cm_yr, causes: vec![], note: note.into() }, &mut events);
     }
 
     // Craton formation: the oldest continental crust on each continental plate.
@@ -334,14 +307,7 @@ pub fn infer_events(
     }
     for (_, (a, c)) in oldest {
         push(
-            Event {
-                t_ma: f64::from(a).round(),
-                kind: EventKind::CratonFormation,
-                at: Place::Point { at: grid.center(c) },
-                magnitude: 1.0,
-                causes: vec![],
-                note: "continental core stabilises".into(),
-            },
+            Event { t_ma: f64::from(a).round(), kind: EventKind::CratonFormation, at: Place::Point { at: grid.center(c) }, magnitude: 1.0, causes: vec![], note: "continental core stabilises".into() },
             &mut events,
         );
     }

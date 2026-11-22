@@ -25,14 +25,7 @@ pub struct ElectrostaticConfig {
 
 impl Default for ElectrostaticConfig {
     fn default() -> Self {
-        Self {
-            max_iterations: 1000,
-            convergence_threshold: 1e-6,
-            damping_factor: 0.9,
-            time_step: 0.01,
-            min_charge: 0.01,
-            max_charge: 100.0,
-        }
+        Self { max_iterations: 1000, convergence_threshold: 1e-6, damping_factor: 0.9, time_step: 0.01, min_charge: 0.01, max_charge: 100.0 }
     }
 }
 

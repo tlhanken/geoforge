@@ -8,15 +8,14 @@
 //! **quantity maps** (sea-level pressure), exported as 16-bit grayscale PNGs with the range
 //! and units.
 
+use geoforge_analysis::ground::{self, Ground};
+use geoforge_analysis::hazards::{self, Hazard, Lightning, Measure};
+use geoforge_analysis::koppen::{self, Koppen, KoppenRules};
+use geoforge_analysis::oceans::{Reef, SeaIce};
+use geoforge_analysis::resources::{self, Deposit, Soil};
 use geoforge_core::grid::{AnyGrid, Cell, Grid};
-use geoforge_core::magnetism::MagneticField;
 use geoforge_core::product::{ProductId, Products};
 use geoforge_core::BodyContext;
-use geoforge_surface::ground::{self, Ground};
-use geoforge_surface::hazards::{self, Hazard, Lightning, Measure};
-use geoforge_surface::koppen::{self, Koppen, KoppenRules};
-use geoforge_surface::oceans::{Reef, SeaIce};
-use geoforge_surface::resources::{self, Deposit, Soil};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -162,7 +161,7 @@ pub struct Source<'a> {
     pub body: &'a BodyContext,
     /// The storm field, for the tropical cyclone map; without it the hazard layer's own
     /// cyclone model is used.
-    pub storms: Option<&'a crate::storms::Atmosphere>,
+    pub storms: Option<&'a geoforge_almanac::storms::Atmosphere>,
     ground: std::cell::OnceCell<Option<Ground<'a>>>,
 }
 
@@ -174,7 +173,7 @@ impl<'a> Source<'a> {
 
     /// Count tropical cyclones from the storm field's tracks.
     #[must_use]
-    pub fn with_storms(mut self, atm: &'a crate::storms::Atmosphere) -> Self {
+    pub fn with_storms(mut self, atm: &'a geoforge_almanac::storms::Atmosphere) -> Self {
         self.storms = Some(atm);
         self
     }
@@ -226,13 +225,15 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             let g = s.ground()?;
             let lambda = match (h, s.storms) {
                 (Hazard::Cyclones, Some(atm)) => {
-                    let rates = atm.cyclone_rates(crate::storms::CYCLONE_YEARS);
-                    (0..g.len()).map(|c| {
-                        let ll = s.grid.center(c as geoforge_core::grid::Cell).to_lat_lon();
-                        atm.at(&rates, ll.lat_deg, ll.lon_deg)
-                    }).collect()
+                    let rates = atm.cyclone_rates(geoforge_almanac::storms::CYCLONE_YEARS);
+                    (0..g.len())
+                        .map(|c| {
+                            let ll = s.grid.center(c as geoforge_core::grid::Cell).to_lat_lon();
+                            atm.at(&rates, ll.lat_deg, ll.lon_deg)
+                        })
+                        .collect()
                 }
-                _ => hazards::rate(g, &hazards::Setting::new(s.products, aurora_of(s.body)), h),
+                _ => hazards::rate(g, &hazards::Setting::new(s.products, hazards::aurora_of(s.body)), h),
             };
             let m = h.measure();
             let meaning = match m {
@@ -242,26 +243,9 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             };
             chances((0..g.len()).map(|c| (h.at_sea() || !g.sea[c]).then(|| m.value(lambda[c]))).collect(), meaning)
         }
-        View::Pressure { july } => {
-            let wind = if july { s.products.wind_jul() } else { s.products.wind_jan() }?;
-            let (t, range) = (&s.products.temperature()?.values, &s.products.temperature_range()?.values);
-            // July: the north at its warmest month, the south at its coldest.
-            let season_t: Vec<f64> = (0..s.grid.len())
-                .map(|c| {
-                    let north = s.grid.center(c as Cell).to_lat_lon().lat_deg >= 0.0;
-                    f64::from(t[c]) + 0.5 * f64::from(range[c]) * if north == july { 1.0 } else { -1.0 }
-                })
-                .collect();
-            use geoforge_surface::pressure::{sea_level_pressure, Air, Planet};
-            let land: Vec<bool> = s.sea().iter().map(|&wet| !wet).collect();
-            let elevation = &s.products.elevation().or(s.products.rough_elevation())?.values;
-            let b = s.body;
-            let planet = Planet { radius_km: b.exterior.radius_km, rotation_h: b.exterior.rotation_h, mean_hpa: b.interior.surface_pressure_bar() * 1000.0, gravity_m_s2: b.gravity_m_s2() };
-            let cells = sea_level_pressure(s.grid, &planet, &Air { wind: &wind.values, temperature: &season_t, elevation, land: &land });
-            Map::Quantity(Quantity { cells, units: "hPa", contour: 4.0 })
-        }
+        View::Pressure { july } => Map::Quantity(Quantity { cells: geoforge_analysis::pressure::seasonal(s.products, s.grid, s.body, july)?, units: "hPa", contour: 4.0 }),
         View::SeaIce | View::Reefs | View::Productivity => {
-            let sea = geoforge_surface::oceans::Sea::read(s.products, s.grid, s.body.exterior.radius_km, s.sea_world())?;
+            let sea = geoforge_analysis::oceans::Sea::read(s.products, s.grid, s.body.exterior.radius_km, s.sea_world())?;
             if !s.sea_world() {
                 return None;
             }
@@ -272,13 +256,6 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             }
         }
     })
-}
-
-/// The magnetic pole and the auroral ovals' latitude, if the body has a field.
-#[must_use]
-pub fn aurora_of(body: &BodyContext) -> Option<(geoforge_core::geom::UnitVec3, f64)> {
-    let f = MagneticField::of(body);
-    f.aurora_lat_deg.map(|lat| (f.pole(), lat))
 }
 
 /// Index cells into a legend of the classes present (in `order`), with area shares.

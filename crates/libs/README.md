@@ -1,20 +1,22 @@
-# Geoforge v2 libraries
+# Geoforge libraries
 
 | Crate | Role | Depends on |
 |---|---|---|
-| `geoforge-core` | Data and the body's own physics: keys, seeds, geometry, the `Grid` trait and `EquirectGrid`, the five shapes (`Table`, `Field`, `Partition`, `Network`, `Timeline`), body and system types (`body/`: system, matter, interior with `TectonicRegime`, context, `Archetype` presets), derived quantities and the gray-atmosphere `radiation` model, surface entity types (rock and biome catalog rows), product ids, sources, `Generator` trait | serde |
-| `geoforge-cosmos` | Thin cosmology: one solar system per seed (`system`), what each body is made of (`worlds`), and the `BodyContext` handoff for any body, belt members included (`context`) | core |
-| `geoforge-surface` | The surface layers as `Generator`s: plate tectonics, geology (with the rock catalog), elevation (with erosion); `lid/` generators for rigid-lid worlds; the shared `atmosphere/` model; circulation, climate, hydrology, biomes (with the biome catalog); `preconditions` that pick between them | core |
-| `geoforge-store` | The world directory: manifest, lossless product storage with content hashes, edit views (PNG + world file + sidecar), patches, preview renders | core |
-| `geoforge-pipeline` | The generator `registry` (layer slots), plan, provenance, incremental generation, export/import/reset, realism stats | all of the above |
+| `geoforge-core` | Data and the body's own physics: keys, seeds, geometry, the `Grid` trait and `EquirectGrid`, the five shapes (`Table`, `Field`, `Partition`, `Network`, `Timeline`), body and system types, derived quantities, the gray-atmosphere radiation model, magnetism, surface entity types, product ids, sources, the `Generator` trait | serde |
+| `geoforge-names` | Pronounceable names from a seed | — |
+| `geoforge-cosmos` | Galaxies and their populations, stellar evolution, solar systems and what each body is made of, the `BodyContext` handoff, the stellar neighbourhood of a system | core, names |
+| `geoforge-surface` | The surface layers as `Generator`s: tectonics, geology (rock catalog), elevation, erosion, rigid-lid worlds, the shared atmosphere model, circulation, climate, hydrology, biomes (biome catalog), giants' bands; preconditions that pick between them | core |
+| `geoforge-analysis` | What a surface means: Köppen classes, soils, timber and ore deposits (with the giant-deposit generator), natural hazards, sea ice, reefs and productivity, sea-level pressure | core, surface |
+| `geoforge-store` | The world directory: manifest, lossless products with content hashes, edit views (PNG + world file + sidecar, scaled, polar caps), patches, preview renders, the derived cache | core |
+| `geoforge-almanac` | The world in time: Kepler positions and calendars, eclipses, the night sky, the storm field, daily weather and its phenomena, hazards near a place | core, cosmos, analysis, store, names |
+| `geoforge-pipeline` | The generator registry, plan, provenance, incremental generation, export/import/reset, derived views, place reports, realism stats | all of the above |
 
-Binaries: `crates/bins/geoforge-cli` (`geoforge-v2`) and `crates/bins/geoforge` (v1, kept as
-the reference for parity tests).
+Binary: `crates/bins/geoforge-cli` (`geoforge`).
 
 Rules:
 
 - `geoforge-core` has no generation algorithms and no I/O; its physics is pure functions of
-  a body (derived quantities, radiative balance) that both cosmology and the surface use.
+  a body that both cosmology and the surface use.
 - A generator never branches on the kind of body: a different kind of body gets a different
   generator for the same layer, chosen by its preconditions.
 - Surface layers see a `BodyContext` and earlier products, never cosmology.
@@ -22,4 +24,4 @@ Rules:
   Goldberg grid can be added without touching them.
 - Only `geoforge-store` reads or writes files.
 
-See `docs/V2_PIPELINE.md` for the user guide.
+See `docs/GETTING_STARTED.md` to use them through the `geoforge` command.

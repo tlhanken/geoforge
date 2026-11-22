@@ -20,7 +20,8 @@ fn ran(reports: &[pipe::LayerReport]) -> Vec<LayerId> {
 #[test]
 fn generate_edit_regenerate() {
     let dir = tmp("cycle");
-    let mut w = pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(7), grid: GridSpec::Equirect { width: 256, height: 128 }, body: None, focus: None }).unwrap();
+    let mut w =
+        pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(7), grid: GridSpec::Equirect { width: 256, height: 128 }, body: None, focus: None }).unwrap();
 
     // First run builds everything; a second run reuses everything.
     let (p1, r1) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
@@ -29,7 +30,7 @@ fn generate_edit_regenerate() {
     assert!(ran(&r2).is_empty(), "nothing should rerun: {:?}", ran(&r2));
     // Reopening from disk gives the same products.
     let w2 = World::open(&dir).unwrap();
-    let loaded = pipe::load_all(&w2).unwrap();
+    let loaded = w2.load_products().unwrap();
     let differ: Vec<ProductId> = ProductId::ALL.into_iter().filter(|&p| loaded.get(p) != p1.get(p)).collect();
     assert!(differ.is_empty(), "differ after reload: {differ:?}");
 

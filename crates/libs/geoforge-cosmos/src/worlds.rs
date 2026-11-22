@@ -22,8 +22,8 @@ use crate::draw::Draw;
 use geoforge_core::body::{Archetype, BodyClass, BodyContext, BodyExterior, BodyInterior, Composition, Phase, Shell, ShellKind, Species, TectonicRegime, EARTH_MASS_KG};
 use geoforge_core::derived::{MAXIMUM_GREENHOUSE_FLUX, RUNAWAY_GREENHOUSE_FLUX};
 use geoforge_core::energy_balance::{Radiation, EARTH_HEAT_TRANSPORT, WEATHERING_E_FOLD_K};
-use std::sync::OnceLock;
 use geoforge_core::seed::Seed;
+use std::sync::OnceLock;
 
 /// Where a body formed and what it receives.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,10 +120,7 @@ fn icy_world(d: &mut Draw, ext: &BodyExterior, setting: &Setting) -> BodyInterio
 fn small_body(ext: &BodyExterior, setting: &Setting) -> BodyInterior {
     let crust = if setting.icy { Composition::from_weights(&[(Species::Ice, 0.6), (Species::Silicate, 0.4)]) } else { Composition::from_weights(&[(Species::Silicate, 0.85), (Species::Iron, 0.15)]) };
     BodyInterior {
-        shells: vec![
-            Shell::new(ShellKind::Mantle, Phase::Solid, ext.radius_km * 0.8, Composition::single(Species::Silicate)),
-            Shell::new(ShellKind::Crust, Phase::Solid, ext.radius_km * 0.2, crust),
-        ],
+        shells: vec![Shell::new(ShellKind::Mantle, Phase::Solid, ext.radius_km * 0.8, Composition::single(Species::Silicate)), Shell::new(ShellKind::Crust, Phase::Solid, ext.radius_km * 0.2, crust)],
         regime: TectonicRegime::Inactive,
     }
 }
@@ -217,7 +214,11 @@ pub fn describe(body: &BodyContext) -> String {
     } else {
         "airless".into()
     };
-    let water = if i.has_surface_liquid_water() { format!(", ocean {:.1} km, CO₂ {:.0} ppm", i.surface_ocean_gel_km(), 1e6 * i.partial_pressure_bar(Species::CarbonDioxide) / i.surface_pressure_bar()) } else { String::new() };
+    let water = if i.has_surface_liquid_water() {
+        format!(", ocean {:.1} km, CO₂ {:.0} ppm", i.surface_ocean_gel_km(), 1e6 * i.partial_pressure_bar(Species::CarbonDioxide) / i.surface_pressure_bar())
+    } else {
+        String::new()
+    };
     format!("{regime}, {air}{water}")
 }
 

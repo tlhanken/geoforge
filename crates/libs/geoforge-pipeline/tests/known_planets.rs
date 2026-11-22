@@ -44,9 +44,7 @@ fn mode(g: &AnyGrid, e: &[f64], cells: &[Cell]) -> f64 {
     for &c in cells {
         *h.entry((e[c as usize] / 250.0).floor() as i64).or_default() += g.area_sr(c);
     }
-    h.into_iter()
-        .max_by(|a, b| a.1.total_cmp(&b.1))
-        .map_or(0.0, |(k, _)| (k as f64 + 0.5) * 250.0)
+    h.into_iter().max_by(|a, b| a.1.total_cmp(&b.1)).map_or(0.0, |(k, _)| (k as f64 + 0.5) * 250.0)
 }
 
 fn measure(a: Archetype, seed: u64) -> Stats {
@@ -54,14 +52,7 @@ fn measure(a: Archetype, seed: u64) -> Stats {
     let body = a.context(Key(1), a.name());
     let climate = a == Archetype::Mars;
     let layers: &[LayerId] = if climate {
-        &[
-            LayerId::Tectonics,
-            LayerId::Geology,
-            LayerId::Elevation,
-            LayerId::Circulation,
-            LayerId::Climate,
-            LayerId::Erosion,
-        ]
+        &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion]
     } else {
         &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Erosion]
     };
@@ -70,28 +61,16 @@ fn measure(a: Archetype, seed: u64) -> Stats {
     let all: Vec<Cell> = g.cells().collect();
     let datum = mean(&g, &all, |c| e[c as usize]);
     let crust = p.crust_type().unwrap();
-    let (low, high): (Vec<Cell>, Vec<Cell>) = all
-        .iter()
-        .partition(|&&c| *crust.get(c) == CrustType::Oceanic);
+    let (low, high): (Vec<Cell>, Vec<Cell>) = all.iter().partition(|&&c| *crust.get(c) == CrustType::Oceanic);
     let area = |cells: &[Cell]| cells.iter().map(|&c| g.area_sr(c)).sum::<f64>();
-    let centroid = low.iter().fold(Vec3::new(0.0, 0.0, 0.0), |s, &c| {
-        s + g.center(c).v() * g.area_sr(c)
-    });
+    let centroid = low.iter().fold(Vec3::new(0.0, 0.0, 0.0), |s, &c| s + g.center(c).v() * g.area_sr(c));
     let axis = centroid.normalized().unwrap();
-    let one_side: Vec<Cell> = low
-        .iter()
-        .copied()
-        .filter(|&c| g.center(c).dot(axis) > 0.0)
-        .collect();
+    let one_side: Vec<Cell> = low.iter().copied().filter(|&c| g.center(c).dot(axis) > 0.0).collect();
 
     let prov = p.provinces().unwrap();
     let mut basins: BTreeMap<Key, f64> = BTreeMap::new();
     for &c in &all {
-        if let Some(k) = prov.owner_of(c).filter(|&k| {
-            prov.table
-                .get(k)
-                .is_some_and(|r| r.kind == GeologicProvince::ImpactBasin)
-        }) {
+        if let Some(k) = prov.owner_of(c).filter(|&k| prov.table.get(k).is_some_and(|r| r.kind == GeologicProvince::ImpactBasin)) {
             *basins.entry(k).or_default() += g.area_sr(c);
         }
     }
@@ -142,8 +121,7 @@ fn scorecard() -> &'static Scorecard {
         // Mars: MOLA (Smith et al. 1999, 2001; Aharonson et al. 2001).
         s.range("mars", "highest point (Olympus Mons, 21.2 km)", km(median(&mars, |x| x.max_m)), 17.0..=26.0, "km");
         s.range("mars", "lowest point (Hellas floor, −8.2 km)", km(median(&mars, |x| x.min_m)), -10.5..=-6.0, "km");
-        s.range("mars", "full range (~30 km)", km(median(&mars, |x| x.max_m - x.min_m)), 25.0..=35.0, "km")
-            .gap("the extremes overshoot: 29, 35 and 39 km over seeds 1–3");
+        s.range("mars", "full range (~30 km)", km(median(&mars, |x| x.max_m - x.min_m)), 25.0..=35.0, "km").gap("the extremes overshoot: 29, 35 and 39 km over seeds 1–3");
         s.range("mars", "lowland share of the surface (about a third)", median(&mars, |x| x.lowland_share), 0.28..=0.42, "");
         s.range("mars", "lowland in one hemisphere", median(&mars, |x| x.lowland_one_side), 0.85..=1.0, "");
         s.range("mars", "highland peak above the lowland peak (5.5 km)", km(median(&mars, |x| x.mode_gap_m)), 4.0..=7.0, "km");

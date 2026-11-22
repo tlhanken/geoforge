@@ -21,8 +21,8 @@
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
 
-use crate::atmosphere::transport::semi_lagrangian;
 use crate::atmosphere::grid::is_sea;
+use crate::atmosphere::transport::semi_lagrangian;
 use crate::atmosphere::{winds, Atmo, AtmoGrid, Radiation, Season};
 use crate::climate::ClimateParams;
 use geoforge_core::grid::Cell;
@@ -62,16 +62,7 @@ pub struct CirculationParams {
 
 impl Default for CirculationParams {
     fn default() -> Self {
-        Self {
-            resolution_deg: 1.0,
-            monsoon: 0.7,
-            subtropical_highs: 0.5,
-            boundary_current_m_s: 1.5,
-            boundary_current_km: 150.0,
-            drift_m_s: 0.3,
-            heat_memory_days: 60.0,
-            upwelling_c: 12.0,
-        }
+        Self { resolution_deg: 1.0, monsoon: 0.7, subtropical_highs: 0.5, boundary_current_m_s: 1.5, boundary_current_km: 150.0, drift_m_s: 0.3, heat_memory_days: 60.0, upwelling_c: 12.0 }
     }
 }
 
@@ -136,7 +127,7 @@ pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f6
         // Anticyclones over each basin: poleward on the western side, equatorward on the east.
         let b = basins(a, 6371.0);
         let mut v_high = vec![0.0; g.len()];
-        for i in 0..g.len() {
+        for (i, vh) in v_high.iter_mut().enumerate() {
             let y = i / g.w;
             if a.land[i] >= 0.5 || b.open_row[y] {
                 continue;
@@ -147,7 +138,7 @@ pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f6
             let x_rel = we / (we + ea).max(1.0); // 0 at the western shore, 1 at the eastern
             let edge = (cells.itcz + hemi * cells.hadley).abs();
             let band = (-((lat.abs() - edge) / 11.0).powi(2)).exp();
-            v_high[i] = hemi * p.subtropical_highs * band * (std::f64::consts::PI * x_rel).cos();
+            *vh = hemi * p.subtropical_highs * band * (std::f64::consts::PI * x_rel).cos();
         }
         // Let the flow reach onto the coasts, and round off the basins' row-by-row edges.
         let rad = (5.0 / g.res).round().max(1.0) as usize;
@@ -174,7 +165,11 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
                     n += 1.0;
                 }
             }
-            if n > 0.0 { s / n } else { 0.0 }
+            if n > 0.0 {
+                s / n
+            } else {
+                0.0
+            }
         })
         .collect();
     // Basin-scale stress varies smoothly with latitude (eddies and storms average out the
@@ -347,7 +342,11 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
         .map(|y| {
             let annual = |i: usize| (0.5 * (seasons[0][i].0 + seasons[1][i].0), 0.5 * (seasons[0][i].1 + seasons[1][i].1));
             let sea: Vec<usize> = (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).collect();
-            if sea.is_empty() { 0.0 } else { sea.iter().map(|&i| wind_drift(annual(i), g.lat(y)).1).sum::<f64>() / sea.len() as f64 }
+            if sea.is_empty() {
+                0.0
+            } else {
+                sea.iter().map(|&i| wind_drift(annual(i), g.lat(y)).1).sum::<f64>() / sea.len() as f64
+            }
         })
         .collect();
     let source: Vec<f64> = (0..g.len())
@@ -380,9 +379,7 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
     // A departure from the zonal temperature averages to zero round each latitude circle.
     // The mean taken off is smoothed over ~10° of latitude so that it cannot itself draw
     // bands where one row's mean differs from the next.
-    let rows: Vec<(f64, f64)> = (0..g.h)
-        .map(|y| (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).fold((0.0, 0.0), |(s, n), i| (s + anom[i], n + 1.0)))
-        .collect();
+    let rows: Vec<(f64, f64)> = (0..g.h).map(|y| (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).fold((0.0, 0.0), |(s, n), i| (s + anom[i], n + 1.0))).collect();
     let half = (ZONAL_MEAN_SMOOTH_DEG / 2.0 / g.res).round() as i64;
     let mean: Vec<f64> = (0..g.h as i64)
         .map(|y| {
@@ -390,7 +387,11 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
                 let w = 1.0 - (k - y).abs() as f64 / (half + 1) as f64;
                 (s + w * rows[k as usize].0, n + w * rows[k as usize].1)
             });
-            if n > 0.0 { s / n } else { 0.0 }
+            if n > 0.0 {
+                s / n
+            } else {
+                0.0
+            }
         })
         .collect();
     for (i, v) in anom.iter_mut().enumerate() {

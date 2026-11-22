@@ -113,9 +113,7 @@ impl BodyInterior {
     #[must_use]
     pub fn has_surface_liquid_water(&self) -> bool {
         let Some(surface) = self.surface_index() else { return false };
-        self.shells[surface + 1..].iter().any(|s| {
-            s.kind == ShellKind::Ocean && s.phase == Phase::Liquid && s.thickness_km > 0.0 && s.composition.fraction(Species::Water) > 0.5
-        })
+        self.shells[surface + 1..].iter().any(|s| s.kind == ShellKind::Ocean && s.phase == Phase::Liquid && s.thickness_km > 0.0 && s.composition.fraction(Species::Water) > 0.5)
     }
 }
 

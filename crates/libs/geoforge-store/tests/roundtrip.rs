@@ -23,7 +23,17 @@ fn lakes() -> ProductData {
     let mut t = Table::new();
     t.insert(Key(1), Lake { surface_elevation_m: 120.0, endorheic: false });
     t.insert(Key(2), Lake { surface_elevation_m: -20.0, endorheic: true });
-    let owner = (0..G.cell_count() as u32).map(|i| if i % 50 == 0 { 1 } else if i % 77 == 0 { 2 } else { 0 }).collect();
+    let owner = (0..G.cell_count() as u32)
+        .map(|i| {
+            if i % 50 == 0 {
+                1
+            } else if i % 77 == 0 {
+                2
+            } else {
+                0
+            }
+        })
+        .collect();
     ProductData::Lakes(Partition { owner: Field::from_values(G, owner), table: t })
 }
 

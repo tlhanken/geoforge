@@ -34,13 +34,17 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
     let mut out: Summary = BTreeMap::new();
     let wmean = |vals: &dyn Fn(usize) -> Option<f64>| -> f64 {
         let (mut s, mut w) = (0.0, 0.0);
-        for c in 0..n {
+        for (c, a) in area.iter().enumerate() {
             if let Some(v) = vals(c) {
-                s += v * area[c];
-                w += area[c];
+                s += v * a;
+                w += a;
             }
         }
-        if w > 0.0 { s / w } else { f64::NAN }
+        if w > 0.0 {
+            s / w
+        } else {
+            f64::NAN
+        }
     };
     if let Some(pv) = pr.provinces() {
         // Share of the surface and number of regions per province kind.
@@ -166,10 +170,7 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
         s.insert("rivers_over_1000_m3_s".into(), st(mouths.iter().filter(|&&q| q >= 1000.0).count() as f64, Some(80.0)));
         s.insert("max_strahler".into(), st(rv.edges.iter().map(|e| e.attrs.strahler_order).max().unwrap_or(0).into(), None));
         let by = lk.cells_by_owner();
-        let mut la: Vec<(f64, bool)> = by
-            .iter()
-            .map(|(k, cs)| (km2(cs.iter().map(|&c| area[c as usize]).sum()), lk.table.get(*k).is_some_and(|l| l.endorheic)))
-            .collect();
+        let mut la: Vec<(f64, bool)> = by.iter().map(|(k, cs)| (km2(cs.iter().map(|&c| area[c as usize]).sum()), lk.table.get(*k).is_some_and(|l| l.endorheic))).collect();
         la.sort_by(|a, b| b.0.total_cmp(&a.0));
         s.insert("lakes".into(), st(la.len() as f64, None));
         s.insert("lakes_over_10000_km2".into(), st(la.iter().filter(|l| l.0 >= 10_000.0).count() as f64, Some(16.0)));

@@ -264,10 +264,7 @@ mod tests {
     #[test]
     fn dead_stars_keep_little() {
         let mut d = Draw::new(Seed(3));
-        let arch = Architecture {
-            planets: [0.5, 1.0, 1.5, 3.0, 6.0].iter().map(|&a| Formed { a_au: a, e: 0.0, class: BodyClass::Terrestrial, mass_earth: 1.0 }).collect(),
-            ..Default::default()
-        };
+        let arch = Architecture { planets: [0.5, 1.0, 1.5, 3.0, 6.0].iter().map(|&a| Formed { a_au: a, e: 0.0, class: BodyClass::Terrestrial, mass_earth: 1.0 }).collect(), ..Default::default() };
         let wd = evolve(1.0, 12.0, 0.0);
         let left = fate(&mut d, arch.clone(), &wd, wd.mass_solar, 1.0);
         assert_eq!(left.planets.len(), 2, "only planets beyond ~2 AU survive the giant phases");

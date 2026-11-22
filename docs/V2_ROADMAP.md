@@ -1,4 +1,4 @@
-# Geoforge v2 roadmap
+# Geoforge roadmap
 
 What comes next, in order, and why. Sources: our own gaps (`V2_REALISM.md`), and a
 comparison with Artifexian's *Worldbuilder's Log* series (Logs 0–48), from two NotebookLM
@@ -53,7 +53,7 @@ cells, so the pressure view is drawn from them, and should land in the same plac
 
 ## 3. Resources and soils — done; refinements open
 
-Done as derived views (`geoforge_surface::resources`; see `V2_PIPELINE.md`): prospectivity
+Done as derived views (`geoforge_analysis::resources`; see `V2_PIPELINE.md`): prospectivity
 for iron, copper, tin, lead–zinc–silver, gold, coal, salt, peat and gemstones, soils with
 fertility, and timber; `place` reports what is within reach of a point and draws how many
 deposits a local map holds. Next:
@@ -300,26 +300,19 @@ blizzards, wildfires, dust, fog, quakes, eruptions, tsunamis and auroras from th
 yearly rates, on the days that favour them. Open: lows merging or repelling rather than
 piling up; hail; storm surge with cyclones; magnitudes for drawn quakes.
 
-## Refactoring — proposed
+## Refactoring — done
 
-- **A `geoforge-almanac` crate** for everything in time: the ephemeris and calendar (now in
-  core), eclipses, the sky (cosmos + pipeline), the storm field, daily weather and the
-  almanac (8d). `geoforge-pipeline` would go back to orchestration only (plan, generate,
-  edit, export), and `place` to a thin report over library calls.
-- **Split `geoforge-surface` in two, not per layer**: the stored-layer generators
-  (tectonics, geology, elevation, circulation, climate, erosion, hydrology, biomes,
-  resources) and the derived analyses (Köppen, ground, hazards, oceans, pressure, soils) as
-  `geoforge-analysis`. Per-layer crates would mostly add boilerplate: the layers share the
-  grid, products and helpers, and 10k lines compile fine as modules. Revisit when build
-  times hurt.
-- **Store**: `render.rs` into `render/{products, views, sky, weather}`; `edit.rs` into
-  `edit/{view, patch}`.
-- **CLI**: `main.rs` (800+ lines) into a module per command family (world, edit, look,
-  sky, weather).
-- **Retire v1** (`crates/bins/geoforge`, 11k lines) once the cutover is done; keep only what
-  the parity test needs, or drop that test.
-- **Caching**: the Ground and the views (Köppen, hazards) through `cache`, so commands that
-  read them start in under a second.
+- `geoforge-almanac` holds everything in time: ephemeris and calendar (from core), eclipses,
+  the sky, the storm field, daily weather and hazards near a place (from the pipeline);
+  `geoforge-pipeline` is orchestration, views and the place report.
+- `geoforge-analysis` holds the derived readings (Köppen, ground, hazards, oceans,
+  pressure, resources); `geoforge-surface` the generators of stored layers.
+- Store: `render/{mod, maps, sky, weather}`, `edit/{mod, import, patch}`, `cache`.
+- CLI: a module per command family (`world`, `edit`, `system`, `almanac`), full help.
+- v1 (`crates/bins/geoforge`, examples) removed; the binary is `geoforge`.
+- `rustfmt.toml` matches the codebase's long-line style; a `justfile`; `GETTING_STARTED.md`.
+
+Open: cache the ground and views so commands start in under a second.
 
 ## 8c. Names — crate done; languages later
 
@@ -337,6 +330,15 @@ phases, the day's weather (high, low, rain or snow, sun or cloud, wind, the stor
 passing), and the natural phenomena of that day: eclipses, auroras, thunderstorms and
 tornadoes, cyclones, earthquakes and eruptions drawn from their rates, meteor showers.
 Output as a table (JSON/CSV) and a printable calendar page per month.
+
+**Droughts** (and wet spells) belong here too, for harvests and societies later: the
+weather today has no year-to-year swings beyond the storms, so a dry year never comes.
+Add slow rain anomalies — a seeded monthly-to-yearly process (AR(1) over months, plus an
+ENSO-like oscillation of a few years where the ocean allows) that scales the storms' rain
+and the day's odds — then track a standardised precipitation index (SPI over 3, 6 and 12
+months) and soil moisture (rain against evaporation from temperature), report drought
+onset, severity and length in the almanac, and summarise drought frequency in `place`
+for crop risk.
 
 ## 8b. A system's local environment — next
 

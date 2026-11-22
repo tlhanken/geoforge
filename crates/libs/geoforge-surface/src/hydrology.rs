@@ -227,9 +227,8 @@ impl Generator for Hydrology {
         let mut comp = vec![u32::MAX; n];
         let mut basins: Vec<Basin> = Vec::new();
         let mut open_ok: Vec<bool> = Vec::new();
-        let rift_cell = |c: Cell| {
-            inputs.provinces().is_some_and(|pv| pv.owner_of(c).and_then(|k| pv.table.get(k)).is_some_and(|pr| pr.kind == geoforge_core::surface::GeologicProvince::ContinentalRift))
-        };
+        let rift_cell =
+            |c: Cell| inputs.provinces().is_some_and(|pv| pv.owner_of(c).and_then(|k| pv.table.get(k)).is_some_and(|pr| pr.kind == geoforge_core::surface::GeologicProvince::ContinentalRift));
         for s in 0..n {
             if !raised[s] || comp[s] != u32::MAX {
                 continue;
@@ -259,7 +258,13 @@ impl Generator for Hydrology {
             open_ok.push(persistent);
             basins.push(Basin { remaining: cells.len(), cells, ext_inflow: 0.0, out: 0.0, exit: NONE });
         }
-        let in_basin = |c: usize| -> Option<usize> { if comp[c] < u32::MAX - 1 { Some(comp[c] as usize) } else { None } };
+        let in_basin = |c: usize| -> Option<usize> {
+            if comp[c] < u32::MAX - 1 {
+                Some(comp[c] as usize)
+            } else {
+                None
+            }
+        };
 
         // Accumulate upstream to downstream, resolving each lake when its last cell is done.
         // Units: mm/yr × km² = 1000 m³/yr.
@@ -368,7 +373,15 @@ impl Generator for Hydrology {
             let ci = c as usize;
             if is_river(ci) || lake_owner[ci] != 0 {
                 let (m, k) = best[ci];
-                strahler[ci] = if lake_owner[ci] != 0 { m } else if m == 0 { 1 } else if k >= 2 { m.saturating_add(1) } else { m };
+                strahler[ci] = if lake_owner[ci] != 0 {
+                    m
+                } else if m == 0 {
+                    1
+                } else if k >= 2 {
+                    m.saturating_add(1)
+                } else {
+                    m
+                };
                 let par = d.parent[ci];
                 if par != NONE && strahler[ci] > 0 {
                     let e = &mut best[par as usize];
@@ -382,7 +395,7 @@ impl Generator for Hydrology {
         }
         let mut nodes = Table::new();
         let mut edges = Vec::new();
-        for c in 0..n {
+        for (c, &order) in strahler.iter().enumerate() {
             if !is_river(c) {
                 continue;
             }
@@ -395,7 +408,7 @@ impl Generator for Hydrology {
             if !is_river(pi) {
                 nodes.insert(Key(pi as u64 + 1), RiverNode { cell: par, discharge_m3_s: q(c) });
             }
-            edges.push(Edge { from: Key(c as u64 + 1), to: Key(pi as u64 + 1), attrs: RiverReach { strahler_order: strahler[c].max(1), discharge_m3_s: q(c) } });
+            edges.push(Edge { from: Key(c as u64 + 1), to: Key(pi as u64 + 1), attrs: RiverReach { strahler_order: order.max(1), discharge_m3_s: q(c) } });
         }
 
         // Watersheds: terminal outlet per cell, downstream first.

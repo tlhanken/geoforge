@@ -40,16 +40,7 @@ pub struct LidElevationParams {
 
 impl Default for LidElevationParams {
     fn default() -> Self {
-        Self {
-            dichotomy_m: None,
-            dichotomy_width_km: 400.0,
-            rise_m: 3000.0,
-            shield_m: 8500.0,
-            rift_depth_m: 2800.0,
-            corona_m: 1000.0,
-            crater_min_cells: 3.0,
-            roughness_m: 400.0,
-        }
+        Self { dichotomy_m: None, dichotomy_width_km: 400.0, rise_m: 3000.0, shield_m: 8500.0, rift_depth_m: 2800.0, corona_m: 1000.0, crater_min_cells: 3.0, roughness_m: 400.0 }
     }
 }
 
@@ -120,7 +111,8 @@ impl Generator for LidElevation {
                 G::Corona => canvas.stamp(at, radius, 1.1, p.corona_m * scale.sqrt() * prov.intensity, corona),
                 G::ContinentalRift => {
                     let own = key.0 as u32;
-                    let outside: Vec<Cell> = grid.cells().filter(|&c| provinces.owner.values[c as usize] != own && grid.neighbors(c).iter().any(|nb| provinces.owner.values[nb as usize] == own)).collect();
+                    let outside: Vec<Cell> =
+                        grid.cells().filter(|&c| provinces.owner.values[c as usize] != own && grid.neighbors(c).iter().any(|nb| provinces.owner.values[nb as usize] == own)).collect();
                     let half = (prov.width_km / 2.0) / r;
                     let inside = distance_field(grid, outside, half, |c| provinces.owner.values[c as usize] == own);
                     for (c, di) in inside.iter().enumerate() {

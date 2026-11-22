@@ -1,6 +1,6 @@
 [package]
 name = "geoforge-pipeline"
-description = "Geoforge v2 pipeline runner: plan, provenance, generate, export and import edits"
+description = "Geoforge pipeline: plan, provenance, generate, export and import edits, views, place reports"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -9,12 +9,12 @@ license.workspace = true
 [dependencies]
 geoforge-core = { path = "../geoforge-core" }
 geoforge-surface = { path = "../geoforge-surface" }
+geoforge-analysis = { path = "../geoforge-analysis" }
+geoforge-almanac = { path = "../geoforge-almanac" }
 geoforge-cosmos = { path = "../geoforge-cosmos" }
-geoforge-names = { path = "../geoforge-names" }
 geoforge-store = { path = "../geoforge-store" }
 serde = { workspace = true }
 serde_json = "1"
-rayon = "1.10"
 thiserror = { workspace = true }
 
 [dev-dependencies]

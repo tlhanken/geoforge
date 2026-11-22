@@ -1,6 +1,6 @@
 [package]
 name = "geoforge-store"
-description = "Geoforge v2 world store: manifest, products on disk, edit views, patches, renders"
+description = "Geoforge world store: manifest, products on disk, edit views, patches, renders, derived cache"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true

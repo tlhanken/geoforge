@@ -277,9 +277,7 @@ mod tests {
     fn great_storms_are_a_coin_toss() {
         let profile = Profile { jets: 6, speed: 60.0, ice: false };
         let p = BandsParams::default();
-        let great = (0..200)
-            .filter(|&k| storms(&mut Draws { seed: Seed(k), n: 0 }, &profile, &p).iter().any(|o| o.value < 0.5))
-            .count();
+        let great = (0..200).filter(|&k| storms(&mut Draws { seed: Seed(k), n: 0 }, &profile, &p).iter().any(|o| o.value < 0.5)).count();
         assert!((60..140).contains(&great), "{great} of 200 with a great storm");
     }
 

@@ -129,7 +129,11 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
             let vt = (vrel * vrel - vn * vn).max(0.0).sqrt();
             let angle = vt.atan2(vn.abs()).to_degrees();
             let kind = if angle < p.angle_threshold_deg {
-                if vn > 0.0 { BoundaryKind::Convergent } else { BoundaryKind::Divergent }
+                if vn > 0.0 {
+                    BoundaryKind::Convergent
+                } else {
+                    BoundaryKind::Divergent
+                }
             } else {
                 BoundaryKind::Transform
             };
@@ -161,11 +165,7 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
             let comps = components(grid, &all, |c| cells.get(&c).is_some_and(|s| s.kind == kind));
             for comp in comps {
                 let n = comp.len() as f64;
-                let rate = if kind == BoundaryKind::Transform {
-                    comp.iter().map(|c| cells[c].vrel).sum::<f64>() / n
-                } else {
-                    comp.iter().map(|c| cells[c].vn.abs()).sum::<f64>() / n
-                };
+                let rate = if kind == BoundaryKind::Transform { comp.iter().map(|c| cells[c].vrel).sum::<f64>() / n } else { comp.iter().map(|c| cells[c].vn.abs()).sum::<f64>() / n };
                 let length_km = comp
                     .iter()
                     .map(|&c| {
@@ -177,14 +177,7 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
                     })
                     .sum::<f64>()
                     / 2.0;
-                segments.push(BoundarySegment {
-                    a: Key(u64::from(a)),
-                    b: Key(u64::from(b)),
-                    kind,
-                    cells: comp,
-                    rate_cm_yr: rate,
-                    length_km,
-                });
+                segments.push(BoundarySegment { a: Key(u64::from(a)), b: Key(u64::from(b)), kind, cells: comp, rate_cm_yr: rate, length_km });
             }
         }
     }

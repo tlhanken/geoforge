@@ -45,58 +45,23 @@ fn earth() -> &'static Earth {
         let mut table = Table::new();
         let mut codes = BTreeMap::new();
         for (i, r) in rows.iter().enumerate() {
-            let w = rotation(
-                r[2].parse().unwrap(),
-                r[3].parse().unwrap(),
-                r[4].parse().unwrap(),
-            ) + pacific;
-            let cells: Vec<UnitVec3> = g
-                .cells()
-                .filter(|&c| usize::from(idx[c as usize]) == i)
-                .map(|c| g.center(c))
-                .collect();
+            let w = rotation(r[2].parse().unwrap(), r[3].parse().unwrap(), r[4].parse().unwrap()) + pacific;
+            let cells: Vec<UnitVec3> = g.cells().filter(|&c| usize::from(idx[c as usize]) == i).map(|c| g.center(c)).collect();
             let Some(home) = UnitVec3::centroid(cells) else {
                 continue;
             };
             let pole = w.normalized().unwrap();
-            table.insert(
-                Key(i as u64 + 1),
-                Plate {
-                    name: r[1].clone(),
-                    euler_pole: pole,
-                    rate_deg_per_myr: w.norm(),
-                    seed_point: home,
-                },
-            );
+            table.insert(Key(i as u64 + 1), Plate { name: r[1].clone(), euler_pole: pole, rate_deg_per_myr: w.norm(), seed_point: home });
             codes.insert(i as u32 + 1, r[0].clone());
         }
         let owner = Field::from_values(g.spec(), idx.iter().map(|&i| u32::from(i) + 1).collect());
-        let crust = etopo
-            .iter()
-            .map(|&e| {
-                if e > -2000.0 {
-                    CrustType::Continental
-                } else {
-                    CrustType::Oceanic
-                }
-            })
-            .collect();
+        let crust = etopo.iter().map(|&e| if e > -2000.0 { CrustType::Continental } else { CrustType::Oceanic }).collect();
         let mut inputs = Products::new();
         inputs.insert(ProductData::Plates(Partition { owner, table }));
         inputs.insert(ProductData::CrustType(Field::from_values(g.spec(), crust)));
         let body = Archetype::Earth.context(Key(1), "Earth");
-        let products = known::run(
-            &body,
-            &g,
-            inputs,
-            &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion],
-        );
-        Earth {
-            grid: g,
-            products,
-            codes,
-            etopo,
-        }
+        let products = known::run(&body, &g, inputs, &[LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion]);
+        Earth { grid: g, products, codes, etopo }
     })
 }
 
@@ -114,13 +79,7 @@ fn steps() -> Vec<Step> {
         .into_iter()
         .map(|r| {
             let (a, b) = r[3].split_at(2);
-            Step {
-                lat: r[0].parse().unwrap(),
-                lon: r[1].parse().unwrap(),
-                class: r[2].clone(),
-                plates: (a.into(), b[1..].into()),
-                km: r[4].parse().unwrap(),
-            }
+            Step { lat: r[0].parse().unwrap(), lon: r[1].parse().unwrap(), class: r[2].clone(), plates: (a.into(), b[1..].into()), km: r[4].parse().unwrap() }
         })
         .collect()
 }
@@ -156,27 +115,18 @@ fn around(e: &Earth, lat: f64, lon: f64, km: f64) -> Vec<Cell> {
 
 fn province_kinds_near(e: &Earth, lat: f64, lon: f64, km: f64) -> BTreeSet<G> {
     let p = e.products.provinces().unwrap();
-    around(e, lat, lon, km)
-        .into_iter()
-        .filter_map(|c| p.row_at(c).map(|row| row.kind))
-        .collect()
+    around(e, lat, lon, km).into_iter().filter_map(|c| p.row_at(c).map(|row| row.kind)).collect()
 }
 
 fn province_at(e: &Earth, lat: f64, lon: f64) -> String {
     let p = e.products.provinces().unwrap();
-    p.row_at(at(&e.grid, lat, lon))
-        .map_or("none".into(), |row| format!("{:?}", row.kind))
+    p.row_at(at(&e.grid, lat, lon)).map_or("none".into(), |row| format!("{:?}", row.kind))
 }
 
 /// The model's boundary type per (cell, plate code, plate code), both orders.
 fn boundary_kinds(e: &Earth) -> BTreeMap<(Cell, String, String), BoundaryKind> {
     let plates = e.products.plates().unwrap();
-    let segs = boundaries::analyze(
-        &e.grid,
-        plates,
-        6371.0,
-        &geoforge_surface::tectonics::TectonicsParams::default().boundaries,
-    );
+    let segs = boundaries::analyze(&e.grid, plates, 6371.0, &geoforge_surface::tectonics::TectonicsParams::default().boundaries);
     let mut kind_at = BTreeMap::new();
     for seg in &segs {
         let (a, b) = (&e.codes[&(seg.a.0 as u32)], &e.codes[&(seg.b.0 as u32)]);
@@ -189,19 +139,10 @@ fn boundary_kinds(e: &Earth) -> BTreeMap<(Cell, String, String), BoundaryKind> {
 }
 
 /// Each PB2002 step against the model's boundary type there, by length.
-fn boundary_types(
-    s: &mut Scorecard,
-    e: &Earth,
-    steps: &[Step],
-    kind_at: &BTreeMap<(Cell, String, String), BoundaryKind>,
-) {
+fn boundary_types(s: &mut Scorecard, e: &Earth, steps: &[Step], kind_at: &BTreeMap<(Cell, String, String), BoundaryKind>) {
     let mut by_class: BTreeMap<&str, (f64, f64, f64)> = BTreeMap::new(); // (agree, found, total) km
     for st in steps {
-        let found = around(e, st.lat, st.lon, 80.0).into_iter().find_map(|c| {
-            kind_at
-                .get(&(c, st.plates.0.clone(), st.plates.1.clone()))
-                .copied()
-        });
+        let found = around(e, st.lat, st.lon, 80.0).into_iter().find_map(|c| kind_at.get(&(c, st.plates.0.clone(), st.plates.1.clone())).copied());
         let t = by_class.entry(&st.class).or_default();
         t.2 += st.km;
         if let Some(k) = found {
@@ -211,23 +152,9 @@ fn boundary_types(
             }
         }
     }
-    let (agree, found, total) = by_class
-        .values()
-        .fold((0.0, 0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2));
-    s.range(
-        "boundaries",
-        "PB2002 boundary length found on the grid",
-        found / total,
-        0.8..=1.0,
-        "",
-    );
-    s.range(
-        "boundaries",
-        "type agrees with PB2002 (of length found)",
-        agree / found,
-        0.7..=1.0,
-        "",
-    );
+    let (agree, found, total) = by_class.values().fold((0.0, 0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2));
+    s.range("boundaries", "PB2002 boundary length found on the grid", found / total, 0.8..=1.0, "");
+    s.range("boundaries", "type agrees with PB2002 (of length found)", agree / found, 0.7..=1.0, "");
     for (class, what) in [
         ("SUB", "subduction → convergent"),
         ("OSR", "spreading ridge → divergent"),
@@ -236,13 +163,7 @@ fn boundary_types(
         ("CRB", "continental rift → divergent"),
     ] {
         let (a, f, _) = by_class[class];
-        s.range(
-            "boundaries",
-            format!("{class}: {what}"),
-            a / f,
-            0.6..=1.0,
-            "",
-        );
+        s.range("boundaries", format!("{class}: {what}"), a / f, 0.6..=1.0, "");
         if class == "OTF" {
             s.gap("ridge–transform staircases read as oblique ridge: the boundary normal is fitted over 150 km and stretches under 100 km merge");
         }
@@ -253,39 +174,12 @@ fn crust_age(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
     let g = &e.grid;
     let age = known::scalar(&e.products, Products::crust_age);
     let crust = e.products.crust_type().unwrap();
-    let ocean: Vec<Cell> = g
-        .cells()
-        .filter(|&c| *crust.get(c) == CrustType::Oceanic)
-        .collect();
-    s.range(
-        "crust age",
-        "mean ocean-floor age",
-        mean(g, &ocean, |c| age[c as usize]),
-        45.0..=85.0,
-        "Ma",
-    );
-    s.range(
-        "crust age",
-        "oldest ocean floor",
-        ocean.iter().map(|&c| age[c as usize]).fold(0.0, f64::max),
-        150.0..=280.0,
-        "Ma",
-    );
-    let mut ridge_ages: Vec<f64> = steps
-        .iter()
-        .filter(|st| st.class == "OSR")
-        .map(|st| at(g, st.lat, st.lon))
-        .filter(|&c| *crust.get(c) == CrustType::Oceanic)
-        .map(|c| age[c as usize])
-        .collect();
+    let ocean: Vec<Cell> = g.cells().filter(|&c| *crust.get(c) == CrustType::Oceanic).collect();
+    s.range("crust age", "mean ocean-floor age", mean(g, &ocean, |c| age[c as usize]), 45.0..=85.0, "Ma");
+    s.range("crust age", "oldest ocean floor", ocean.iter().map(|&c| age[c as usize]).fold(0.0, f64::max), 150.0..=280.0, "Ma");
+    let mut ridge_ages: Vec<f64> = steps.iter().filter(|st| st.class == "OSR").map(|st| at(g, st.lat, st.lon)).filter(|&c| *crust.get(c) == CrustType::Oceanic).map(|c| age[c as usize]).collect();
     ridge_ages.sort_by(f64::total_cmp);
-    s.range(
-        "crust age",
-        "median age at PB2002 spreading ridges",
-        ridge_ages[ridge_ages.len() / 2],
-        0.0..=10.0,
-        "Ma",
-    );
+    s.range("crust age", "median age at PB2002 spreading ridges", ridge_ages[ridge_ages.len() / 2], 0.0..=10.0, "Ma");
 }
 
 /// Provinces at places with a known geology.
@@ -293,51 +187,14 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
     let g = &e.grid;
     let near_share = |class: &str, kind: &[G], km: f64| {
         let st: Vec<&Step> = steps.iter().filter(|st| st.class == class).collect();
-        let hit = st
-            .iter()
-            .filter(|st| {
-                kind.iter()
-                    .any(|k| province_kinds_near(e, st.lat, st.lon, km).contains(k))
-            })
-            .map(|st| st.km)
-            .sum::<f64>();
+        let hit = st.iter().filter(|st| kind.iter().any(|k| province_kinds_near(e, st.lat, st.lon, km).contains(k))).map(|st| st.km).sum::<f64>();
         hit / st.iter().map(|st| st.km).sum::<f64>()
     };
-    s.range(
-        "provinces",
-        "spreading ridges with a mid-ocean ridge nearby",
-        near_share("OSR", &[G::MidOceanRidge], 100.0),
-        0.8..=1.0,
-        "",
-    );
-    s.range(
-        "provinces",
-        "subduction zones with a trench nearby",
-        near_share("SUB", &[G::OceanTrench], 150.0),
-        0.7..=1.0,
-        "",
-    );
-    s.range(
-        "provinces",
-        "subduction zones with a volcanic arc within 350 km",
-        near_share("SUB", &[G::VolcanicArc], 350.0),
-        0.6..=1.0,
-        "",
-    );
-    s.range(
-        "provinces",
-        "continental collisions with an orogen nearby",
-        near_share("CCB", &[G::CollisionOrogen], 200.0),
-        0.6..=1.0,
-        "",
-    );
-    s.range(
-        "provinces",
-        "continental rifts with a rift nearby",
-        near_share("CRB", &[G::ContinentalRift], 200.0),
-        0.5..=1.0,
-        "",
-    );
+    s.range("provinces", "spreading ridges with a mid-ocean ridge nearby", near_share("OSR", &[G::MidOceanRidge], 100.0), 0.8..=1.0, "");
+    s.range("provinces", "subduction zones with a trench nearby", near_share("SUB", &[G::OceanTrench], 150.0), 0.7..=1.0, "");
+    s.range("provinces", "subduction zones with a volcanic arc within 350 km", near_share("SUB", &[G::VolcanicArc], 350.0), 0.6..=1.0, "");
+    s.range("provinces", "continental collisions with an orogen nearby", near_share("CCB", &[G::CollisionOrogen], 200.0), 0.6..=1.0, "");
+    s.range("provinces", "continental rifts with a rift nearby", near_share("CRB", &[G::ContinentalRift], 200.0), 0.5..=1.0, "");
     // Arc–trench gap: from each subduction step to the nearest arc cell within 800 km.
     let prov = e.products.provinces().unwrap();
     let mut gaps_km: Vec<f64> = steps
@@ -345,63 +202,23 @@ fn provinces(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
         .filter(|st| st.class == "SUB")
         .filter_map(|st| {
             let here = UnitVec3::from_lat_lon(st.lat, st.lon);
-            around(e, st.lat, st.lon, 800.0)
-                .into_iter()
-                .filter(|&c| prov.row_at(c).is_some_and(|r| r.kind == G::VolcanicArc))
-                .map(|c| g.center(c).angle_to(here) * 6371.0)
-                .reduce(f64::min)
+            around(e, st.lat, st.lon, 800.0).into_iter().filter(|&c| prov.row_at(c).is_some_and(|r| r.kind == G::VolcanicArc)).map(|c| g.center(c).angle_to(here) * 6371.0).reduce(f64::min)
         })
         .collect();
     gaps_km.sort_by(f64::total_cmp);
-    s.range(
-        "provinces",
-        "median arc–trench distance (Earth 150–300)",
-        gaps_km[gaps_km.len() / 2],
-        120.0..=320.0,
-        "km",
-    );
+    s.range("provinces", "median arc–trench distance (Earth 150–300)", gaps_km[gaps_km.len() / 2], 120.0..=320.0, "km");
     let stable = ["Craton", "Platform", "IntracratonicBasin", "PaleoOrogen"];
-    for (name, lat, lon) in [
-        ("Canadian Shield", 58.0, -95.0),
-        ("Siberian platform", 63.0, 105.0),
-        ("West Africa", 15.0, -5.0),
-        ("Western Australia", -26.0, 122.0),
-        ("Amazon craton", -8.0, -55.0),
-    ] {
-        s.one_of(
-            "provinces",
-            format!("{name} is a stable interior"),
-            &province_at(e, lat, lon),
-            &stable,
-        );
+    for (name, lat, lon) in [("Canadian Shield", 58.0, -95.0), ("Siberian platform", 63.0, 105.0), ("West Africa", 15.0, -5.0), ("Western Australia", -26.0, 122.0), ("Amazon craton", -8.0, -55.0)] {
+        s.one_of("provinces", format!("{name} is a stable interior"), &province_at(e, lat, lon), &stable);
     }
-    let arc = [
-        "VolcanicArc",
-        "ForearcBasin",
-        "BackarcBasin",
-        "AccretionaryWedge",
-        "CollisionOrogen",
-        "OrogenicPlateau",
-    ];
+    let arc = ["VolcanicArc", "ForearcBasin", "BackarcBasin", "AccretionaryWedge", "CollisionOrogen", "OrogenicPlateau"];
     s.one_of("provinces", "central Andes (20°S 68°W)", &province_at(e, -20.0, -68.0), &arc);
-    s.one_of(
-        "provinces",
-        "Himalaya (29°N 84°E)",
-        &province_at(e, 29.0, 84.0),
-        &["CollisionOrogen"],
-    );
-    s.one_of(
-        "provinces",
-        "Zagros (32°N 50°E)",
-        &province_at(e, 32.0, 50.0),
-        &["CollisionOrogen"],
-    );
+    s.one_of("provinces", "Himalaya (29°N 84°E)", &province_at(e, 29.0, 84.0), &["CollisionOrogen"]);
+    s.one_of("provinces", "Zagros (32°N 50°E)", &province_at(e, 32.0, 50.0), &["CollisionOrogen"]);
     // India and Arabia go under Asia: the plateau grows on Asia, the foreland on them.
-    for (name, lat, lon, want) in [
-        ("Tibet (33°N 88°E)", 33.0, 88.0, "OrogenicPlateau"),
-        ("Ganges plain (26°N 82°E)", 26.0, 82.0, "ForelandBasin"),
-        ("Mesopotamia (32°N 45°E)", 32.0, 45.0, "ForelandBasin"),
-    ] {
+    for (name, lat, lon, want) in
+        [("Tibet (33°N 88°E)", 33.0, 88.0, "OrogenicPlateau"), ("Ganges plain (26°N 82°E)", 26.0, 82.0, "ForelandBasin"), ("Mesopotamia (32°N 45°E)", 32.0, 45.0, "ForelandBasin")]
+    {
         s.one_of("provinces", name, &province_at(e, lat, lon), &[want]);
     }
 }
@@ -413,150 +230,51 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
     let real: Vec<f64> = e.etopo.iter().map(|&v| f64::from(v)).collect();
     let all: Vec<Cell> = g.cells().collect();
     let land_share = |v: &[f64]| mean(g, &all, |c| f64::from(u8::from(v[c as usize] >= 0.0)));
-    s.range(
-        "elevation",
-        format!(
-            "land share of the surface (ETOPO1 {:.2})",
-            land_share(&real)
-        ),
-        land_share(&z),
-        0.25..=0.33,
-        "",
-    );
+    s.range("elevation", format!("land share of the surface (ETOPO1 {:.2})", land_share(&real)), land_share(&z), 0.25..=0.33, "");
     let corr = |cells: &[Cell]| {
-        let (mx, my) = (
-            mean(g, cells, |c| z[c as usize]),
-            mean(g, cells, |c| real[c as usize]),
-        );
+        let (mx, my) = (mean(g, cells, |c| z[c as usize]), mean(g, cells, |c| real[c as usize]));
         let cov = mean(g, cells, |c| (z[c as usize] - mx) * (real[c as usize] - my));
         let sx = mean(g, cells, |c| (z[c as usize] - mx).powi(2)).sqrt();
         let sy = mean(g, cells, |c| (real[c as usize] - my).powi(2)).sqrt();
         cov / (sx * sy)
     };
-    let mid: Vec<Cell> = all
-        .iter()
-        .copied()
-        .filter(|&c| known::lat_lon(g, c).0.abs() < 60.0)
-        .collect();
-    let land: Vec<Cell> = mid
-        .iter()
-        .copied()
-        .filter(|&c| real[c as usize] >= 0.0)
-        .collect();
-    let deep: Vec<Cell> = mid
-        .iter()
-        .copied()
-        .filter(|&c| real[c as usize] < -2000.0)
-        .collect();
-    s.range(
-        "elevation",
-        "correlation with ETOPO1, 60°S–60°N",
-        corr(&mid),
-        0.85..=1.0,
-        "",
-    );
-    s.range(
-        "elevation",
-        "correlation over land",
-        corr(&land),
-        0.4..=1.0,
-        "",
-    );
-    s.range(
-        "elevation",
-        "correlation over the deep ocean",
-        corr(&deep),
-        0.5..=1.0,
-        "",
-    );
+    let mid: Vec<Cell> = all.iter().copied().filter(|&c| known::lat_lon(g, c).0.abs() < 60.0).collect();
+    let land: Vec<Cell> = mid.iter().copied().filter(|&c| real[c as usize] >= 0.0).collect();
+    let deep: Vec<Cell> = mid.iter().copied().filter(|&c| real[c as usize] < -2000.0).collect();
+    s.range("elevation", "correlation with ETOPO1, 60°S–60°N", corr(&mid), 0.85..=1.0, "");
+    s.range("elevation", "correlation over land", corr(&land), 0.4..=1.0, "");
+    s.range("elevation", "correlation over the deep ocean", corr(&deep), 0.5..=1.0, "");
 
     // Each statistic for the model and for ETOPO1.
     let both = |f: &dyn Fn(&[f64]) -> f64| (f(&z), f(&real));
-    let where_mean = |v: &[f64], cells: &[Cell], keep: &dyn Fn(f64) -> bool| {
-        mean(
-            g,
-            &cells
-                .iter()
-                .copied()
-                .filter(|&c| keep(v[c as usize]))
-                .collect::<Vec<_>>(),
-            |c| v[c as usize],
-        )
-    };
+    let where_mean = |v: &[f64], cells: &[Cell], keep: &dyn Fn(f64) -> bool| mean(g, &cells.iter().copied().filter(|&c| keep(v[c as usize])).collect::<Vec<_>>(), |c| v[c as usize]);
     let (m, r) = both(&|v| where_mean(v, &all, &|x| x < 0.0));
-    s.range(
-        "elevation",
-        format!("mean ocean depth (ETOPO1 {r:.0})"),
-        m,
-        -4200.0..=-3200.0,
-        "m",
-    );
+    s.range("elevation", format!("mean ocean depth (ETOPO1 {r:.0})"), m, -4200.0..=-3200.0, "m");
     let (m, r) = both(&|v| where_mean(v, &mid, &|x| x >= 0.0));
-    s.range(
-        "elevation",
-        format!("mean land height, 60°S–60°N (ETOPO1 {r:.0})"),
-        m,
-        450.0..=950.0,
-        "m",
-    );
+    s.range("elevation", format!("mean land height, 60°S–60°N (ETOPO1 {r:.0})"), m, 450.0..=950.0, "m");
     let (m, r) = both(&|v| mean(g, &land, |c| f64::from(u8::from(v[c as usize] > 2000.0))));
-    s.range(
-        "elevation",
-        format!("land above 2000 m, 60°S–60°N (ETOPO1 {r:.2})"),
-        m,
-        0.03..=0.10,
-        "",
-    );
-    let ridge: Vec<Cell> = steps
-        .iter()
-        .filter(|st| st.class == "OSR")
-        .map(|st| at(g, st.lat, st.lon))
-        .collect();
+    s.range("elevation", format!("land above 2000 m, 60°S–60°N (ETOPO1 {r:.2})"), m, 0.03..=0.10, "");
+    let ridge: Vec<Cell> = steps.iter().filter(|st| st.class == "OSR").map(|st| at(g, st.lat, st.lon)).collect();
     let (m, r) = both(&|v| mean(g, &ridge, |c| v[c as usize]));
-    s.range(
-        "elevation",
-        format!("depth at spreading ridges (ETOPO1 {r:.0})"),
-        m,
-        -3300.0..=-2200.0,
-        "m",
-    );
-    let subs: Vec<&Step> = steps
-        .iter()
-        .filter(|st| st.class == "SUB" && st.lat.abs() < 60.0)
-        .collect();
-    let trench = |v: &[f64]| {
-        subs.iter()
-            .map(|st| {
-                around(e, st.lat, st.lon, 200.0)
-                    .into_iter()
-                    .map(|c| v[c as usize])
-                    .fold(f64::INFINITY, f64::min)
-            })
-            .sum::<f64>()
-            / subs.len() as f64
-    };
+    s.range("elevation", format!("depth at spreading ridges (ETOPO1 {r:.0})"), m, -3300.0..=-2200.0, "m");
+    let subs: Vec<&Step> = steps.iter().filter(|st| st.class == "SUB" && st.lat.abs() < 60.0).collect();
+    let trench = |v: &[f64]| subs.iter().map(|st| around(e, st.lat, st.lon, 200.0).into_iter().map(|c| v[c as usize]).fold(f64::INFINITY, f64::min)).sum::<f64>() / subs.len() as f64;
     let (m, r) = both(&trench);
-    s.range(
-        "elevation",
-        format!("deepest point near subduction zones (ETOPO1 {r:.0})"),
-        m,
-        -9000.0..=-4500.0,
-        "m",
-    );
+    s.range("elevation", format!("deepest point near subduction zones (ETOPO1 {r:.0})"), m, -9000.0..=-4500.0, "m");
     for (name, lat, lon0, lon1, want, gap) in [
         ("Tibet, 30–35°N 80–95°E", 30.0..=35.0, 80.0, 95.0, 3500.0..=5500.0, None),
         ("Himalaya, 27.5–29.5°N 80–90°E", 27.5..=29.5, 80.0, 90.0, 2500.0..=5500.0, None),
         ("Ganges plain, 24–27°N 78–88°E", 24.0..=27.0, 78.0, 88.0, 0.0..=500.0, None),
-        ("Iranian plateau, 30–35°N 52–60°E", 30.0..=35.0, 52.0, 60.0, 800.0..=2200.0, Some("rate is all the collision model knows: Arabia converges nearly as fast as India but has collided half as long, and the dry plateau barely erodes")),
-        ("Mesopotamia, 30–34°N 43–47°E", 30.0..=34.0, 43.0, 47.0, -100.0..=400.0, None),
         (
-            "central Andes, 15–25°S 70–65°W",
-            -25.0..=-15.0,
-            -70.0,
-            -65.0,
-            2000.0..=4000.0,
-            None,
+            "Iranian plateau, 30–35°N 52–60°E",
+            30.0..=35.0,
+            52.0,
+            60.0,
+            800.0..=2200.0,
+            Some("rate is all the collision model knows: Arabia converges nearly as fast as India but has collided half as long, and the dry plateau barely erodes"),
         ),
+        ("Mesopotamia, 30–34°N 43–47°E", 30.0..=34.0, 43.0, 47.0, -100.0..=400.0, None),
+        ("central Andes, 15–25°S 70–65°W", -25.0..=-15.0, -70.0, -65.0, 2000.0..=4000.0, None),
         (
             "Peruvian Andes, 8–12°S 78–74°W",
             -12.0..=-8.0,
@@ -573,14 +291,7 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
             200.0..=1500.0,
             Some("no flat-slab segments: the model's slab is as old here as under the Altiplano, so the plateau runs on to 37°S"),
         ),
-        (
-            "Cascades, 43–48°N 123–120°W",
-            43.0..=48.0,
-            -123.0,
-            -120.0,
-            400.0..=1500.0,
-            Some("a slow margin's cordillera stands only one or two cells wide, and erodes"),
-        ),
+        ("Cascades, 43–48°N 123–120°W", 43.0..=48.0, -123.0, -120.0, 400.0..=1500.0, Some("a slow margin's cordillera stands only one or two cells wide, and erodes")),
         ("Amazon basin, 5°S–0 65–55°W", -5.0..=0.0, -65.0, -55.0, 0.0..=300.0, None),
         ("Rocky Mountains, 38–42°N 110–105°W", 38.0..=42.0, -110.0, -105.0, 1500.0..=3000.0, Some("no mountain building far inland of a plate boundary (the Laramide uplift, Tian Shan)")),
         ("Ethiopian highlands, 5–10°N 36–40°E", 5.0..=10.0, 36.0, 40.0, 1000.0..=2600.0, Some("no plume uplift: the Ethiopian and East African domes are 1.5–2 km over 1000 km")),
@@ -598,7 +309,7 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
 /// Earthquake rates on PB2002's plates against the USGS catalogue: ~140 magnitude 6+ quakes
 /// a year worldwide (1900–2023), dense at subduction zones, rare in stable interiors.
 fn earthquakes(s: &mut Scorecard, e: &Earth) {
-    let (rate, corner) = geoforge_surface::hazards::earthquakes(&e.grid, 6371.0, &e.products);
+    let (rate, corner) = geoforge_analysis::hazards::earthquakes(&e.grid, 6371.0, &e.products);
     let per_year: f64 = e.grid.cells().map(|c| rate[c as usize] * e.grid.area_sr(c) * 6371f64.powi(2) / 1e4).sum();
     s.range("hazards", "magnitude 6+ quakes a year, worldwide (USGS ~140)", per_year, 70.0..=300.0, "");
     let region = |lat: f64, lon: f64| mean(&e.grid, &around(e, lat, lon, 300.0), |c| rate[c as usize]);
@@ -622,32 +333,12 @@ fn earthquakes(s: &mut Scorecard, e: &Earth) {
 
 fn dump(e: &Earth, kind_at: &BTreeMap<(Cell, String, String), BoundaryKind>) {
     let prov = e.products.provinces().unwrap();
-    known::dump(
-        "tectonics_elevation",
-        known::scalar(&e.products, Products::elevation),
-    );
-    known::dump(
-        "tectonics_rough_elevation",
-        known::scalar(&e.products, Products::rough_elevation),
-    );
-    known::dump(
-        "tectonics_precipitation",
-        known::scalar(&e.products, Products::precipitation),
-    );
-    known::dump(
-        "tectonics_temperature",
-        known::scalar(&e.products, Products::temperature),
-    );
-    known::dump(
-        "tectonics_crust_age",
-        known::scalar(&e.products, Products::crust_age),
-    );
-    known::dump(
-        "tectonics_provinces",
-        e.grid
-            .cells()
-            .map(|c| prov.row_at(c).map_or(-1.0, |r| f64::from(r.kind as u8))),
-    );
+    known::dump("tectonics_elevation", known::scalar(&e.products, Products::elevation));
+    known::dump("tectonics_rough_elevation", known::scalar(&e.products, Products::rough_elevation));
+    known::dump("tectonics_precipitation", known::scalar(&e.products, Products::precipitation));
+    known::dump("tectonics_temperature", known::scalar(&e.products, Products::temperature));
+    known::dump("tectonics_crust_age", known::scalar(&e.products, Products::crust_age));
+    known::dump("tectonics_provinces", e.grid.cells().map(|c| prov.row_at(c).map_or(-1.0, |r| f64::from(r.kind as u8))));
     let mut kinds = vec![-1.0; e.grid.len()];
     for ((c, _, _), k) in kind_at {
         kinds[*c as usize] = f64::from(*k as u8);

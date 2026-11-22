@@ -1,9 +1,9 @@
-# Geoforge v2 realism check
+# Geoforge realism check
 
 ## Earth-like worlds
 
 Six worlds at 2048×1024 (about 18 km cells at the equator), generated with
-`geoforge-v2 new … && geoforge-v2 generate … && geoforge-v2 stats …`:
+`geoforge new … && geoforge generate … && geoforge stats …`:
 
 | World | Body |
 |---|---|
@@ -93,7 +93,7 @@ The climate model's greenhouse is fitted to Earth, Mars, Venus and Titan presets
 
 Generated systems also give Venus-like inner worlds (runaway greenhouse, 35–360 bar CO₂),
 cold super-Earths with thin CO₂, ice-shell ocean moons around giants, frozen cratered moons
-and belt members; `geoforge-v2 show` lists each body with its regime, air and water.
+and belt members; `geoforge show` lists each body with its regime, air and water.
 
 ## Real Earth
 
@@ -380,6 +380,14 @@ per hemisphere drifting ~70° east over their lives (10–15 m/s), tropical cycl
 westward; storm rain at places 100 km apart correlates above 0.7 and 70° of longitude
 apart below 0.3; wet days at the near pair go together while the far pair's do not; ten
 years with storms still give the climate's rain within 15% and its mean within 0.8 K. A
+On the Earth run (`known_earth_climate`, storm field): 87 tropical cyclones a year
+(IBTrACS: 80–90) and 6.6 mid-latitude lows formed a day; tropical cyclones passing within
+200 km a year: Gulf of Mexico 2.4, Bay of Bengal 0.7, none in the South Atlantic, off Peru
+or on the equator, as observed; the Philippine Sea gets only 0.12 (observed the world's
+busiest): the modelled western Pacific warm pool is too cool (25 °C at 15°N 135°E, observed
+~29), so storms form only in its far east and few reach it still deep. The hazard layer's
+own cyclone model is kept as a check (Philippine Sea 0.74, but 0.25 in the South Atlantic).
+
 Phenomena (`weather` test): over ten years at 45° with storms, thunder days, tornadoes,
 blizzard days and quakes come within 40% of their rates; most thunder falls in summer, no
 blizzards; thunder is likelier on stormy days. In a rainforest cell of Thumi IV, 40

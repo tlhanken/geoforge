@@ -1,10 +1,9 @@
-//! Geoforge v2 core: identity, seeds, geometry, grids, the five data shapes, body and
+//! Geoforge core: identity, seeds, geometry, grids, the five data shapes, body and
 //! product types. Data only: generation algorithms live in other crates.
 
 pub mod body;
 pub mod derived;
 pub mod energy_balance;
-pub mod ephemeris;
 pub mod geom;
 pub mod grid;
 pub mod key;

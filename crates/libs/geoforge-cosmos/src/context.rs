@@ -3,7 +3,9 @@
 
 use crate::draw::Draw;
 use crate::worlds::{interior_for, regulate_co2, Setting};
-use geoforge_core::body::{BodyClass, BodyContext, BodyExterior, Elements, Irradiance, NodeKind, OrbitalNode, Population, SolarSystem, Species, Star, StellarStage, TidalPartner, AU_KM, SOLAR_MASS_KG};
+use geoforge_core::body::{
+    BodyClass, BodyContext, BodyExterior, Elements, Irradiance, NodeKind, OrbitalNode, Population, SolarSystem, Species, Star, StellarStage, TidalPartner, AU_KM, SOLAR_MASS_KG,
+};
 use geoforge_core::derived::{flux_w_m2, frost_line_au, main_sequence_luminosity, orbital_period_days};
 use geoforge_core::key::Key;
 
@@ -73,24 +75,11 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
         Some((_, pb)) if matches!(pb.class, BodyClass::GasGiant | BodyClass::IceGiant) => pb.obliquity_deg,
         _ => ext.obliquity_deg,
     };
-    let irradiance = Irradiance {
-        flux_w_m2: flux,
-        star_temperature_k: star.temperature_k,
-        eccentricity: year.e,
-        obliquity_deg,
-        year_days: orbital_period_days(year.a_au, star.mass_solar * SOLAR_MASS_KG),
-    };
-    let setting = Setting {
-        flux_w_m2: flux,
-        icy: year.a_au > star.frost_au,
-        tidally_heated: parent.is_some_and(|(_, pb)| orbit.a_au * AU_KM < TIDAL_HEATING_RADII * pb.radius_km),
-    };
+    let irradiance =
+        Irradiance { flux_w_m2: flux, star_temperature_k: star.temperature_k, eccentricity: year.e, obliquity_deg, year_days: orbital_period_days(year.a_au, star.mass_solar * SOLAR_MASS_KG) };
+    let setting = Setting { flux_w_m2: flux, icy: year.a_au > star.frost_au, tidally_heated: parent.is_some_and(|(_, pb)| orbit.a_au * AU_KM < TIDAL_HEATING_RADII * pb.radius_km) };
     // Tides: a moon feels its planet, a planet its moons; both feel the star.
-    let star_tide = TidalPartner {
-        name: system.node(planet.parent?).map_or_else(String::new, |n| n.name.clone()),
-        mass_kg: star.mass_solar * SOLAR_MASS_KG,
-        distance_km: year.a_au * AU_KM,
-    };
+    let star_tide = TidalPartner { name: system.node(planet.parent?).map_or_else(String::new, |n| n.name.clone()), mass_kg: star.mass_solar * SOLAR_MASS_KG, distance_km: year.a_au * AU_KM };
     let mut tides: Vec<TidalPartner> = match parent {
         Some((p, pb)) => vec![TidalPartner { name: p.name.clone(), mass_kg: pb.mass_kg, distance_km: orbit.a_au * AU_KM }],
         None => system

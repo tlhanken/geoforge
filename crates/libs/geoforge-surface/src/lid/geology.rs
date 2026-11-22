@@ -99,7 +99,8 @@ impl Painter<'_> {
         if let Some(kind) = event {
             let t_ma = prov.age_ma;
             let magnitude = prov.width_km;
-            self.events.insert(Key(self.events.rows.len() as u64 + 1), Event { t_ma, kind, at: Place::Entity { product: ProductId::Provinces, key }, magnitude, causes: Vec::new(), note: String::new() });
+            self.events
+                .insert(Key(self.events.rows.len() as u64 + 1), Event { t_ma, kind, at: Place::Entity { product: ProductId::Provinces, key }, magnitude, causes: Vec::new(), note: String::new() });
         }
         self.table.insert(key, prov);
         key

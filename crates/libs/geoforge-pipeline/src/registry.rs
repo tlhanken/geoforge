@@ -76,7 +76,7 @@ macro_rules! dispatch {
                 $body
             }
             Implementation::GiantDeposits => {
-                type $g = surface::GiantDeposits;
+                type $g = geoforge_analysis::GiantDeposits;
                 $body
             }
             Implementation::GiantBands => {

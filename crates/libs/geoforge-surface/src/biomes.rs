@@ -362,7 +362,11 @@ impl Generator for Biomes {
                     let b = classify(&c, p);
                     // Wet floodplain, unless the climate leaves it bone dry.
                     let floods = wet[i] && !matches!(b, Earth::IceSheet | Earth::HotDesert | Earth::ColdDesert | Earth::Alpine);
-                    if floods && f64::from(pr[i]) > 0.4 * pet_mm(c.t_mean) { Earth::Wetland } else { b }
+                    if floods && f64::from(pr[i]) > 0.4 * pet_mm(c.t_mean) {
+                        Earth::Wetland
+                    } else {
+                        b
+                    }
                 };
                 let extra = catalog.extras.iter().zip(&patches).find(|(x, patch)| x.admits(base, &c) && patch.as_ref().is_none_or(|u| u[i] < x.def.envelope.cover));
                 extra.map_or(base.key(), |(x, _)| x.key).0 as u32
@@ -430,14 +434,16 @@ mod tests {
 
     #[test]
     fn extras_parse_from_toml() {
-        let d: BiomeDef = toml::from_str(r##"
+        let d: BiomeDef = toml::from_str(
+            r##"
             slug = "ashlands"
             name = "Ashlands"
             color = "#4a4040"
             within = ["hot_desert", "savanna"]
             temperature_c = [20.0, 40.0]
             cover = 0.25
-        "##)
+        "##,
+        )
         .unwrap();
         assert_eq!(d.envelope.within.len(), 2);
         assert_eq!(d.envelope.temperature_c, Some([20.0, 40.0]));

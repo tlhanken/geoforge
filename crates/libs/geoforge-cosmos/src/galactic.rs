@@ -19,8 +19,8 @@ use crate::population::{draw as draw_phenotype, Companion, Phenotype};
 use crate::stars::evolve;
 use crate::system::{big_moon_orbit_km, hill_km, moon, moon_system, planet_radius_earth, Generated, MoonSpec, MOON_HILL_SHARE, ROMAN};
 use geoforge_core::body::{
-    BodyClass, BodyContext, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot,
-    TectonicRegime, AU_KM, EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
+    BodyClass, BodyContext, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, TectonicRegime, AU_KM,
+    EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
 };
 use geoforge_core::derived::{main_sequence_luminosity, orbital_period_days};
 use geoforge_core::key::{Key, KeyAllocator};
@@ -197,14 +197,9 @@ fn birth_disk(ph: &Phenotype, close: bool) -> Disk {
                 survival: 1.0,
             }
         }
-        Some(c) => Disk {
-            mass: m1,
-            luminosity: main_sequence_luminosity(m1),
-            metallicity: ph.metallicity_dex,
-            inner_au: 0.0,
-            outer_au: reach(c, m1).min(outer_limit),
-            survival: binary_survival(c.a_au),
-        },
+        Some(c) => {
+            Disk { mass: m1, luminosity: main_sequence_luminosity(m1), metallicity: ph.metallicity_dex, inner_au: 0.0, outer_au: reach(c, m1).min(outer_limit), survival: binary_survival(c.a_au) }
+        }
         None => Disk { mass: m1, luminosity: main_sequence_luminosity(m1), metallicity: ph.metallicity_dex, inner_au: 0.0, outer_au: f64::INFINITY, survival: 1.0 },
     }
 }
@@ -343,7 +338,8 @@ mod tests {
             let Ok(gen) = galactic_system(Seed(s), &g) else { continue };
             let ctx = any_body(&gen.system, gen.focus).unwrap();
             let host = gen.system.nodes.iter().find_map(|n| if let NodeKind::Star(st) = &n.node { Some(st.clone()) } else { None }).unwrap();
-            if host.stage.is_main_sequence() && host.mass_solar < 0.4 && ctx.interior.has_surface_liquid_water() && gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Star(_))).count() == 1 {
+            if host.stage.is_main_sequence() && host.mass_solar < 0.4 && ctx.interior.has_surface_liquid_water() && gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Star(_))).count() == 1
+            {
                 let period_h = orbital_period_days(ctx.orbit.a_au, host.mass_solar * SOLAR_MASS_KG) * 24.0;
                 assert!((ctx.exterior.rotation_h / period_h - 1.0).abs() < 0.34, "seed {s}: day {} h, year {period_h} h", ctx.exterior.rotation_h);
                 checked += 1;

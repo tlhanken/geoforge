@@ -20,7 +20,6 @@
   bins = let
     dir = root + /crates/bins;
   in {
-    geoforge = makeCrate (dir + /geoforge);
     geoforge-cli = makeCrate (dir + /geoforge-cli);
   };
 
@@ -28,9 +27,12 @@
     dir = root + /crates/libs;
   in {
     geoforge-core = makeCrate (dir + /geoforge-core);
+    geoforge-names = makeCrate (dir + /geoforge-names);
     geoforge-surface = makeCrate (dir + /geoforge-surface);
+    geoforge-analysis = makeCrate (dir + /geoforge-analysis);
     geoforge-cosmos = makeCrate (dir + /geoforge-cosmos);
     geoforge-store = makeCrate (dir + /geoforge-store);
+    geoforge-almanac = makeCrate (dir + /geoforge-almanac);
     geoforge-pipeline = makeCrate (dir + /geoforge-pipeline);
   };
 

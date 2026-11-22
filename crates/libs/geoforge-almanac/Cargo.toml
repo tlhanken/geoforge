@@ -1,0 +1,18 @@
+[package]
+name = "geoforge-almanac"
+description = "Geoforge in time: orbits and calendars, eclipses, the night sky, storms, daily weather and hazards near a place"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+geoforge-core = { path = "../geoforge-core" }
+geoforge-cosmos = { path = "../geoforge-cosmos" }
+geoforge-analysis = { path = "../geoforge-analysis" }
+geoforge-store = { path = "../geoforge-store" }
+geoforge-names = { path = "../geoforge-names" }
+rayon = "1.10"
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }

@@ -31,18 +31,8 @@ pub enum LayerId {
 }
 
 impl LayerId {
-    pub const ALL: [LayerId; 10] = [
-        LayerId::Tectonics,
-        LayerId::Geology,
-        LayerId::Elevation,
-        LayerId::Circulation,
-        LayerId::Climate,
-        LayerId::Erosion,
-        LayerId::Hydrology,
-        LayerId::Biomes,
-        LayerId::Resources,
-        LayerId::Bands,
-    ];
+    pub const ALL: [LayerId; 10] =
+        [LayerId::Tectonics, LayerId::Geology, LayerId::Elevation, LayerId::Circulation, LayerId::Climate, LayerId::Erosion, LayerId::Hydrology, LayerId::Biomes, LayerId::Resources, LayerId::Bands];
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
@@ -206,9 +196,7 @@ impl ProductId {
     #[must_use]
     pub fn shape(self) -> Shape {
         match self {
-            ProductId::Plates | ProductId::Provinces | ProductId::Lithology | ProductId::Lakes | ProductId::Watersheds | ProductId::Biome => {
-                Shape::Partition
-            }
+            ProductId::Plates | ProductId::Provinces | ProductId::Lithology | ProductId::Lakes | ProductId::Watersheds | ProductId::Biome => Shape::Partition,
             ProductId::CrustType
             | ProductId::CrustAge
             | ProductId::RockAge
@@ -390,8 +378,12 @@ pub enum Status {
     /// A patch was re-applied to a regenerated base.
     Rebased,
     /// Some of a patch's edits refer to cells or keys that no longer exist.
-    Orphaned { count: usize },
-    NotApplicable { reason: String },
+    Orphaned {
+        count: usize,
+    },
+    NotApplicable {
+        reason: String,
+    },
     Missing,
 }
 

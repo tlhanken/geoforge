@@ -65,7 +65,11 @@ impl Default for ElevationParams {
 #[must_use]
 pub fn gdh1_depth_m(t: f64) -> f64 {
     let t = t.max(0.0);
-    if t < 20.0 { 2600.0 + 365.0 * t.sqrt() } else { 5651.0 - 2473.0 * (-0.0278 * t).exp() }
+    if t < 20.0 {
+        2600.0 + 365.0 * t.sqrt()
+    } else {
+        5651.0 - 2473.0 * (-0.0278 * t).exp()
+    }
 }
 
 fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
@@ -109,10 +113,7 @@ impl Generator for Elevation {
         let plateau_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0x0071_A7EA);
 
         // Distance to the continent–ocean crust edge, both sides (km).
-        let coast: Vec<Cell> = grid
-            .cells()
-            .filter(|&c| grid.neighbors(c).iter().any(|nb| crust[nb as usize] != crust[c as usize]))
-            .collect();
+        let coast: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|nb| crust[nb as usize] != crust[c as usize])).collect();
         let edge_raw: Vec<f64> = distance_field(grid, coast, 1.0, |_| true).into_iter().map(|d| d * r).collect();
         // Coastlines are fractal: perturb distance-to-edge so margins form bays, capes and
         // offshore banks instead of following the smooth plate boundary. Not at active
@@ -280,14 +281,7 @@ impl Generator for Elevation {
                     }
                     G::AbyssalPlain | G::OceanicFractureZone | G::HotspotTrack => {}
                     // Rigid-lid kinds: drawn by `lid::LidElevation`.
-                    G::CrateredHighlands
-                    | G::CrateredIce
-                    | G::VolcanicPlains
-                    | G::ImpactBasin
-                    | G::VolcanicRise
-                    | G::ShieldVolcano
-                    | G::Corona
-                    | G::Tessera => {}
+                    G::CrateredHighlands | G::CrateredIce | G::VolcanicPlains | G::ImpactBasin | G::VolcanicRise | G::ShieldVolcano | G::Corona | G::Tessera => {}
                 }
                 z
             })
@@ -355,7 +349,13 @@ impl Generator for Elevation {
                 let kind = prov.map(|p| p.kind);
                 let base = noise.fbm(pt, freq, 7);
                 let land = crust[i] == CrustType::Continental;
-                let amp = if margin[i].is_some() { 60.0 } else if land { 120.0 + 900.0 * rough } else { 120.0 + 350.0 * rough };
+                let amp = if margin[i].is_some() {
+                    60.0
+                } else if land {
+                    120.0 + 900.0 * rough
+                } else {
+                    120.0 + 350.0 * rough
+                };
                 let mut z = e[i] + rs * amp * base;
                 if matches!(kind, Some(G::CollisionOrogen | G::OrogenicPlateau | G::VolcanicArc | G::PaleoOrogen | G::ContinentalRift)) {
                     let ridges = noise.ridged(pt, freq * 3.0, 6);
@@ -363,7 +363,13 @@ impl Generator for Elevation {
                         Some(G::CollisionOrogen) => 2600.0 * prov.map_or(0.0, |p| 0.5 + 0.5 * p.intensity),
                         // Ranges and basins across the plateau (Tibet's ~1 km internal relief).
                         Some(G::OrogenicPlateau) => 1100.0,
-                        Some(G::VolcanicArc) => if crust[i] == CrustType::Oceanic { 300.0 } else { 1800.0 },
+                        Some(G::VolcanicArc) => {
+                            if crust[i] == CrustType::Oceanic {
+                                300.0
+                            } else {
+                                1800.0
+                            }
+                        }
                         Some(G::PaleoOrogen) => 700.0,
                         _ => 500.0,
                     };
@@ -493,7 +499,11 @@ pub fn sea_level_for_volume(e: &[f64], area_sr: &[f64], gel_m: f64) -> f64 {
     let (mut lo, mut hi) = (e.iter().cloned().fold(f64::INFINITY, f64::min), e.iter().cloned().fold(f64::NEG_INFINITY, f64::max) + gel_m * 2.0);
     for _ in 0..80 {
         let mid = 0.5 * (lo + hi);
-        if vol(mid) < target { lo = mid } else { hi = mid }
+        if vol(mid) < target {
+            lo = mid
+        } else {
+            hi = mid
+        }
     }
     0.5 * (lo + hi)
 }
@@ -508,10 +518,7 @@ pub fn is_ocean(elevation_m: f32) -> bool {
 #[must_use]
 pub fn slope(grid: &dyn Grid, elev: &[f32], c: Cell, radius_km: f64) -> f64 {
     let pc = grid.center(c);
-    grid.neighbors(c)
-        .iter()
-        .map(|n| (f64::from(elev[n as usize]) - f64::from(elev[c as usize])).abs() / (pc.angle_to(grid.center(n)) * radius_km * 1000.0))
-        .fold(0.0, f64::max)
+    grid.neighbors(c).iter().map(|n| (f64::from(elev[n as usize]) - f64::from(elev[c as usize])).abs() / (pc.angle_to(grid.center(n)) * radius_km * 1000.0)).fold(0.0, f64::max)
 }
 
 #[cfg(test)]

@@ -35,8 +35,8 @@ mod moisture;
 
 pub use moisture::w_sat;
 
-use crate::atmosphere::transport::carry;
 use crate::atmosphere::grid::{ground_m, is_sea};
+use crate::atmosphere::transport::carry;
 use crate::atmosphere::{Atmo, AtmoGrid, Radiation, Season, Substellar};
 use geoforge_core::grid::{distance_field, Cell};
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
@@ -148,14 +148,8 @@ impl Climate {
         // The rain belt and monsoons follow the circulation layer's defaults.
         let circulation = crate::circulation::CirculationParams::default();
         let season_winds: Vec<Vec<(f64, f64)>> = match (inputs.wind_jul(), inputs.wind_jan()) {
-            (Some(jul), Some(jan)) => vec![
-                atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S),
-                atmo.vectors_from_world(grid, &jan.values, crate::circulation::WIND_REF_M_S),
-            ],
-            _ => [1.0, -1.0]
-                .into_iter()
-                .map(|sign| crate::circulation::season_winds(&atmo, &Season::for_body(&atmo, body, sign, circulation.monsoon), &circulation))
-                .collect(),
+            (Some(jul), Some(jan)) => vec![atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S), atmo.vectors_from_world(grid, &jan.values, crate::circulation::WIND_REF_M_S)],
+            _ => [1.0, -1.0].into_iter().map(|sign| crate::circulation::season_winds(&atmo, &Season::for_body(&atmo, body, sign, circulation.monsoon), &circulation)).collect(),
         };
         let sst: Vec<f64> = match inputs.sst_anomaly() {
             Some(a) => atmo.sea_mean_from_world(grid, &a.values, elev),
@@ -177,11 +171,7 @@ impl Climate {
         // cold upwelling is chilled in a shallow marine layer that the first hills stop.
         let warm: Vec<f64> = sst.iter().map(|v| v.max(0.0)).collect();
         let cold: Vec<f64> = sst.iter().map(|v| v.min(0.0)).collect();
-        let sst_air: Vec<f64> = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &warm)
-            .iter()
-            .zip(carry(&atmo, &wind_annual, COLD_AIR_REACH_KM, r, &cold))
-            .map(|(w, c)| w + c)
-            .collect();
+        let sst_air: Vec<f64> = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &warm).iter().zip(carry(&atmo, &wind_annual, COLD_AIR_REACH_KM, r, &cold)).map(|(w, c)| w + c).collect();
         let broad = g.blur(&atmo.elev, 3);
         let mut t_sl = vec![0.0; g.len()];
         let mut swing = vec![0.0; g.len()];
@@ -208,7 +198,7 @@ impl Climate {
             t_mean_here[i] = t_here;
             t_season[0][i] = t_here + half; // northern summer
             t_season[1][i] = t_here - half; // northern winter
-            // Summer land under sinking air bakes: clear skies, dry ground, adiabatic warming.
+                                            // Summer land under sinking air bakes: clear skies, dry ground, adiabatic warming.
             for (k, season) in seasons_def.iter().enumerate() {
                 if lat * season.sign > 0.0 {
                     let sink = ((1.0 - season.convergence(i % g.w, lat, atmo.land[i])) / 0.6).clamp(0.0, 1.0);
@@ -337,7 +327,11 @@ impl Generator for Climate {
                     let jul = g.sample(&co.precip_jul, ll.lat_deg, ll.lon_deg).max(0.0);
                     let jan = g.sample(&co.precip_jan, ll.lat_deg, ll.lon_deg).max(0.0);
                     let warm = if ll.lat_deg >= 0.0 { jul } else { jan };
-                    if jul + jan > 0.0 { (warm / (jul + jan)) as f32 } else { 0.5 }
+                    if jul + jan > 0.0 {
+                        (warm / (jul + jan)) as f32
+                    } else {
+                        0.5
+                    }
                 })
                 .collect();
             out.insert(ProductData::PrecipitationWarmShare(Field::from_values(spec, share)));
@@ -356,11 +350,7 @@ impl Generator for Climate {
 pub fn on_ground(temperature: &[f32], rough: Option<&[f32]>, elevation: &[f32], body: &BodyContext) -> Vec<f32> {
     let Some(rough) = rough else { return temperature.to_vec() };
     let lapse = ClimateParams::default().lapse_rate(body) / 1000.0;
-    temperature
-        .iter()
-        .zip(rough.iter().zip(elevation))
-        .map(|(&t, (&r, &e))| if e >= 0.0 && r >= 0.0 { t + (lapse * f64::from(r - e)) as f32 } else { t })
-        .collect()
+    temperature.iter().zip(rough.iter().zip(elevation)).map(|(&t, (&r, &e))| if e >= 0.0 && r >= 0.0 { t + (lapse * f64::from(r - e)) as f32 } else { t }).collect()
 }
 
 /// `f` at `x` by linear interpolation between samples `f[k]` at `xs[k]` (any order).
@@ -383,5 +373,9 @@ fn interpolate(xs: &[f64], f: &[f64], x: f64) -> f64 {
 /// calibrated to ~1650 mm at 25 °C, ~720 mm at 10 °C and ~190 mm at 0 °C).
 #[must_use]
 pub fn pet_mm(t: f64) -> f64 {
-    if t <= -5.0 { 0.0 } else { 28.0 * (t + 5.0).powf(1.2) }
+    if t <= -5.0 {
+        0.0
+    } else {
+        28.0 * (t + 5.0).powf(1.2)
+    }
 }

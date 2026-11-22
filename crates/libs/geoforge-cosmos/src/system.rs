@@ -6,8 +6,8 @@ use crate::dynamics::{self, HasOrbit};
 use crate::planets::Formed;
 use crate::stars::spectral_class;
 use geoforge_core::body::{
-    BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, AU_KM,
-    EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
+    BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, AU_KM, EARTH_MASS_KG, EARTH_RADIUS_KM,
+    SOLAR_MASS_KG,
 };
 use geoforge_core::derived::{effective_temperature_k, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius, orbital_period_days};
 use geoforge_core::key::{Key, KeyAllocator};
@@ -43,7 +43,17 @@ pub fn generate_system(seed: Seed) -> Generated {
     let r = main_sequence_radius(m);
     let teff = effective_temperature_k(l, r);
     let age = d.range(2.5, 7.5).min(10.0 * m.powf(-2.5) * 0.9);
-    let star = Star { mass_solar: m, luminosity_solar: l, radius_solar: r, temperature_k: teff, age_gyr: age, metallicity_dex: d.normal(0.0, 0.18).clamp(-0.6, 0.4), spectral_class: spectral_class(teff), stage: StellarStage::MainSequence, initial_mass_solar: None };
+    let star = Star {
+        mass_solar: m,
+        luminosity_solar: l,
+        radius_solar: r,
+        temperature_k: teff,
+        age_gyr: age,
+        metallicity_dex: d.normal(0.0, 0.18).clamp(-0.6, 0.4),
+        spectral_class: spectral_class(teff),
+        stage: StellarStage::MainSequence,
+        initial_mass_solar: None,
+    };
     let star_key = keys.fresh();
     let mut nodes = vec![OrbitalNode { key: star_key, name: sys_name.clone(), parent: None, node: NodeKind::Star(star), elements: None }];
 

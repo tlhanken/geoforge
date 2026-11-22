@@ -27,3 +27,6 @@ node_modules/
 # Real-Earth check data (scripts/real-earth/fetch.sh)
 real-earth-data/
 __pycache__/
+
+# Worlds made while trying things out
+/worlds/

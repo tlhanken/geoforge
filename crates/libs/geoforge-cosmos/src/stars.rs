@@ -82,17 +82,7 @@ pub fn evolve(initial_mass: f64, age_gyr: f64, metallicity_dex: f64) -> Star {
     let r_ms = main_sequence_radius(m0);
     let make = |stage, mass: f64, l: f64, r: f64| {
         let t = if l > 0.0 { effective_temperature_k(l, r) } else { 0.0 };
-        Star {
-            mass_solar: mass,
-            luminosity_solar: l,
-            radius_solar: r,
-            temperature_k: t,
-            age_gyr,
-            metallicity_dex,
-            spectral_class: classify(stage, t),
-            stage,
-            initial_mass_solar: Some(m0),
-        }
+        Star { mass_solar: mass, luminosity_solar: l, radius_solar: r, temperature_k: t, age_gyr, metallicity_dex, spectral_class: classify(stage, t), stage, initial_mass_solar: Some(m0) }
     };
     if f < 1.0 {
         let l = l_ms * brightening(f);

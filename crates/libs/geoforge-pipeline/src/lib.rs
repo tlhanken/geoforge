@@ -12,13 +12,9 @@
 //!   generated, patched, and then fed back so the rest of their layer is consistent with
 //!   the edit. Downstream layers always see the edited version.
 
-pub mod cache;
 pub mod place;
 pub mod registry;
-pub mod sky;
 pub mod stats;
-pub mod storms;
-pub mod weather;
 pub mod views;
 
 pub use registry::Implementation;
@@ -41,6 +37,8 @@ pub enum PipelineError {
     Store(#[from] geoforge_store::StoreError),
     #[error("{0}")]
     Core(#[from] geoforge_core::Error),
+    #[error("{0}")]
+    Almanac(#[from] geoforge_almanac::Error),
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
     #[error("io: {0}")]
@@ -91,11 +89,7 @@ pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
     };
     // Defaults for the implementations this body uses; others fall back to defaults if the
     // body later changes.
-    let params = LayerId::ALL
-        .into_iter()
-        .filter_map(|l| registry::select(l, &body).ok())
-        .map(|i| (i.name().to_string(), i.default_params()))
-        .collect();
+    let params = LayerId::ALL.into_iter().filter_map(|l| registry::select(l, &body).ok()).map(|i| (i.name().to_string(), i.default_params())).collect();
     let manifest = Manifest {
         schema_version: geoforge_core::SCHEMA_VERSION,
         code_version: CODE_VERSION.into(),
@@ -162,13 +156,11 @@ fn json_bytes<T: Serialize>(v: &T) -> Result<Vec<u8>> {
 fn edit_hash(world: &World, p: ProductId, src: &Source) -> Result<Option<Hash>> {
     Ok(match src {
         Source::Generate { .. } => None,
-        Source::Authored { .. } => Some(
-            codec::read_content_hash(&world.edits_dir(), p)
-                .ok_or_else(|| PipelineError::Invalid(format!("{p} is marked authored but its edit file is missing or unreadable")))?,
-        ),
+        Source::Authored { .. } => {
+            Some(codec::read_content_hash(&world.edits_dir(), p).ok_or_else(|| PipelineError::Invalid(format!("{p} is marked authored but its edit file is missing or unreadable")))?)
+        }
         Source::Patched { patch, .. } => {
-            let bytes = std::fs::read(world.body_dir().join(patch))
-                .map_err(|e| PipelineError::Invalid(format!("{p} is marked patched but {patch} is unreadable: {e}")))?;
+            let bytes = std::fs::read(world.body_dir().join(patch)).map_err(|e| PipelineError::Invalid(format!("{p} is marked patched but {patch} is unreadable: {e}")))?;
             Some(hash_parts(&[b"patch-file", &bytes]))
         }
     })
@@ -440,25 +432,11 @@ pub fn generate(world: &mut World, opts: &GenerateOptions, mut log: impl FnMut(&
     Ok((products, reports))
 }
 
-/// Load every stored product (no generation).
-///
-/// # Errors
-/// On unreadable products.
-pub fn load_all(world: &World) -> Result<Products> {
-    let mut out = Products::new();
-    for p in ProductId::ALL {
-        if let Some(d) = world.load_product(p)? {
-            out.insert(d);
-        }
-    }
-    Ok(out)
-}
-
 // ---------------------------------------------------------------- edit views
 
 /// The storm field, when a view needs it (the tropical cyclone map).
-fn storm_field_for(world: &World, views: &[View], stored: &Products, grid: &AnyGrid, body: &BodyContext) -> Option<storms::Atmosphere> {
-    views.contains(&View::Hazard(geoforge_surface::hazards::Hazard::Cyclones)).then(|| weather::atmosphere(world, stored, grid, body).ok()).flatten()
+fn storm_field_for(world: &World, views: &[View], stored: &Products, grid: &AnyGrid, body: &BodyContext) -> Option<geoforge_almanac::storms::Atmosphere> {
+    views.contains(&View::Hazard(geoforge_analysis::hazards::Hazard::Cyclones)).then(|| geoforge_almanac::weather::atmosphere(world, stored, grid, body).ok()).flatten()
 }
 
 /// Default folder for edit views.
@@ -506,10 +484,11 @@ pub fn import(world: &mut World, p: ProductId, from: &Path, authored: bool) -> R
     let grid = world.manifest.grid;
     let baseline = codec::read_canonical(&world.baseline_dir(), p, grid).ok();
     let view = edit::read_view(from, p, grid, baseline.as_ref())?;
-    let report = |mode, changed_cells, rows_changed| ImportReport { product: p, mode, changed_cells, snapped: view.snapped, rows_changed, resampled_from: view.resampled_from, cap_cells: view.cap_cells };
+    let report =
+        |mode, changed_cells, rows_changed| ImportReport { product: p, mode, changed_cells, snapped: view.snapped, rows_changed, resampled_from: view.resampled_from, cap_cells: view.cap_cells };
     let body = world.load_body()?;
     let g = grid.build()?;
-    let ctx = load_all(world)?;
+    let ctx = world.load_products()?;
     let fill = filler(world.manifest.root_seed, &body, &g, &ctx);
     let edits = world.edits_dir();
     std::fs::create_dir_all(&edits)?;
@@ -615,7 +594,7 @@ pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(Vie
     std::fs::create_dir_all(to)?;
     let body = world.load_body()?;
     let grid = world.manifest.grid.build()?;
-    let stored = load_all(world)?;
+    let stored = world.load_products()?;
     let bref = BodyRef { name: body.name.clone(), radius_km: body.exterior.radius_km };
     let atm = storm_field_for(world, views, &stored, &grid, &body);
     let mut source = views::Source::new(&stored, &grid, &body);

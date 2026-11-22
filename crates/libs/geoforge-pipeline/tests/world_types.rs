@@ -9,7 +9,8 @@ use geoforge_pipeline::{self as pipe, GenerateOptions, Implementation as I, NewW
 fn world(name: &str, body: Option<geoforge_core::BodyContext>, focus: Option<&str>) -> geoforge_store::World {
     let dir = std::env::temp_dir().join(format!("geoforge-types-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 128, height: 64 }, body, focus: focus.map(str::to_string) }).unwrap()
+    pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 128, height: 64 }, body, focus: focus.map(str::to_string) })
+        .unwrap()
 }
 
 /// The implementation filling each layer, `None` where the layer does not apply.
@@ -64,7 +65,10 @@ fn any_body_of_a_system_can_be_the_focus() {
         assert_eq!(reports.len(), LayerId::ALL.len());
     }
     let dir = std::env::temp_dir().join(format!("geoforge-types-nobody-{}", std::process::id()));
-    let err = pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 64, height: 32 }, body: None, focus: Some("Nowhere".into()) });
+    let err = pipe::create_world(
+        &dir,
+        &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(11), grid: GridSpec::Equirect { width: 64, height: 32 }, body: None, focus: Some("Nowhere".into()) },
+    );
     assert!(err.is_err());
 }
 
@@ -96,12 +100,12 @@ fn giant_deposits_follow_the_ground() {
     assert!(!deposits.rows.is_empty());
     let body = w1.load_body().unwrap();
     let grid = w1.manifest.grid.build().unwrap();
-    let g = geoforge_surface::ground::Ground::read(&p1, &grid, body.exterior.radius_km, true).unwrap();
+    let g = geoforge_analysis::ground::Ground::read(&p1, &grid, body.exterior.radius_km, true).unwrap();
     for d in deposits.rows.values() {
         let c = geoforge_core::Grid::locate(&grid, geoforge_core::UnitVec3::from_lat_lon(d.lat_deg, d.lon_deg)) as usize;
-        let kind = geoforge_surface::resources::Deposit::from_slug(&d.kind).unwrap();
+        let kind = geoforge_analysis::resources::Deposit::from_slug(&d.kind).unwrap();
         assert!(!g.sea[c], "{} at sea", d.kind);
-        assert!(geoforge_surface::resources::prospectivity(&g, kind)[c] > 0.0, "{} ({}) where none forms", d.kind, d.setting);
+        assert!(geoforge_analysis::resources::prospectivity(&g, kind)[c] > 0.0, "{} ({}) where none forms", d.kind, d.setting);
         assert!(d.ore_mt > 0.0 && d.depth_m >= 0.0);
     }
 }

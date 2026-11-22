@@ -8,7 +8,11 @@ use geoforge_core::BodyContext;
 type Check = Result<(), Precondition>;
 
 fn require(ok: bool, why: &str) -> Check {
-    if ok { Ok(()) } else { Err(Precondition(why.into())) }
+    if ok {
+        Ok(())
+    } else {
+        Err(Precondition(why.into()))
+    }
 }
 
 /// Rock crust broken into moving plates.
@@ -25,10 +29,7 @@ pub fn rocky_surface(body: &BodyContext) -> Check {
 /// Rock crust under one rigid lid: stagnant, episodic, or geologically dead.
 pub fn rigid_lid(body: &BodyContext) -> Check {
     require(body.interior.has_lithosphere(), "needs a rocky crust")?;
-    require(
-        matches!(body.interior.regime, TectonicRegime::StagnantLid | TectonicRegime::Episodic | TectonicRegime::Inactive),
-        "needs a rigid lid (stagnant, episodic or inactive)",
-    )
+    require(matches!(body.interior.regime, TectonicRegime::StagnantLid | TectonicRegime::Episodic | TectonicRegime::Inactive), "needs a rigid lid (stagnant, episodic or inactive)")
 }
 
 /// Ground under air.

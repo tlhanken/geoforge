@@ -24,8 +24,7 @@ pub enum Archetype {
 }
 
 impl Archetype {
-    pub const ALL: [Self; 9] =
-        [Self::Earth, Self::Mars, Self::Venus, Self::Mercury, Self::Moon, Self::Titan, Self::Europa, Self::GasGiant, Self::IceGiant];
+    pub const ALL: [Self; 9] = [Self::Earth, Self::Mars, Self::Venus, Self::Mercury, Self::Moon, Self::Titan, Self::Europa, Self::GasGiant, Self::IceGiant];
 
     #[must_use]
     pub fn slug(self) -> &'static str {
@@ -103,19 +102,11 @@ impl Archetype {
                 TectonicRegime::Episodic,
             ),
             Self::Mercury => (
-                vec![
-                    Shell::new(Core, Liquid, 2020.0, w(&[(Iron, 0.9), (Nickel, 0.05), (Sulfur, 0.05)])),
-                    Shell::new(Mantle, Solid, 384.7, one(Silicate)),
-                    Shell::new(Crust, Solid, 35.0, one(Basalt)),
-                ],
+                vec![Shell::new(Core, Liquid, 2020.0, w(&[(Iron, 0.9), (Nickel, 0.05), (Sulfur, 0.05)])), Shell::new(Mantle, Solid, 384.7, one(Silicate)), Shell::new(Crust, Solid, 35.0, one(Basalt))],
                 TectonicRegime::StagnantLid,
             ),
             Self::Moon => (
-                vec![
-                    Shell::new(Core, Solid, 350.0, one(Iron)),
-                    Shell::new(Mantle, Solid, 1347.4, one(Silicate)),
-                    Shell::new(Crust, Solid, 40.0, w(&[(Anorthosite, 0.8), (Basalt, 0.2)])),
-                ],
+                vec![Shell::new(Core, Solid, 350.0, one(Iron)), Shell::new(Mantle, Solid, 1347.4, one(Silicate)), Shell::new(Crust, Solid, 40.0, w(&[(Anorthosite, 0.8), (Basalt, 0.2)]))],
                 TectonicRegime::StagnantLid,
             ),
             Self::Titan => (
@@ -171,55 +162,19 @@ impl Archetype {
                 sun(1361.0, 0.0167, 23.44, 365.256),
                 [tide("Moon", 7.342e22, 384_400.0), tide("Sun", 1.989e30, AU_KM)].concat(),
             ),
-            Self::Mars => (
-                ext(Terrestrial, 6.417e23, 3389.5, 24.623, 25.19),
-                orbit(1.5237, 0.0934, 1.85, 49.56, 286.5),
-                sun(586.2, 0.0934, 25.19, 686.98),
-                Vec::new(),
-            ),
+            Self::Mars => (ext(Terrestrial, 6.417e23, 3389.5, 24.623, 25.19), orbit(1.5237, 0.0934, 1.85, 49.56, 286.5), sun(586.2, 0.0934, 25.19, 686.98), Vec::new()),
             // Retrograde spin: obliquity past 90°.
-            Self::Venus => (
-                ext(Terrestrial, 4.867e24, 6051.8, 5832.5, 177.36),
-                orbit(0.7233, 0.0068, 3.39, 76.68, 54.88),
-                sun(2601.0, 0.0068, 177.36, 224.70),
-                Vec::new(),
-            ),
-            Self::Mercury => (
-                ext(Terrestrial, 3.301e23, 2439.7, 1407.5, 0.034),
-                orbit(0.3871, 0.2056, 7.0, 48.33, 29.12),
-                sun(9083.0, 0.2056, 0.034, 87.969),
-                Vec::new(),
-            ),
-            Self::Moon => (
-                ext(Terrestrial, 7.342e22, 1737.4, 655.72, 6.68),
-                orbit(384_400.0 / AU_KM, 0.0549, 5.145, 125.08, 318.15),
-                sun(1361.0, 0.0167, 1.54, 365.256),
-                tide("Earth", 5.972e24, 384_400.0),
-            ),
-            Self::Titan => (
-                ext(Terrestrial, 1.3452e23, 2574.73, 382.69, 0.3),
-                orbit(1_221_870.0 / AU_KM, 0.0288, 0.348, 0.0, 0.0),
-                sun(14.9, 0.0565, 26.73, 10_759.0),
-                tide("Saturn", 5.683e26, 1_221_870.0),
-            ),
-            Self::Europa => (
-                ext(Terrestrial, 4.7998e22, 1560.8, 85.23, 0.1),
-                orbit(671_034.0 / AU_KM, 0.009, 0.47, 0.0, 0.0),
-                sun(50.3, 0.0489, 3.1, 4332.6),
-                tide("Jupiter", 1.898e27, 671_034.0),
-            ),
-            Self::GasGiant => (
-                ext(GasGiant, 1.898e27, 69_911.0, 9.925, 3.13),
-                orbit(5.2034, 0.0489, 1.30, 100.46, 273.87),
-                sun(50.3, 0.0489, 3.13, 4332.6),
-                Vec::new(),
-            ),
-            Self::IceGiant => (
-                ext(IceGiant, 1.024e26, 24_622.0, 16.11, 28.32),
-                orbit(30.07, 0.0086, 1.77, 131.78, 273.19),
-                sun(1.505, 0.0086, 28.32, 60_190.0),
-                Vec::new(),
-            ),
+            Self::Venus => (ext(Terrestrial, 4.867e24, 6051.8, 5832.5, 177.36), orbit(0.7233, 0.0068, 3.39, 76.68, 54.88), sun(2601.0, 0.0068, 177.36, 224.70), Vec::new()),
+            Self::Mercury => (ext(Terrestrial, 3.301e23, 2439.7, 1407.5, 0.034), orbit(0.3871, 0.2056, 7.0, 48.33, 29.12), sun(9083.0, 0.2056, 0.034, 87.969), Vec::new()),
+            Self::Moon => {
+                (ext(Terrestrial, 7.342e22, 1737.4, 655.72, 6.68), orbit(384_400.0 / AU_KM, 0.0549, 5.145, 125.08, 318.15), sun(1361.0, 0.0167, 1.54, 365.256), tide("Earth", 5.972e24, 384_400.0))
+            }
+            Self::Titan => {
+                (ext(Terrestrial, 1.3452e23, 2574.73, 382.69, 0.3), orbit(1_221_870.0 / AU_KM, 0.0288, 0.348, 0.0, 0.0), sun(14.9, 0.0565, 26.73, 10_759.0), tide("Saturn", 5.683e26, 1_221_870.0))
+            }
+            Self::Europa => (ext(Terrestrial, 4.7998e22, 1560.8, 85.23, 0.1), orbit(671_034.0 / AU_KM, 0.009, 0.47, 0.0, 0.0), sun(50.3, 0.0489, 3.1, 4332.6), tide("Jupiter", 1.898e27, 671_034.0)),
+            Self::GasGiant => (ext(GasGiant, 1.898e27, 69_911.0, 9.925, 3.13), orbit(5.2034, 0.0489, 1.30, 100.46, 273.87), sun(50.3, 0.0489, 3.13, 4332.6), Vec::new()),
+            Self::IceGiant => (ext(IceGiant, 1.024e26, 24_622.0, 16.11, 28.32), orbit(30.07, 0.0086, 1.77, 131.78, 273.19), sun(1.505, 0.0086, 28.32, 60_190.0), Vec::new()),
         }
     }
 }

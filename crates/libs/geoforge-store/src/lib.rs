@@ -12,6 +12,7 @@
 //!   cache/baselines/                 last edit-view export of each product (for diffs)
 //! ```
 
+pub mod cache;
 pub mod codec;
 pub mod edit;
 pub mod polar;
@@ -95,6 +96,13 @@ pub fn slug(s: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
+/// A world's body, grid and stored products, loaded once for a command.
+pub struct Snapshot {
+    pub body: BodyContext,
+    pub grid: geoforge_core::grid::AnyGrid,
+    pub products: geoforge_core::product::Products,
+}
+
 /// blake3 of arbitrary parts, as a [`Hash`].
 #[must_use]
 pub fn hash_parts(parts: &[&[u8]]) -> Hash {
@@ -130,8 +138,7 @@ impl World {
     /// # Errors
     /// If there is no world at `root` or its manifest is invalid.
     pub fn open(root: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(root.join("world.toml"))
-            .map_err(|e| StoreError::Invalid(format!("no world at {}: {e}", root.display())))?;
+        let text = std::fs::read_to_string(root.join("world.toml")).map_err(|e| StoreError::Invalid(format!("no world at {}: {e}", root.display())))?;
         let manifest: Manifest = toml::from_str(&text)?;
         if manifest.schema_version != geoforge_core::SCHEMA_VERSION {
             return Err(StoreError::Invalid(format!("world schema {} but this build reads {}", manifest.schema_version, geoforge_core::SCHEMA_VERSION)));
@@ -195,6 +202,28 @@ impl World {
     /// On IO or format errors.
     pub fn save_product(&self, data: &ProductData, provenance: Hash) -> Result<Hash> {
         codec::write_canonical(&self.products_dir(), data, provenance)
+    }
+
+    /// Every stored product (no generation).
+    ///
+    /// # Errors
+    /// On unreadable products.
+    pub fn load_products(&self) -> Result<geoforge_core::product::Products> {
+        let mut out = geoforge_core::product::Products::new();
+        for p in ProductId::ALL {
+            if let Some(d) = self.load_product(p)? {
+                out.insert(d);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The body, its grid and every stored product, loaded together.
+    ///
+    /// # Errors
+    /// On unreadable files or an unbuildable grid.
+    pub fn snapshot(&self) -> Result<Snapshot> {
+        Ok(Snapshot { body: self.load_body()?, grid: self.manifest.grid.build().map_err(|e| StoreError::Invalid(e.to_string()))?, products: self.load_products()? })
     }
 
     /// # Errors

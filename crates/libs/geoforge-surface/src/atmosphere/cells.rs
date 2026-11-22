@@ -82,7 +82,11 @@ impl Cells {
     /// Cells per hemisphere: the Hadley cell, then a pair per jet; with no jet, a polar cap.
     #[must_use]
     pub fn count(&self) -> u32 {
-        if self.jets == 0 { 2 } else { 1 + 2 * self.jets }
+        if self.jets == 0 {
+            2
+        } else {
+            1 + 2 * self.jets
+        }
     }
 
     /// Where `lat` (poleward of the Hadley cell) falls among the jets: westerly band or not,
@@ -119,7 +123,11 @@ impl Cells {
 
     /// Subtropical edge of the Hadley cell on the side of `lat`.
     fn edge(&self, lat: f64) -> f64 {
-        if lat >= self.itcz { self.itcz + self.hadley } else { self.itcz - self.hadley }
+        if lat >= self.itcz {
+            self.itcz + self.hadley
+        } else {
+            self.itcz - self.hadley
+        }
     }
 
     /// Poleward edge of the Ferrel cell (the polar front) on the side of `lat`: it follows
@@ -191,9 +199,7 @@ impl Cells {
         // The sinking branch of each Hadley cell: a broad belt inside its subtropical edge,
         // strongest in the winter hemisphere (whose cell reaches across the equator). Each
         // cell's belt is judged on its own side, so the rain-out is continuous across the ITCZ.
-        let belt = |poleward: f64, edge: f64, winter: f64| {
-            (0.525 + 0.225 * winter.clamp(-1.0, 1.0)) * plateau(poleward, edge - 0.55 * self.hadley, edge + 0.1 * self.hadley, 8.0)
-        };
+        let belt = |poleward: f64, edge: f64, winter: f64| (0.525 + 0.225 * winter.clamp(-1.0, 1.0)) * plateau(poleward, edge - 0.55 * self.hadley, edge + 0.1 * self.hadley, 8.0);
         let north = belt(lat, self.itcz + self.hadley, -self.itcz / 7.0);
         let south = belt(-lat, self.hadley - self.itcz, self.itcz / 7.0);
         let mut sink = north.max(south);
@@ -328,7 +334,11 @@ impl Season {
                         w += c;
                     }
                 }
-                if w > 0.0 { (s / w).min(1.2) } else { 0.0 }
+                if w > 0.0 {
+                    (s / w).min(1.2)
+                } else {
+                    0.0
+                }
             })
             .collect();
         // Smooth a little along the latitude circle; wider, and the trough would cross onto

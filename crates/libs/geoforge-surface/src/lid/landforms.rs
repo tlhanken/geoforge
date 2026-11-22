@@ -137,7 +137,11 @@ pub fn basin_depth_m(diameter_km: f64) -> f64 {
 /// Broad volcanic rise (Tharsis, Beta Regio).
 #[must_use]
 pub fn dome(x: f64) -> f64 {
-    if x < 1.0 { (1.0 - x * x).powi(2) } else { 0.0 }
+    if x < 1.0 {
+        (1.0 - x * x).powi(2)
+    } else {
+        0.0
+    }
 }
 
 /// Shield volcano: concave flanks, a summit plateau and a caldera sunk into it.

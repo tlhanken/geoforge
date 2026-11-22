@@ -9,11 +9,11 @@
 
 mod known;
 
+use geoforge_analysis::koppen::{self, Koppen, KoppenRules};
 use geoforge_core::grid::AnyGrid;
 use geoforge_core::product::{LayerId, Products};
 use geoforge_core::{Archetype, Cell, Field, Grid, Key};
 use geoforge_surface::biomes::{classify, BiomesParams, CellClimate};
-use geoforge_surface::koppen::{self, Koppen, KoppenRules};
 use known::{cells_in, mean, near, Scorecard};
 use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
@@ -40,30 +40,8 @@ struct Station {
 }
 
 #[allow(clippy::too_many_arguments)]
-const fn st(
-    name: &'static str,
-    lat: f64,
-    lon: f64,
-    elev_m: f64,
-    t: f64,
-    range: f64,
-    precip: f64,
-    warm_share: f64,
-    koppen: &'static str,
-    biomes: &'static [&'static str],
-) -> Station {
-    Station {
-        name,
-        lat,
-        lon,
-        elev_m,
-        t,
-        range,
-        precip,
-        warm_share,
-        koppen,
-        biomes,
-    }
+const fn st(name: &'static str, lat: f64, lon: f64, elev_m: f64, t: f64, range: f64, precip: f64, warm_share: f64, koppen: &'static str, biomes: &'static [&'static str]) -> Station {
+    Station { name, lat, lon, elev_m, t, range, precip, warm_share, koppen, biomes }
 }
 
 const TF: &str = "temperate_deciduous_forest";
@@ -207,17 +185,7 @@ fn earth() -> &'static Earth {
         inputs.insert(known::elevation_product(&g, e.clone()));
         inputs.insert(known::rough_elevation_product(&g, e.clone()));
         let body = Archetype::Earth.context(Key(1), "Earth");
-        let p = known::run(
-            &body,
-            &g,
-            inputs,
-            &[
-                LayerId::Circulation,
-                LayerId::Climate,
-                LayerId::Hydrology,
-                LayerId::Biomes,
-            ],
-        );
+        let p = known::run(&body, &g, inputs, &[LayerId::Circulation, LayerId::Climate, LayerId::Hydrology, LayerId::Biomes]);
         Earth {
             t: known::scalar(&p, Products::temperature),
             t_range: known::scalar(&p, Products::temperature_range),
@@ -232,17 +200,11 @@ fn earth() -> &'static Earth {
 
 impl Earth {
     fn sea(&self, lat: RangeInclusive<f64>, lon0: f64, lon1: f64) -> Vec<Cell> {
-        cells_in(&self.grid, lat, lon0, lon1)
-            .into_iter()
-            .filter(|&c| self.elev[c as usize] < 0.0)
-            .collect()
+        cells_in(&self.grid, lat, lon0, lon1).into_iter().filter(|&c| self.elev[c as usize] < 0.0).collect()
     }
 
     fn land(&self) -> Vec<Cell> {
-        self.grid
-            .cells()
-            .filter(|&c| self.elev[c as usize] >= 0.0)
-            .collect()
+        self.grid.cells().filter(|&c| self.elev[c as usize] >= 0.0).collect()
     }
 
     /// The cell at a place, or the nearest land cell (a coastal station whose cell is sea).
@@ -267,10 +229,7 @@ impl Earth {
 
     /// Area-weighted mean (east, north) of a vector field.
     fn vector_mean(&self, f: &Field<[f32; 2]>, cells: &[Cell]) -> (f64, f64) {
-        (
-            mean(&self.grid, cells, |c| f64::from(f.get(c)[0])),
-            mean(&self.grid, cells, |c| f64::from(f.get(c)[1])),
-        )
+        (mean(&self.grid, cells, |c| f64::from(f.get(c)[0])), mean(&self.grid, cells, |c| f64::from(f.get(c)[1])))
     }
 
     /// The commonest land biome, by area, within 1.5° of a place (lakes left out: they are
@@ -279,16 +238,11 @@ impl Earth {
         let b = self.p.biome().unwrap();
         let mut area: BTreeMap<String, f64> = BTreeMap::new();
         for c in cells_in(&self.grid, (lat - 1.5)..=(lat + 1.5), lon - 1.5, lon + 1.5) {
-            if let Some(r) = b
-                .row_at(c)
-                .filter(|r| self.elev[c as usize] >= 0.0 && r.slug != "lake")
-            {
+            if let Some(r) = b.row_at(c).filter(|r| self.elev[c as usize] >= 0.0 && r.slug != "lake") {
                 *area.entry(r.slug.clone()).or_default() += self.grid.area_sr(c);
             }
         }
-        area.into_iter()
-            .max_by(|a, b| a.1.total_cmp(&b.1))
-            .map_or("none".into(), |(k, _)| k)
+        area.into_iter().max_by(|a, b| a.1.total_cmp(&b.1)).map_or("none".into(), |(k, _)| k)
     }
 }
 
@@ -297,128 +251,32 @@ fn winds(s: &mut Scorecard, e: &Earth) {
     let east = |w, cells: &[Cell]| e.vector_mean(w, cells).0;
     let north = |w, cells: &[Cell]| e.vector_mean(w, cells).1;
     for (name, w) in [("January", jan), ("July", jul)] {
-        s.range(
-            "winds",
-            format!("{name} trades, 10–20°N, east–west"),
-            east(w, &e.sea(10.0..=20.0, -180.0, 180.0)),
-            -10.0..=-1.0,
-            "m/s",
-        );
-        s.range(
-            "winds",
-            format!("{name} trades, 10–20°S, east–west"),
-            east(w, &e.sea(-20.0..=-10.0, -180.0, 180.0)),
-            -10.0..=-1.0,
-            "m/s",
-        );
-        s.range(
-            "winds",
-            format!("{name} westerlies, 40–55°S, east–west"),
-            east(w, &e.sea(-55.0..=-40.0, -180.0, 180.0)),
-            2.0..=15.0,
-            "m/s",
-        );
+        s.range("winds", format!("{name} trades, 10–20°N, east–west"), east(w, &e.sea(10.0..=20.0, -180.0, 180.0)), -10.0..=-1.0, "m/s");
+        s.range("winds", format!("{name} trades, 10–20°S, east–west"), east(w, &e.sea(-20.0..=-10.0, -180.0, 180.0)), -10.0..=-1.0, "m/s");
+        s.range("winds", format!("{name} westerlies, 40–55°S, east–west"), east(w, &e.sea(-55.0..=-40.0, -180.0, 180.0)), 2.0..=15.0, "m/s");
     }
-    s.range(
-        "winds",
-        "January westerlies, 40–55°N, east–west",
-        east(jan, &e.sea(40.0..=55.0, -180.0, 180.0)),
-        2.0..=15.0,
-        "m/s",
-    );
+    s.range("winds", "January westerlies, 40–55°N, east–west", east(jan, &e.sea(40.0..=55.0, -180.0, 180.0)), 2.0..=15.0, "m/s");
     let arabian = e.sea(8.0..=18.0, 55.0, 72.0);
-    s.range(
-        "winds",
-        "July southwest monsoon, Arabian Sea, east–west",
-        east(jul, &arabian),
-        2.0..=15.0,
-        "m/s",
-    );
-    s.range(
-        "winds",
-        "January northeast monsoon, Arabian Sea, east–west",
-        east(jan, &arabian),
-        -10.0..=0.0,
-        "m/s",
-    );
-    s.range(
-        "winds",
-        "July West African monsoon, 5–12°N 10°W–10°E, northward",
-        north(jul, &cells_in(&e.grid, 5.0..=12.0, -10.0, 10.0)),
-        0.5..=10.0,
-        "m/s",
-    );
-    s.range(
-        "winds",
-        "January South China Sea, northward",
-        north(jan, &e.sea(10.0..=20.0, 110.0, 120.0)),
-        -10.0..=-0.5,
-        "m/s",
-    );
+    s.range("winds", "July southwest monsoon, Arabian Sea, east–west", east(jul, &arabian), 2.0..=15.0, "m/s");
+    s.range("winds", "January northeast monsoon, Arabian Sea, east–west", east(jan, &arabian), -10.0..=0.0, "m/s");
+    s.range("winds", "July West African monsoon, 5–12°N 10°W–10°E, northward", north(jul, &cells_in(&e.grid, 5.0..=12.0, -10.0, 10.0)), 0.5..=10.0, "m/s");
+    s.range("winds", "January South China Sea, northward", north(jan, &e.sea(10.0..=20.0, 110.0, 120.0)), -10.0..=-0.5, "m/s");
 }
 
 fn ocean(s: &mut Scorecard, e: &Earth) {
     let cur = e.p.ocean_currents().unwrap();
     let flow = |lat, lon0, lon1| e.vector_mean(cur, &e.sea(lat, lon0, lon1));
-    s.range(
-        "currents",
-        "Gulf Stream, 30–38°N 80–72°W, northward",
-        flow(30.0..=38.0, -80.0, -72.0).1,
-        0.1..=2.0,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "Kuroshio, 25–35°N 125–140°E, northward",
-        flow(25.0..=35.0, 125.0, 140.0).1,
-        0.05..=2.0,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "California Current, 25–40°N 130–120°W, northward",
-        flow(25.0..=40.0, -130.0, -120.0).1,
-        -1.0..=-0.01,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "Humboldt Current, 30–10°S 85–75°W, northward",
-        flow(-30.0..=-10.0, -85.0, -75.0).1,
-        0.01..=1.0,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "Benguela Current, 30–15°S 5–15°E, northward",
-        flow(-30.0..=-15.0, 5.0, 15.0).1,
-        0.01..=1.0,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "Antarctic Circumpolar, 50–60°S, eastward",
-        flow(-60.0..=-50.0, -180.0, 180.0).0,
-        0.05..=1.0,
-        "m/s",
-    );
-    s.range(
-        "currents",
-        "South Equatorial, 3°S–3°N 150–100°W, eastward",
-        flow(-3.0..=3.0, -150.0, -100.0).0,
-        -1.0..=-0.02,
-        "m/s",
-    );
+    s.range("currents", "Gulf Stream, 30–38°N 80–72°W, northward", flow(30.0..=38.0, -80.0, -72.0).1, 0.1..=2.0, "m/s");
+    s.range("currents", "Kuroshio, 25–35°N 125–140°E, northward", flow(25.0..=35.0, 125.0, 140.0).1, 0.05..=2.0, "m/s");
+    s.range("currents", "California Current, 25–40°N 130–120°W, northward", flow(25.0..=40.0, -130.0, -120.0).1, -1.0..=-0.01, "m/s");
+    s.range("currents", "Humboldt Current, 30–10°S 85–75°W, northward", flow(-30.0..=-10.0, -85.0, -75.0).1, 0.01..=1.0, "m/s");
+    s.range("currents", "Benguela Current, 30–15°S 5–15°E, northward", flow(-30.0..=-15.0, 5.0, 15.0).1, 0.01..=1.0, "m/s");
+    s.range("currents", "Antarctic Circumpolar, 50–60°S, eastward", flow(-60.0..=-50.0, -180.0, 180.0).0, 0.05..=1.0, "m/s");
+    s.range("currents", "South Equatorial, 3°S–3°N 150–100°W, eastward", flow(-3.0..=3.0, -150.0, -100.0).0, -1.0..=-0.02, "m/s");
 
     let sst = e.p.sst_anomaly().unwrap();
     let anom = |lat, lon0, lon1| mean(&e.grid, &e.sea(lat, lon0, lon1), |c| f64::from(*sst.get(c)));
-    s.range(
-        "sea surface",
-        "Gulf Stream, 35–42°N 72–55°W, warmer than the zonal mean",
-        anom(35.0..=42.0, -72.0, -55.0),
-        0.0..=10.0,
-        "°C",
-    );
+    s.range("sea surface", "Gulf Stream, 35–42°N 72–55°W, warmer than the zonal mean", anom(35.0..=42.0, -72.0, -55.0), 0.0..=10.0, "°C");
     // Observed: annual SST departure from the zonal mean (scripts/real-earth/check.py).
     #[rustfmt::skip]
     let observed = [
@@ -439,68 +297,20 @@ fn ocean(s: &mut Scorecard, e: &Earth) {
 fn temperature(s: &mut Scorecard, e: &Earth) {
     let g = &e.grid;
     let all: Vec<Cell> = g.cells().collect();
-    let zone =
-        |lo: f64, hi: f64| mean(g, &cells_in(g, lo..=hi, -180.0, 180.0), |c| e.t[c as usize]);
-    s.range(
-        "temperature",
-        "global mean",
-        mean(g, &all, |c| e.t[c as usize]),
-        13.5..=15.5,
-        "°C",
-    );
-    s.range(
-        "temperature",
-        "equator, 5°S–5°N",
-        zone(-5.0, 5.0),
-        25.0..=28.0,
-        "°C",
-    );
-    s.range(
-        "temperature",
-        "75–90°N",
-        zone(75.0, 90.0),
-        -25.0..=-10.0,
-        "°C",
-    );
-    s.range(
-        "temperature",
-        "75–90°S",
-        zone(-90.0, -75.0),
-        -50.0..=-35.0,
-        "°C",
-    )
-    .gap(ANTARCTICA);
+    let zone = |lo: f64, hi: f64| mean(g, &cells_in(g, lo..=hi, -180.0, 180.0), |c| e.t[c as usize]);
+    s.range("temperature", "global mean", mean(g, &all, |c| e.t[c as usize]), 13.5..=15.5, "°C");
+    s.range("temperature", "equator, 5°S–5°N", zone(-5.0, 5.0), 25.0..=28.0, "°C");
+    s.range("temperature", "75–90°N", zone(75.0, 90.0), -25.0..=-10.0, "°C");
+    s.range("temperature", "75–90°S", zone(-90.0, -75.0), -50.0..=-35.0, "°C").gap(ANTARCTICA);
     for st in STATIONS {
         let c = e.station_cell(st);
         // Compare at the station's height: the cell can be a few hundred metres off.
         let at_station = e.t[c] + 6.5 * (e.elev[c].max(0.0) - st.elev_m) / 1000.0;
-        s.range(
-            "temperature",
-            format!("{} mean (observed {:.1})", st.name, st.t),
-            at_station,
-            (st.t - 4.0)..=(st.t + 4.0),
-            "°C",
-        )
-        .gap_if_listed(st.name, TEMPERATURE_GAPS);
+        s.range("temperature", format!("{} mean (observed {:.1})", st.name, st.t), at_station, (st.t - 4.0)..=(st.t + 4.0), "°C").gap_if_listed(st.name, TEMPERATURE_GAPS);
     }
-    for (name, lo, hi) in [
-        ("Singapore", 0.0, 4.0),
-        ("Manaus", 0.0, 4.0),
-        ("London", 9.0, 18.0),
-        ("Perth", 7.0, 15.0),
-        ("Moscow", 18.0, 32.0),
-        ("Beijing", 22.0, 36.0),
-        ("Yakutsk", 45.0, 65.0),
-    ] {
+    for (name, lo, hi) in [("Singapore", 0.0, 4.0), ("Manaus", 0.0, 4.0), ("London", 9.0, 18.0), ("Perth", 7.0, 15.0), ("Moscow", 18.0, 32.0), ("Beijing", 22.0, 36.0), ("Yakutsk", 45.0, 65.0)] {
         let (st, c) = e.station(name);
-        s.range(
-            "temperature",
-            format!("{name} annual range (observed {:.0})", st.range),
-            e.t_range[c],
-            lo..=hi,
-            "°C",
-        )
-        .gap_if_listed(name, RANGE_GAPS);
+        s.range("temperature", format!("{name} annual range (observed {:.0})", st.range), e.t_range[c], lo..=hi, "°C").gap_if_listed(name, RANGE_GAPS);
     }
 }
 
@@ -509,68 +319,19 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
     for st in STATIONS {
         let v = e.precip[e.station_cell(st)];
         // Within a factor of two or so; a hyperarid station may read zero.
-        let lo = if st.precip < 50.0 {
-            0.0
-        } else {
-            st.precip * 0.5
-        };
-        s.range(
-            "precipitation",
-            format!("{} (observed {:.0})", st.name, st.precip),
-            v,
-            lo..=(st.precip * 1.8 + 60.0),
-            "mm",
-        )
-        .gap_if_listed(st.name, RAIN_GAPS);
+        let lo = if st.precip < 50.0 { 0.0 } else { st.precip * 0.5 };
+        s.range("precipitation", format!("{} (observed {:.0})", st.name, st.precip), v, lo..=(st.precip * 1.8 + 60.0), "mm").gap_if_listed(st.name, RAIN_GAPS);
     }
     for name in ["Los Angeles", "Perth", "Cape Town"] {
-        s.range(
-            "precipitation",
-            format!("{name}: dry summers, warm-half share"),
-            e.warm_share[e.station(name).1],
-            0.0..=0.35,
-            "",
-        );
+        s.range("precipitation", format!("{name}: dry summers, warm-half share"), e.warm_share[e.station(name).1], 0.0..=0.35, "");
     }
     for name in ["Mumbai", "Beijing", "Timbuktu"] {
-        s.range(
-            "precipitation",
-            format!("{name}: summer monsoon, warm-half share"),
-            e.warm_share[e.station(name).1],
-            0.7..=1.0,
-            "",
-        );
+        s.range("precipitation", format!("{name}: summer monsoon, warm-half share"), e.warm_share[e.station(name).1], 0.7..=1.0, "");
     }
-    s.range(
-        "precipitation",
-        "land mean (Earth 780)",
-        mean(g, &e.land(), |c| e.precip[c as usize]),
-        650.0..=950.0,
-        "mm",
-    );
-    let both = |lo: f64, hi: f64| {
-        [
-            e.sea(lo..=hi, -180.0, 180.0),
-            e.sea(-hi..=-lo, -180.0, 180.0),
-        ]
-        .concat()
-    };
-    s.range(
-        "precipitation",
-        "subtropical oceans, 20–30° (Earth ~700)",
-        mean(g, &both(20.0, 30.0), |c| e.precip[c as usize]),
-        450.0..=1000.0,
-        "mm",
-    );
-    s.range(
-        "precipitation",
-        "equatorial oceans, 5°S–10°N (Earth ~2000)",
-        mean(g, &e.sea(-5.0..=10.0, -180.0, 180.0), |c| {
-            e.precip[c as usize]
-        }),
-        1500.0..=3000.0,
-        "mm",
-    );
+    s.range("precipitation", "land mean (Earth 780)", mean(g, &e.land(), |c| e.precip[c as usize]), 650.0..=950.0, "mm");
+    let both = |lo: f64, hi: f64| [e.sea(lo..=hi, -180.0, 180.0), e.sea(-hi..=-lo, -180.0, 180.0)].concat();
+    s.range("precipitation", "subtropical oceans, 20–30° (Earth ~700)", mean(g, &both(20.0, 30.0), |c| e.precip[c as usize]), 450.0..=1000.0, "mm");
+    s.range("precipitation", "equatorial oceans, 5°S–10°N (Earth ~2000)", mean(g, &e.sea(-5.0..=10.0, -180.0, 180.0), |c| e.precip[c as usize]), 1500.0..=3000.0, "mm");
 
     let modelled: Vec<Koppen> = STATIONS
         .iter()
@@ -579,66 +340,32 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
             koppen_of(e.t[c], e.t_range[c], e.precip[c], e.warm_share[c])
         })
         .collect();
-    let share = |same: fn(Koppen, Koppen) -> bool| {
-        STATIONS.iter().zip(&modelled).filter(|(st, &k)| same(k, observed(st))).count() as f64 / STATIONS.len() as f64
-    };
-    s.range("climate class", "stations in their Köppen group", share(|a, b| a.group() == b.group()), 0.65..=1.0, "")
-        .gap("follows the station misses above");
+    let share = |same: fn(Koppen, Koppen) -> bool| STATIONS.iter().zip(&modelled).filter(|(st, &k)| same(k, observed(st))).count() as f64 / STATIONS.len() as f64;
+    s.range("climate class", "stations in their Köppen group", share(|a, b| a.group() == b.group()), 0.65..=1.0, "").gap("follows the station misses above");
     s.range("climate class", "stations in their full Köppen class", share(|a, b| a == b), FULL_CLASS_FLOOR..=1.0, "");
 }
 
 fn hydrology(s: &mut Scorecard, e: &Earth) {
     let g = &e.grid;
     let rivers = e.p.rivers().unwrap();
-    let biggest = rivers
-        .nodes
-        .rows
-        .values()
-        .max_by(|a, b| a.discharge_m3_s.total_cmp(&b.discharge_m3_s))
-        .unwrap();
+    let biggest = rivers.nodes.rows.values().max_by(|a, b| a.discharge_m3_s.total_cmp(&b.discharge_m3_s)).unwrap();
     let (lat, lon) = known::lat_lon(g, biggest.cell);
     let at_amazon = (lat + 0.5).abs() < 6.0 && (lon + 50.0).abs() < 8.0;
-    s.one_of(
-        "hydrology",
-        "largest river reaches the sea near the Amazon mouth",
-        if at_amazon { "Amazon" } else { "elsewhere" },
-        &["Amazon"],
-    );
+    s.one_of("hydrology", "largest river reaches the sea near the Amazon mouth", if at_amazon { "Amazon" } else { "elsewhere" }, &["Amazon"]);
     let sheds = e.p.watersheds().unwrap();
     let shed = |lat: f64, lon: f64| sheds.row_at(e.at_land(lat, lon) as Cell);
-    let to_med =
-        shed(15.6, 32.5).is_some_and(|w| w.reaches_sea && known::lat_lon(g, w.outlet).0 > 28.0);
-    s.one_of(
-        "hydrology",
-        "Khartoum drains to the Mediterranean",
-        if to_med { "yes" } else { "no" },
-        &["yes"],
-    );
-    for (name, lat, lon) in [
-        ("Great Basin", 40.0, -117.0),
-        ("Tarim", 40.0, 83.0),
-        ("Lake Eyre", -28.0, 137.5),
-        ("Lake Chad", 14.0, 16.0),
-    ] {
+    let to_med = shed(15.6, 32.5).is_some_and(|w| w.reaches_sea && known::lat_lon(g, w.outlet).0 > 28.0);
+    s.one_of("hydrology", "Khartoum drains to the Mediterranean", if to_med { "yes" } else { "no" }, &["yes"]);
+    for (name, lat, lon) in [("Great Basin", 40.0, -117.0), ("Tarim", 40.0, 83.0), ("Lake Eyre", -28.0, 137.5), ("Lake Chad", 14.0, 16.0)] {
         let closed = shed(lat, lon).is_some_and(|w| !w.reaches_sea);
-        s.one_of(
-            "hydrology",
-            format!("{name} is a closed basin"),
-            if closed { "closed" } else { "drains to sea" },
-            &["closed"],
-        )
-        .gap_if_listed(name, &[("Great Basin", SOUTHWEST)]);
+        s.one_of("hydrology", format!("{name} is a closed basin"), if closed { "closed" } else { "drains to sea" }, &["closed"]).gap_if_listed(name, &[("Great Basin", SOUTHWEST)]);
     }
 }
 
 fn biomes(s: &mut Scorecard, e: &Earth) {
     let biome = e.p.biome().unwrap();
     let land = e.land();
-    let share = |slug: &str| {
-        mean(&e.grid, &land, |c| {
-            f64::from(u8::from(biome.row_at(c).is_some_and(|r| r.slug == slug)))
-        })
-    };
+    let share = |slug: &str| mean(&e.grid, &land, |c| f64::from(u8::from(biome.row_at(c).is_some_and(|r| r.slug == slug))));
     for (slug, lo, hi) in [
         ("hot_desert", 0.10, 0.20),
         ("temperate_grassland", 0.04, 0.13),
@@ -656,18 +383,8 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
         ("Arabia", 22.0, 47.0, &["hot_desert"]),
         ("Australian outback", -25.0, 133.0, &["hot_desert"]),
         ("Amazon", -3.0, -62.0, &["tropical_rainforest"]),
-        (
-            "Congo",
-            0.0,
-            22.0,
-            &["tropical_rainforest", "tropical_seasonal_forest"],
-        ),
-        (
-            "Cerrado",
-            -15.0,
-            -50.0,
-            &["savanna", "tropical_seasonal_forest"],
-        ),
+        ("Congo", 0.0, 22.0, &["tropical_rainforest", "tropical_seasonal_forest"]),
+        ("Cerrado", -15.0, -50.0, &["savanna", "tropical_seasonal_forest"]),
         ("Sahel", 13.0, 0.0, &["savanna"]),
         ("Siberian taiga", 60.0, 100.0, &["boreal_forest"]),
         ("Canadian taiga", 55.0, -100.0, &["boreal_forest"]),
@@ -683,15 +400,14 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
         ("California", 37.0, -121.0, &["mediterranean_woodland"]),
         ("Tibet", 33.0, 88.0, &["alpine", "cold_desert", "tundra"]),
     ] {
-        s.one_of("biomes", name, &e.dominant_biome(lat, lon), want)
-            .gap_if_listed(name, PLACE_GAPS);
+        s.one_of("biomes", name, &e.dominant_biome(lat, lon), want).gap_if_listed(name, PLACE_GAPS);
     }
 }
 
 /// Sea ice against NSIDC's 1991–2020 extents, reefs against the Allen Coral Atlas, and the
 /// sea's productivity against the great fisheries and the gyre deserts.
 fn oceans(s: &mut Scorecard, e: &Earth) {
-    use geoforge_surface::oceans::{Reef, Sea, SeaIce};
+    use geoforge_analysis::oceans::{Reef, Sea, SeaIce};
     let sea = Sea::read(&e.p, &e.grid, 6371.0, true).unwrap();
     let ice = sea.ice();
     let (max_n, max_s) = sea.ice_area_km2(&ice, &[SeaIce::Seasonal, SeaIce::Perennial]);
@@ -749,9 +465,8 @@ const OCEAN_GAPS: &[(&str, &str)] = &[
 fn pressure(s: &mut Scorecard, e: &Earth) {
     let land: Vec<bool> = e.elev.iter().map(|&v| v >= 0.0).collect();
     // Northern winter in January: the north at its coldest month, the south at its warmest.
-    let season_t = |north_cold: bool| -> Vec<f64> {
-        (0..e.t.len()).map(|c| e.t[c] + 0.5 * e.t_range[c] * if (e.grid.center(c as u32).to_lat_lon().lat_deg >= 0.0) == north_cold { -1.0 } else { 1.0 }).collect()
-    };
+    let season_t =
+        |north_cold: bool| -> Vec<f64> { (0..e.t.len()).map(|c| e.t[c] + 0.5 * e.t_range[c] * if (e.grid.center(c as u32).to_lat_lon().lat_deg >= 0.0) == north_cold { -1.0 } else { 1.0 }).collect() };
     for (month, wind, places) in [
         (
             "January",
@@ -778,7 +493,7 @@ fn pressure(s: &mut Scorecard, e: &Earth) {
             ],
         ),
     ] {
-        use geoforge_surface::pressure::{sea_level_pressure, Air, Planet};
+        use geoforge_analysis::pressure::{sea_level_pressure, Air, Planet};
         let planet = Planet { radius_km: 6371.0, rotation_h: 23.934, mean_hpa: 1013.25, gravity_m_s2: 9.81 };
         let elevation: Vec<f32> = e.elev.iter().map(|&v| v as f32).collect();
         let p = sea_level_pressure(&e.grid, &planet, &Air { wind, temperature: &season_t(month == "January"), elevation: &elevation, land: &land });
@@ -804,7 +519,7 @@ const CYCLONE_GAPS: &[(&str, &str)] = &[(
 fn cyclones(s: &mut Scorecard, e: &Earth) {
     let sea: Vec<bool> = e.elev.iter().map(|&v| v < 0.0).collect();
     let (t, r) = (&e.p.temperature().unwrap().values, &e.p.temperature_range().unwrap().values);
-    let passes = geoforge_surface::hazards::cyclones(&e.grid, 6371.0, &sea, t, r);
+    let passes = geoforge_analysis::hazards::cyclones(&e.grid, 6371.0, &sea, t, r);
     for (name, lat, lon, want) in [
         ("Philippine Sea (15°N 130°E)", 15.0, 130.0, 0.3..=5.0),
         ("Gulf of Mexico (25°N 90°W)", 25.0, -90.0, 0.05..=3.0),
@@ -818,27 +533,43 @@ fn cyclones(s: &mut Scorecard, e: &Earth) {
     }
 }
 
+/// The same sites from the storm field the daily weather uses (tracks counted over ten
+/// years), and the year's tropical cyclones against ~85 (IBTrACS 1991–2020: 80–90).
+fn storm_field(s: &mut Scorecard, e: &Earth) {
+    let body = Archetype::Earth.context(Key(1), "Earth");
+    let season = geoforge_almanac::weather::season_of(None, Key(1), &body, 365.25);
+    let atm = geoforge_almanac::storms::Atmosphere::read(&e.p, &e.grid, &body, 365.25, season, geoforge_core::Seed(1)).expect("climate");
+    let rates = atm.cyclone_rates(10.0);
+    for (name, lat, lon, want) in [
+        ("Philippine Sea (15°N 130°E)", 15.0, 130.0, 0.3..=5.0),
+        ("Gulf of Mexico (25°N 90°W)", 25.0, -90.0, 0.05..=3.0),
+        ("Bay of Bengal (15°N 88°E)", 15.0, 88.0, 0.02..=3.0),
+        ("South Atlantic (20°S 25°W)", -20.0, -25.0, 0.0..=0.02),
+        ("off Peru (15°S 95°W)", -15.0, -95.0, 0.0..=0.02),
+        ("equator, mid-Pacific (0° 160°W)", 0.0, -160.0, 0.0..=0.05),
+    ] {
+        let v = (-1..=1).flat_map(|i| (-1..=1).map(move |j| (lat + 2.0 * f64::from(i), lon + 2.0 * f64::from(j)))).map(|(a, b)| atm.at(&rates, a, b)).sum::<f64>() / 9.0;
+        s.range("storms", format!("tropical cyclones passing a year, {name}"), v, want, "").gap_if_listed(name, STORM_GAPS);
+    }
+    let storms = atm.storms(0.0, 3652.5);
+    let tropical = storms.iter().filter(|x| x.kind == geoforge_almanac::storms::StormKind::TropicalCyclone).count() as f64 / 10.0;
+    s.range("storms", "tropical cyclones a year, world".to_string(), tropical, 50.0..=130.0, "");
+    let lows = storms.iter().filter(|x| x.kind == geoforge_almanac::storms::StormKind::Low).count() as f64 / 3652.5;
+    s.range("storms", "mid-latitude lows formed a day, world".to_string(), lows, 3.0..=8.0, "");
+}
+
+const STORM_GAPS: &[(&str, &str)] = &[(
+    "Philippine Sea (15°N 130°E)",
+    "the modelled western Pacific warm pool is too cool (25 °C at 15°N 135°E, observed ~29), so storms form only in its far east (5–10°N, 155–165°E) and few reach the Philippine Sea still deep",
+)];
+
 /// The classifier alone, fed station normals: its own errors, apart from the climate's.
 fn classifier(s: &mut Scorecard) {
     let p = BiomesParams::default();
     for st in STATIONS {
-        let c = CellClimate {
-            t_mean: st.t,
-            t_range: st.range,
-            precip_mm: st.precip,
-            elevation_m: st.elev_m,
-            lat_deg: st.lat,
-            warm_share: st.warm_share,
-        };
-        s.one_of(
-            "classifier",
-            format!("{} from its normals", st.name),
-            &classify(&c, &p).class().slug,
-            st.biomes,
-        )
-        .gap_if_listed(st.name, CLASSIFIER_GAPS);
-        s.one_of("classifier", format!("{} Köppen from its normals", st.name), koppen_of(st.t, st.range, st.precip, st.warm_share).code(), &[st.koppen])
-            .gap_if_listed(st.name, KOPPEN_CLASSIFIER_GAPS);
+        let c = CellClimate { t_mean: st.t, t_range: st.range, precip_mm: st.precip, elevation_m: st.elev_m, lat_deg: st.lat, warm_share: st.warm_share };
+        s.one_of("classifier", format!("{} from its normals", st.name), &classify(&c, &p).class().slug, st.biomes).gap_if_listed(st.name, CLASSIFIER_GAPS);
+        s.one_of("classifier", format!("{} Köppen from its normals", st.name), koppen_of(st.t, st.range, st.precip, st.warm_share).code(), &[st.koppen]).gap_if_listed(st.name, KOPPEN_CLASSIFIER_GAPS);
     }
 }
 
@@ -870,6 +601,7 @@ fn scorecard() -> &'static Scorecard {
         hydrology(&mut s, e);
         biomes(&mut s, e);
         cyclones(&mut s, e);
+        storm_field(&mut s, e);
         pressure(&mut s, e);
         oceans(&mut s, e);
         classifier(&mut s);

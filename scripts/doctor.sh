@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Diagnose why geoforge-v2 commands fail locally.
+# Diagnose why geoforge commands fail locally.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "Branch: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 if [[ ! -d "$ROOT/crates/bins/geoforge-cli" ]]; then
-  echo "ERROR: crates/bins/geoforge-cli missing — check out the v2-implementation branch."
+  echo "ERROR: crates/bins/geoforge-cli missing — check out the right branch."
   exit 1
 fi
 echo "OK: crates/bins/geoforge-cli exists"
@@ -22,7 +22,7 @@ if ! cargo build --release -p geoforge-cli -q; then
   echo "ERROR: build failed (see above)."
   exit 1
 fi
-BIN="$ROOT/target/release/geoforge-v2"
+BIN="$ROOT/target/release/geoforge"
 "$BIN" --version || exit 1
 echo
 echo "Try:"

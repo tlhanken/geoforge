@@ -144,12 +144,7 @@ pub fn remove_islands(grid: &dyn Grid, owner: &mut [u32]) -> IslandStats {
             continue;
         }
         stats.plates_with_islands += 1;
-        let main = comps
-            .iter()
-            .enumerate()
-            .max_by(|a, b| a.1.len().cmp(&b.1.len()).then(b.0.cmp(&a.0)))
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+        let main = comps.iter().enumerate().max_by(|a, b| a.1.len().cmp(&b.1.len()).then(b.0.cmp(&a.0))).map(|(i, _)| i).unwrap_or(0);
         for (i, comp) in comps.iter().enumerate() {
             if i == main {
                 continue;
@@ -163,10 +158,7 @@ pub fn remove_islands(grid: &dyn Grid, owner: &mut [u32]) -> IslandStats {
                     }
                 }
             }
-            let target = counts
-                .into_iter()
-                .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
-                .map_or(plate, |x| x.0);
+            let target = counts.into_iter().max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0))).map_or(plate, |x| x.0);
             for &c in comp {
                 owner[c as usize] = target;
             }

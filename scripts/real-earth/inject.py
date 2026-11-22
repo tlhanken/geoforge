@@ -1,7 +1,7 @@
 """Write real Earth topography into a world's elevation edit view.
 
 usage: python3 -I inject.py ETOPO_NC WORLD_DIR
-(then: geoforge-v2 import WORLD_DIR elevation --authored)
+(then: geoforge import WORLD_DIR elevation --authored)
 
 ETOPO1 is sampled at the world's pixel centres. Land below sea level that the ocean does not
 reach is raised to +1 m (the Dead Sea, Qattara, Turpan, the Great Lakes' floors and Lake

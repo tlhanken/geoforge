@@ -19,9 +19,9 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Building geoforge-v2 (release)..."
+echo "Building geoforge (release)..."
 cargo build --release -p geoforge-cli -q
-BIN="$ROOT/target/release/geoforge-v2"
+BIN="$ROOT/target/release/geoforge"
 
 mkdir -p "$OUT_DIR"
 if [[ ! -f "$WORLD/world.toml" ]]; then

@@ -253,7 +253,11 @@ mod tests {
         let mut h: Vec<f32> = (0..n as u32)
             .map(|c| {
                 let (x, y) = g.xy(c);
-                if x < 8 { -500.0 } else { 3000.0 * (f64::from(x) / 128.0) as f32 + 50.0 * ((x * 7 + y * 13) % 5) as f32 }
+                if x < 8 {
+                    -500.0
+                } else {
+                    3000.0 * (f64::from(x) / 128.0) as f32 + 50.0 * ((x * 7 + y * 13) % 5) as f32
+                }
             })
             .collect();
         let before = h.clone();

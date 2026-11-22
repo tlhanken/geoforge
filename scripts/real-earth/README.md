@@ -7,7 +7,7 @@ elevation is generated as usual.
 
 ```sh
 cargo build --profile iter -p geoforge-cli
-GEOFORGE=target/iter/geoforge-v2 scripts/real-earth/run.sh /tmp/realearth
+GEOFORGE=target/iter/geoforge scripts/real-earth/run.sh /tmp/realearth
 ```
 
 The first run downloads about 30 MB into `./real-earth-data` (see `fetch.sh`). A 2048×1024
@@ -26,7 +26,7 @@ Python needs `numpy`, `scipy`, `xarray` with `netCDF4`, `pillow` and `pypng`.
 | Land climate | Köppen–Geiger map (Rubel et al., from the `kgcpy` package), with Köppen classes derived from the model's mean, range, precipitation and warm-season share; 31 station normals |
 | Ocean rainfall | Zonal means, roughly as in GPCP |
 | Rivers | Discharge near 18 river mouths |
-| Biomes | Shares of land; compare with `geoforge-v2 stats` Earth references |
+| Biomes | Shares of land; compare with `geoforge stats` Earth references |
 
 Station normals, river discharges and the ocean rainfall table are approximate, rounded
 reference values. They are good to about ±1 °C and ±15%.

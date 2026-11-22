@@ -1,4 +1,4 @@
-# Geoforge v2
+# Geoforge
 
 A world is a directory. Seeds generate every layer; any layer can be exported to files that
 mapping or paint software opens, edited or drawn from scratch, and imported back. Everything
@@ -16,11 +16,11 @@ what it has (air, surface water) decide which generator fills it, or that it doe
 ## Quick start
 
 ```bash
-cargo build --release -p geoforge-cli          # binary: target/release/geoforge-v2
+cargo build --release -p geoforge-cli          # binary: target/release/geoforge
 
-geoforge-v2 new worlds/demo --seed 42 --habitable   # a Sun-like star and its Earth-like world
-geoforge-v2 generate worlds/demo --render      # ~40 s at 2048×1024; previews in worlds/demo/renders
-geoforge-v2 stats worlds/demo                  # summary numbers next to Earth's
+geoforge new worlds/demo --seed 42 --habitable   # a Sun-like star and its Earth-like world
+geoforge generate worlds/demo --render      # ~40 s at 2048×1024; previews in worlds/demo/renders
+geoforge stats worlds/demo                  # summary numbers next to Earth's
 ```
 
 Other starting points:
@@ -152,10 +152,10 @@ curve's amplitude gives the stored warm-half share.
 ## Editing a layer
 
 ```bash
-geoforge-v2 export worlds/demo rough_elevation   # edit/rough_elevation.png (+ .pgw, .prj, .edit.json)
+geoforge export worlds/demo rough_elevation   # edit/rough_elevation.png (+ .pgw, .prj, .edit.json)
 #   … paint in GIMP, Krita, QGIS, Photoshop …
-geoforge-v2 import worlds/demo rough_elevation   # a patch: only the pixels you changed
-geoforge-v2 generate worlds/demo --render        # climate, valleys, rivers and biomes follow
+geoforge import worlds/demo rough_elevation   # a patch: only the pixels you changed
+geoforge generate worlds/demo --render        # climate, valleys, rivers and biomes follow
 ```
 
 **Which heightmap to edit.** The climate sees `rough_elevation`; `erosion` then cuts valleys
@@ -205,7 +205,7 @@ use, or leave it as exported. Caps import as patches (they need the export's bas
    pixels snap to the nearest palette colour on import. The sphere's polar rows pinch; for
    the poles, paint the cap views in a flat editor instead.
 4. Image › Save As, PNG: greyscale views as BW at 16 bits, vector views as RGB at 16 bits,
-   palette views as RGB at 8 bits. Keep the file name, then `geoforge-v2 import`.
+   palette views as RGB at 8 bits. Keep the file name, then `geoforge import`.
 
 **Patch or authored.** By default an import is diffed against the view as it was exported and
 stored as a patch: deltas for continuous fields, new values for categories and owners. If the
@@ -295,21 +295,21 @@ product's randomness. `seed <dir> <product>` prints it.
   else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
   where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
   build up CO₂ and run a few degrees cooler, bright ones draw it down.
-- **Sea-level pressure** (`geoforge_surface::pressure`, derived views): recovered from the
+- **Sea-level pressure** (`geoforge_analysis::pressure`, derived views): recovered from the
   stored surface winds by the surface layer's balance, −∇p/ρ = f k̂×v + r·v (friction 2.5×10⁻⁵
   s⁻¹ over sea, 7×10⁻⁵ over land, so winds cross isobars toward low pressure), fitted by
   least squares on a 2° grid. Over land, a season's departure from its latitude's mean
   temperature (brought to sea level along the lapse rate) adds a dome: 1.5 hPa per kelvin
   colder, 0.6 per kelvin warmer, plus the sea-level reduction's p·g·z/(R·T²) per kelvin on
   ground up to 2 km. The mean is the world's surface pressure.
-- **Oceans** (`geoforge_surface::oceans`, derived views): sea ice in winter where the
+- **Oceans** (`geoforge_analysis::oceans`, derived views): sea ice in winter where the
   coldest month's air is under −4 °C, all year where the warmest's is under −6 °C (set to
   NSIDC's extents on the Earth run: the modelled polar seasons are muted). Coral reefs on
   shallow or shore cells with a coldest month of at least 18 °C and a warmest of at most
   31 °C, clear of cold upwelling and big rivers' plumes; atolls on hotspot tracks more than
   300 km behind the active end. Productivity from upwelling (cold sea-surface anomaly),
   winter mixing poleward of ~40°, shelves and coasts.
-- **Resources** (`geoforge_surface::resources`, derived views): for each deposit kind, λ
+- **Resources** (`geoforge_analysis::resources`, derived views): for each deposit kind, λ
   (expected deposits per 10,000 km²) summed over the settings it forms in: banded iron in
   2.6–1.8 Ga cratonic rock, skarns where granite meets limestone, laterites on basalt in
   wet–dry tropics, bog iron in cool wet lowlands; porphyry copper in young arcs (doubled by
@@ -326,7 +326,7 @@ product's randomness. `seed <dir> <product>` prints it.
   giant (copper 1500 Mt of ore, gold 80 Mt, …). Soils:
   ten WRB groups with a fertility; timber by biome below Artifexian's tree line (4000 m to
   30°, −130 m/° to 50°, −75 m/° beyond).
-- **Hazards** (`geoforge_surface::hazards`, derived views): earthquakes from each boundary's
+- **Hazards** (`geoforge_analysis::hazards`, derived views): earthquakes from each boundary's
   moment rate (μ·length·depth·slip·coupling) over a truncated Gutenberg–Richter law up to a
   corner magnitude by class (subduction 9.5, collision 8.5, continental transform 8, rifts
   7.5, ridges 7), spread over a band beside it; tsunamis on coasts within 600 km of
@@ -335,7 +335,7 @@ product's randomness. `seed <dir> <product>` prints it.
   sea under 18 °C or a few hundred km inland; tornadoes on warm flat plains at 25–50° near
   both high ground and warm sea; lightning tiers; floods, wildfire, landslides, blizzards,
   dust storms and fog by climate and relief; auroras by magnetic latitude.
-- **Positions and calendar** (`geoforge_core::ephemeris`): each node on a fixed Kepler
+- **Positions and calendar** (`geoforge_almanac::ephemeris`): each node on a fixed Kepler
   orbit about its parent from its elements (no mutual perturbations); a pair's stars turn
   about their barycentre, opposite each other. Solar day 1/(1/spin − 1/year) (+ for a
   retrograde spinner: Venus 116.75 days), none for a world locked to its star; months are
@@ -349,7 +349,7 @@ product's randomness. `seed <dir> <product>` prints it.
   radius; total, annular or partial by the discs' sizes; lunar when the moon enters the
   world's umbra. Orbits are fixed, so eclipse seasons do not drift (the Moon's nodes turn
   in 18.6 years).
-- **Sky** (`geoforge_cosmos::sky`, `geoforge_pipeline::sky`, derived): the naked-eye stars
+- **Sky** (`geoforge_cosmos::sky`, `geoforge_almanac::sky`, derived): the naked-eye stars
   around the system drawn from its galaxy's population at its radius (0.09 stars pc⁻³ at
   the Sun's, thinning outward with the disk; scale height 50 pc for young stars to 300 pc
   for old; dust 1 mag/kpc; unresolved companions add their light), by importance sampling
@@ -358,7 +358,7 @@ product's randomness. `seed <dir> <product>` prints it.
   sight through the disk and a thinner dust layer. The system's own stars, planets
   (geometric albedos by class, Lambert phases) and moons on the date; a planet within 15°
   of the star is lost in its glare.
-- **Storms** (`geoforge_pipeline::storms`, derived): a global, seeded storm field. Lows
+- **Storms** (`geoforge_almanac::storms`, derived): a global, seeded storm field. Lows
   form along north–south temperature contrasts at 25–70° (favouring the sea; ~2.5 a day
   per hemisphere on an Earth-sized world, fewer on slow rotators), live 3–7 days, deepen
   10–35 hPa over 1000–1500 km and are steered east by the season's winds; each has a warm
@@ -368,7 +368,7 @@ product's randomness. `seed <dir> <product>` prints it.
   90°), fill them above 1500 m and favour new lows in their lee. Gradient winds about each
   low, with friction and inflow. Tracks
   are seeded by birth day, so a date's storms never depend on how they are asked for.
-- **Weather** (`geoforge_pipeline::weather`, derived): the season from the star's
+- **Weather** (`geoforge_almanac::weather`, derived): the season from the star's
   declination, lagging a month (1.5 at sea); the day's normal from the climate's rebuilt
   months; an AR(1) temperature anomaly (0.7 a day, 1–5 K by continentality); wet days by a
   two-state Markov chain (wet share r/(r + 4 mm), persistence 0.35) with exponential
@@ -384,7 +384,7 @@ product's randomness. `seed <dir> <product>` prints it.
   cyclones are the storm field's own. `place` counts tropical cyclones from the same
   storms' tracks over ten years, and the cyclone hazard map is their track density, so the
   overview and the daily weather agree. Hazard rates are per year of Earth days.
-- **Derived cache** (`geoforge_pipeline::cache`): hazard rate fields are kept in
+- **Derived cache** (`geoforge_store::cache`): hazard rate fields are kept in
   `cache/derived/` keyed by the body and every stored product's provenance, so a second
   `weather` or `place` on a large grid takes seconds, not tens of seconds.
 - **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's

@@ -1,4 +1,4 @@
-"""Read a world's edit views (`geoforge-v2 export DIR all`) as numpy arrays."""
+"""Read a world's edit views (`geoforge export DIR all`) as numpy arrays."""
 import json
 from pathlib import Path
 

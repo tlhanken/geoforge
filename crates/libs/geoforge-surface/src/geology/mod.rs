@@ -56,15 +56,7 @@ pub struct GeologyParams {
 
 impl Default for GeologyParams {
     fn default() -> Self {
-        Self {
-            lip_probability: pc::LIP_PROBABILITY,
-            boundaries: BoundaryParams::default(),
-            oceanic: true,
-            stable_regions: true,
-            arc_systems: true,
-            extensional: true,
-            extra_rocks: Vec::new(),
-        }
+        Self { lip_probability: pc::LIP_PROBABILITY, boundaries: BoundaryParams::default(), oceanic: true, stable_regions: true, arc_systems: true, extensional: true, extra_rocks: Vec::new() }
     }
 }
 
@@ -94,16 +86,7 @@ impl Generator for Geology {
             None
         } else {
             let segments = boundaries::analyze(ctx.grid, plates, ctx.radius_km(), &p.boundaries);
-            let (provinces, timeline) = build(
-                ctx.grid,
-                plates,
-                &crust.values,
-                inputs.crust_age().map(|f| f.values.as_slice()),
-                &segments,
-                ctx.radius_km(),
-                ctx.seed(ProductId::Provinces).value(),
-                p,
-            );
+            let (provinces, timeline) = build(ctx.grid, plates, &crust.values, inputs.crust_age().map(|f| f.values.as_slice()), &segments, ctx.radius_km(), ctx.seed(ProductId::Provinces).value(), p);
             if inputs.geology_events().is_none() {
                 out.insert(ProductData::GeologyEvents(timeline));
             }
@@ -119,14 +102,7 @@ impl Generator for Geology {
         };
         if inputs.lithology().is_none() || inputs.rock_age().is_none() {
             let catalog = lithology::Catalog::new(&p.extra_rocks)?;
-            let (lith, age) = lithology::build(
-                ctx.grid,
-                &provinces,
-                &crust.values,
-                inputs.crust_age().map(|f| f.values.as_slice()),
-                ctx.seed(ProductId::Lithology).value(),
-                &catalog,
-            );
+            let (lith, age) = lithology::build(ctx.grid, &provinces, &crust.values, inputs.crust_age().map(|f| f.values.as_slice()), ctx.seed(ProductId::Lithology).value(), &catalog);
             if inputs.lithology().is_none() {
                 out.insert(ProductData::Lithology(lith));
             }
@@ -306,10 +282,7 @@ impl B<'_> {
             self.push(cont.clone(), pc::platform(cont_area), None, 500.0);
             // Shield: a noisy spherical cap around the continental centroid.
             let Some(centroid) = UnitVec3::centroid(cont.iter().map(|&c| self.grid.center(c))) else { continue };
-            let center = *cont
-                .iter()
-                .min_by(|&&a, &&b| centroid.angle_to(self.grid.center(a)).total_cmp(&centroid.angle_to(self.grid.center(b))))
-                .unwrap_or(&cont[0]);
+            let center = *cont.iter().min_by(|&&a, &&b| centroid.angle_to(self.grid.center(a)).total_cmp(&centroid.angle_to(self.grid.center(b)))).unwrap_or(&cont[0]);
             let pc0 = self.grid.center(center);
             let target = cont_area * pc::SHIELD_AREA_FRACTION;
             let theta = (1.0 - target / (2.0 * std::f64::consts::PI * self.r * self.r)).clamp(-1.0, 1.0).acos();
@@ -395,7 +368,14 @@ impl B<'_> {
                     continue;
                 }
                 let mid = UnitVec3::centroid(cells.iter().map(|&c| self.grid.center(c))).unwrap_or(UnitVec3::NORTH);
-                self.events.push(Event { t_ma: age.round(), kind: EventKind::PaleoOrogeny, at: Place::Point { at: mid }, magnitude: width, causes: vec![], note: "ancient mountain belt, now eroded".into() });
+                self.events.push(Event {
+                    t_ma: age.round(),
+                    kind: EventKind::PaleoOrogeny,
+                    at: Place::Point { at: mid },
+                    magnitude: width,
+                    causes: vec![],
+                    note: "ancient mountain belt, now eroded".into(),
+                });
                 self.push(cells, pc::paleo_orogen(width), None, age);
             }
         }
@@ -465,7 +445,11 @@ impl B<'_> {
             return if wa > wb { (b, a) } else { (a, b) };
         }
         let size = |side: Side| (self.info.get(&side.plate).map_or(0.0, |i| i.cont_area_km2), side.plate);
-        if size(a) < size(b) { (a, b) } else { (b, a) }
+        if size(a) < size(b) {
+            (a, b)
+        } else {
+            (b, a)
+        }
     }
 
     /// The overriding plate and its boundary cells at every subduction under it.
@@ -692,7 +676,14 @@ impl B<'_> {
             let a = self.area(&cells);
             let mut prov = if kind == GeologicProvince::ContinentalFloodBasalt { pc::continental_flood_basalt(a) } else { pc::oceanic_plateau(a) };
             prov.anchor = Some(p0);
-            self.events.push(Event { t_ma: age.round(), kind: EventKind::LargeIgneousProvince, at: Place::Point { at: p0 }, magnitude: a, causes: vec![], note: format!("{} erupts", kind_name(kind)) });
+            self.events.push(Event {
+                t_ma: age.round(),
+                kind: EventKind::LargeIgneousProvince,
+                at: Place::Point { at: p0 },
+                magnitude: a,
+                causes: vec![],
+                note: format!("{} erupts", kind_name(kind)),
+            });
             self.push(cells, prov, None, age);
         }
     }
@@ -746,7 +737,14 @@ impl B<'_> {
             let cells = Self::cells_of(&self.reach(&track, half_w, |_| true), |_, _| true);
             let mut prov = if oceanic { pc::oceanic_hotspot_track(length) } else { pc::continental_hotspot_track(length) };
             prov.anchor = Some(ph);
-            self.events.push(Event { t_ma: (t_len * 10.0).round() / 10.0, kind: EventKind::HotspotTrack, at: Place::Point { at: ph }, magnitude: length, causes: vec![], note: "hotspot track begins; active end is the youngest".into() });
+            self.events.push(Event {
+                t_ma: (t_len * 10.0).round() / 10.0,
+                kind: EventKind::HotspotTrack,
+                at: Place::Point { at: ph },
+                magnitude: length,
+                causes: vec![],
+                note: "hotspot track begins; active end is the youngest".into(),
+            });
             self.push(cells, prov, None, t_len);
         }
     }
@@ -794,7 +792,20 @@ pub fn build(
     let edges: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|n| owner[n as usize] != owner[c as usize])).collect();
     let edge_dist_km: Vec<f64> = distance_field(grid, edges, std::f64::consts::PI, |_| true).into_iter().map(|d| d * radius_km).collect();
 
-    let mut b = B { grid, owner, crust, age, r: radius_km, plates, info, edge_dist_km, regions: vec![], events: vec![], rng: StdRng::seed_from_u64(seed), width_noise: crate::noise::TerrainNoise::new(seed ^ 0x0B1D_7A11) };
+    let mut b = B {
+        grid,
+        owner,
+        crust,
+        age,
+        r: radius_km,
+        plates,
+        info,
+        edge_dist_km,
+        regions: vec![],
+        events: vec![],
+        rng: StdRng::seed_from_u64(seed),
+        width_noise: crate::noise::TerrainNoise::new(seed ^ 0x0B1D_7A11),
+    };
 
     if p.oceanic {
         b.oceanic_base();

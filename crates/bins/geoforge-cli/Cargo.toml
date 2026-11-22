@@ -1,13 +1,13 @@
 [package]
 name = "geoforge-cli"
-description = "Geoforge v2 command line: new, generate, plan, status, export, import, render"
+description = "The geoforge command: make a world, generate it layer by layer, look at it, edit any layer, and ask about any place and day"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "geoforge-v2"
+name = "geoforge"
 path = "src/main.rs"
 
 [dependencies]
@@ -16,6 +16,10 @@ geoforge-cosmos = { path = "../../libs/geoforge-cosmos" }
 geoforge-store = { path = "../../libs/geoforge-store" }
 geoforge-surface = { path = "../../libs/geoforge-surface" }
 geoforge-pipeline = { path = "../../libs/geoforge-pipeline" }
+geoforge-almanac = { path = "../../libs/geoforge-almanac" }
 clap = { workspace = true }
 serde_json = "1"
 toml = "0.8"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

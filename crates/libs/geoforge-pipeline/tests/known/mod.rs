@@ -25,9 +25,7 @@ pub fn grid_of(width: u32, height: u32) -> AnyGrid {
 }
 
 pub fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
 }
 
 /// An equirectangular image's value at (lat, lon), bilinear between pixel centres.
@@ -48,9 +46,7 @@ fn sample(px: &[f32], w: usize, h: usize, lat: f64, lon: f64) -> f32 {
 /// ETOPO1 one-degree block means (see `scripts/known-cases/make_fixtures.py`), m, sampled
 /// at each cell centre of `g`.
 pub fn etopo(g: &AnyGrid) -> Vec<f32> {
-    let img = image::open(fixture("earth_etopo1_360x180.png"))
-        .unwrap()
-        .to_luma16();
+    let img = image::open(fixture("earth_etopo1_360x180.png")).unwrap().to_luma16();
     let px: Vec<f32> = img.pixels().map(|p| f32::from(p.0[0]) - 12000.0).collect();
     g.cells()
         .map(|c| {
@@ -62,9 +58,7 @@ pub fn etopo(g: &AnyGrid) -> Vec<f32> {
 
 /// PB2002 plate index per cell of a 720×360 grid.
 pub fn plate_index(g: &AnyGrid) -> Vec<u8> {
-    let img = image::open(fixture("pb2002_plates_720x360.png"))
-        .unwrap()
-        .to_luma8();
+    let img = image::open(fixture("pb2002_plates_720x360.png")).unwrap().to_luma8();
     let (w, h) = img.dimensions();
     assert_eq!(g.len(), (w * h) as usize, "plate fixture is {w}×{h}");
     let mut out = vec![0; g.len()];
@@ -77,12 +71,7 @@ pub fn plate_index(g: &AnyGrid) -> Vec<u8> {
 }
 
 pub fn csv(name: &str) -> Vec<Vec<String>> {
-    std::fs::read_to_string(fixture(name))
-        .unwrap()
-        .lines()
-        .skip(1)
-        .map(|l| l.split(',').map(str::to_string).collect())
-        .collect()
+    std::fs::read_to_string(fixture(name)).unwrap().lines().skip(1).map(|l| l.split(',').map(str::to_string).collect()).collect()
 }
 
 pub fn at(g: &AnyGrid, lat: f64, lon: f64) -> Cell {
@@ -99,21 +88,14 @@ pub fn cells_in(g: &AnyGrid, lat: RangeInclusive<f64>, lon0: f64, lon1: f64) -> 
     g.cells()
         .filter(|&c| {
             let (la, lo) = lat_lon(g, c);
-            lat.contains(&la)
-                && if lon0 <= lon1 {
-                    (lon0..=lon1).contains(&lo)
-                } else {
-                    lo >= lon0 || lo <= lon1
-                }
+            lat.contains(&la) && if lon0 <= lon1 { (lon0..=lon1).contains(&lo) } else { lo >= lon0 || lo <= lon1 }
         })
         .collect()
 }
 
 /// Area-weighted mean of `f` over `cells`.
 pub fn mean(g: &AnyGrid, cells: &[Cell], f: impl Fn(Cell) -> f64) -> f64 {
-    let (s, w) = cells.iter().fold((0.0, 0.0), |(s, w), &c| {
-        (s + f(c) * g.area_sr(c), w + g.area_sr(c))
-    });
+    let (s, w) = cells.iter().fold((0.0, 0.0), |(s, w), &c| (s + f(c) * g.area_sr(c), w + g.area_sr(c)));
     s / w
 }
 
@@ -145,20 +127,10 @@ pub fn run(body: &BodyContext, g: &AnyGrid, products: Products, layers: &[LayerI
 }
 
 /// [`run`] with another world seed.
-pub fn run_seeded(
-    seed: u64,
-    body: &BodyContext,
-    g: &AnyGrid,
-    mut products: Products,
-    layers: &[LayerId],
-) -> Products {
+pub fn run_seeded(seed: u64, body: &BodyContext, g: &AnyGrid, mut products: Products, layers: &[LayerId]) -> Products {
     for &l in layers {
         let i = registry::select(l, body).unwrap_or_else(|e| panic!("{}: {e:?}", l.name()));
-        let ctx = RunContext {
-            root_seed: Seed(seed),
-            body,
-            grid: g,
-        };
+        let ctx = RunContext { root_seed: Seed(seed), body, grid: g };
         let out = i.run(&ctx, &products, &i.default_params()).unwrap();
         products.extend(out);
     }
@@ -177,10 +149,7 @@ pub fn dump(name: &str, values: impl IntoIterator<Item = f64>) {
     }
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../target/known-cases");
     let _ = std::fs::create_dir_all(&dir);
-    let bytes: Vec<u8> = values
-        .into_iter()
-        .flat_map(|v| (v as f32).to_le_bytes())
-        .collect();
+    let bytes: Vec<u8> = values.into_iter().flat_map(|v| (v as f32).to_le_bytes()).collect();
     let _ = std::fs::write(dir.join(format!("{name}.f32")), bytes);
 }
 
@@ -212,14 +181,7 @@ pub struct Scorecard {
 
 impl Scorecard {
     /// A number that should fall in `range`.
-    pub fn range(
-        &mut self,
-        layer: &'static str,
-        name: impl Into<String>,
-        value: f64,
-        range: RangeInclusive<f64>,
-        unit: &str,
-    ) -> &mut Self {
+    pub fn range(&mut self, layer: &'static str, name: impl Into<String>, value: f64, range: RangeInclusive<f64>, unit: &str) -> &mut Self {
         let fmt = |v: f64| {
             if v.abs() >= 100.0 {
                 format!("{v:.0}")
@@ -239,21 +201,8 @@ impl Scorecard {
     }
 
     /// A category that should be one of `want`.
-    pub fn one_of(
-        &mut self,
-        layer: &'static str,
-        name: impl Into<String>,
-        value: &str,
-        want: &[&str],
-    ) -> &mut Self {
-        self.checks.push(Check {
-            layer,
-            name: name.into(),
-            value: value.into(),
-            expect: want.join(" or "),
-            pass: want.contains(&value),
-            gap: None,
-        });
+    pub fn one_of(&mut self, layer: &'static str, name: impl Into<String>, value: &str, want: &[&str]) -> &mut Self {
+        self.checks.push(Check { layer, name: name.into(), value: value.into(), expect: want.join(" or "), pass: want.contains(&value), gap: None });
         self
     }
 
@@ -280,22 +229,13 @@ impl Scorecard {
                 (false, true) => "gap ",
                 (true, true) => "gap passes now",
             };
-            let _ = writeln!(
-                s,
-                "{mark:5} {:11} {:52} {:>18}  expect {}",
-                c.layer, c.name, c.value, c.expect
-            );
+            let _ = writeln!(s, "{mark:5} {:11} {:52} {:>18}  expect {}", c.layer, c.name, c.value, c.expect);
             if let (Some(why), false) = (c.gap, c.pass) {
                 let _ = writeln!(s, "{:18}{why}", "");
             }
         }
         let pass = self.checks.iter().filter(|c| c.pass).count();
-        let _ = writeln!(
-            s,
-            "{pass} of {} known cases pass; {} are known gaps",
-            self.checks.len(),
-            self.checks.iter().filter(|c| c.gap.is_some()).count()
-        );
+        let _ = writeln!(s, "{pass} of {} known cases pass; {} are known gaps", self.checks.len(), self.checks.iter().filter(|c| c.gap.is_some()).count());
         s
     }
 
@@ -306,39 +246,16 @@ impl Scorecard {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../target/known-cases");
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join(format!("{name}.txt")), &report);
-        let rows: Vec<serde_json::Value> = self
-            .checks
-            .iter()
-            .map(|c| serde_json::json!({"layer": c.layer, "name": c.name, "value": c.value, "expect": c.expect, "pass": c.pass, "gap": c.gap}))
-            .collect();
-        let _ = std::fs::write(
-            dir.join(format!("{name}.json")),
-            serde_json::to_string_pretty(&rows).unwrap_or_default(),
-        );
-        let failed: Vec<&Check> = self
-            .checks
-            .iter()
-            .filter(|c| c.gap.is_none() && !c.pass)
-            .collect();
-        assert!(
-            failed.is_empty(),
-            "{} known cases fail:\n{report}",
-            failed.len()
-        );
+        let rows: Vec<serde_json::Value> =
+            self.checks.iter().map(|c| serde_json::json!({"layer": c.layer, "name": c.name, "value": c.value, "expect": c.expect, "pass": c.pass, "gap": c.gap})).collect();
+        let _ = std::fs::write(dir.join(format!("{name}.json")), serde_json::to_string_pretty(&rows).unwrap_or_default());
+        let failed: Vec<&Check> = self.checks.iter().filter(|c| c.gap.is_none() && !c.pass).collect();
+        assert!(failed.is_empty(), "{} known cases fail:\n{report}", failed.len());
     }
 
     /// Every known gap passes (expected to fail until the model improves).
     pub fn assert_gaps(&self) {
-        let open: Vec<&Check> = self
-            .checks
-            .iter()
-            .filter(|c| c.gap.is_some() && !c.pass)
-            .collect();
-        assert!(
-            open.is_empty(),
-            "{} known gaps are open:\n{}",
-            open.len(),
-            self.report()
-        );
+        let open: Vec<&Check> = self.checks.iter().filter(|c| c.gap.is_some() && !c.pass).collect();
+        assert!(open.is_empty(), "{} known gaps are open:\n{}", open.len(), self.report());
     }
 }

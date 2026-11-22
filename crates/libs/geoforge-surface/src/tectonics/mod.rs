@@ -102,10 +102,7 @@ pub fn generate_plates(grid: &dyn Grid, seed: u64, radius_km: f64, p: &Tectonics
     let mut table = Table::new();
     for (i, (pt, (dir, speed))) in seeds.iter().zip(motion).enumerate() {
         let (axis, rate) = motion::euler_pole_for(*pt, dir, speed, radius_km);
-        table.insert(
-            Key(i as u64 + 1),
-            Plate { name: format!("Plate {}", i + 1), euler_pole: axis, rate_deg_per_myr: rate, seed_point: *pt },
-        );
+        table.insert(Key(i as u64 + 1), Plate { name: format!("Plate {}", i + 1), euler_pole: axis, rate_deg_per_myr: rate, seed_point: *pt });
     }
     let mut plates = Partition { owner: Field::from_values(grid.spec(), owner), table };
     plates.prune();

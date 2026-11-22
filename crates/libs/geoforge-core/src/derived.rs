@@ -61,7 +61,11 @@ pub fn main_sequence_luminosity(mass_solar: f64) -> f64 {
 /// Main-sequence radius (R☉) from mass (M☉).
 #[must_use]
 pub fn main_sequence_radius(mass_solar: f64) -> f64 {
-    if mass_solar < 1.0 { mass_solar.powf(0.8) } else { mass_solar.powf(0.57) }
+    if mass_solar < 1.0 {
+        mass_solar.powf(0.8)
+    } else {
+        mass_solar.powf(0.57)
+    }
 }
 
 /// Effective temperature (K) from luminosity and radius in solar units.
@@ -86,7 +90,13 @@ pub fn solar_masses(kg: f64) -> f64 {
 #[must_use]
 pub fn daily_insolation(s: f64, lat: f64, decl: f64) -> f64 {
     let x = -lat.tan() * decl.tan();
-    let h0 = if x >= 1.0 { 0.0 } else if x <= -1.0 { PI } else { x.acos() };
+    let h0 = if x >= 1.0 {
+        0.0
+    } else if x <= -1.0 {
+        PI
+    } else {
+        x.acos()
+    };
     (s / PI) * (h0 * lat.sin() * decl.sin() + lat.cos() * decl.cos() * h0.sin())
 }
 

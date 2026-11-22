@@ -151,15 +151,11 @@ impl Earth {
         use Earth as L;
         match (kind, continental) {
             (Some(G::Craton), true) => &[(L::CratonicBasement, 0.62), (L::Greenstone, 0.16), (L::Granitoid, 0.12), (L::ClasticSedimentary, 0.10)],
-            (Some(G::Platform), true) | (None, true) => {
-                &[(L::ClasticSedimentary, 0.48), (L::Carbonate, 0.32), (L::Evaporite, 0.04), (L::CratonicBasement, 0.10), (L::Granitoid, 0.06)]
-            }
+            (Some(G::Platform), true) | (None, true) => &[(L::ClasticSedimentary, 0.48), (L::Carbonate, 0.32), (L::Evaporite, 0.04), (L::CratonicBasement, 0.10), (L::Granitoid, 0.06)],
             (Some(G::IntracratonicBasin), true) => &[(L::ClasticSedimentary, 0.55), (L::Carbonate, 0.25), (L::Evaporite, 0.15), (L::FloodBasalt, 0.05)],
             (Some(G::ContinentalRift), _) => &[(L::RiftFill, 0.65), (L::FloodBasalt, 0.20), (L::Granitoid, 0.05), (L::Evaporite, 0.10)],
             (Some(G::ExtendedCrust), true) => &[(L::ClasticSedimentary, 0.35), (L::Metamorphic, 0.30), (L::RiftFill, 0.25), (L::Granitoid, 0.10)],
-            (Some(G::CollisionOrogen), true) => {
-                &[(L::Metamorphic, 0.38), (L::Granitoid, 0.20), (L::ClasticSedimentary, 0.24), (L::Carbonate, 0.12), (L::Ophiolite, 0.06)]
-            }
+            (Some(G::CollisionOrogen), true) => &[(L::Metamorphic, 0.38), (L::Granitoid, 0.20), (L::ClasticSedimentary, 0.24), (L::Carbonate, 0.12), (L::Ophiolite, 0.06)],
             (Some(G::OrogenicPlateau), true) => &[(L::ClasticSedimentary, 0.30), (L::Metamorphic, 0.24), (L::Granitoid, 0.20), (L::Carbonate, 0.14), (L::ArcVolcanic, 0.12)],
             (Some(G::ForelandBasin), true) => &[(L::ClasticSedimentary, 0.78), (L::Carbonate, 0.12), (L::Evaporite, 0.10)],
             (Some(G::PaleoOrogen), true) => &[(L::Metamorphic, 0.42), (L::Granitoid, 0.25), (L::ClasticSedimentary, 0.27), (L::Ophiolite, 0.06)],

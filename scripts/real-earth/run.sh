@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Build a world on real Earth topography and check every generated layer against Earth.
 #   scripts/real-earth/run.sh WORLD_DIR [DATA_DIR] [WIDTH]
-# Needs: geoforge-v2 on PATH (or GEOFORGE=path), python3 with numpy, scipy, xarray, netCDF4,
+# Needs: geoforge on PATH (or GEOFORGE=path), python3 with numpy, scipy, xarray, netCDF4,
 # pillow, pypng; the data from fetch.sh.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORLD=$1
 DATA=${2:-real-earth-data}
 WIDTH=${3:-2048}
-G=${GEOFORGE:-geoforge-v2}
+G=${GEOFORGE:-geoforge}
 [ -s "$DATA/earth-topography-10arcmin.nc" ] || "$HERE/fetch.sh" "$DATA"
 rm -rf "$WORLD"
 "$G" new "$WORLD" --seed 1 --width "$WIDTH" --archetype earth >/dev/null

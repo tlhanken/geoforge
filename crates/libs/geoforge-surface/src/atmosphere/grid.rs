@@ -91,7 +91,11 @@ pub fn is_sea(wet: bool, elevation_m: f64) -> bool {
 /// Height of what the air sits on: sea level over the sea, the ground elsewhere, m.
 #[must_use]
 pub fn ground_m(wet: bool, elevation_m: f64) -> f64 {
-    if is_sea(wet, elevation_m) { 0.0 } else { elevation_m }
+    if is_sea(wet, elevation_m) {
+        0.0
+    } else {
+        elevation_m
+    }
 }
 
 /// The world's surface on the atmosphere grid.

@@ -26,11 +26,7 @@ impl Vec3 {
     }
     #[must_use]
     pub fn cross(self, o: Self) -> Self {
-        Self::new(
-            self.y * o.z - self.z * o.y,
-            self.z * o.x - self.x * o.z,
-            self.x * o.y - self.y * o.x,
-        )
+        Self::new(self.y * o.z - self.z * o.y, self.z * o.x - self.x * o.z, self.x * o.y - self.y * o.x)
     }
     #[must_use]
     pub fn norm(self) -> f64 {

@@ -306,12 +306,7 @@ impl PartialOrd for Item {
 /// Multi-source geodesic distance (radians, along neighbour steps) from `sources`, limited to
 /// `max_rad` and to cells where `allow(cell)` is true. Unreached cells are `f64::INFINITY`.
 /// Sources are always included (distance 0) even if `allow` rejects them.
-pub fn distance_field(
-    grid: &dyn Grid,
-    sources: impl IntoIterator<Item = Cell>,
-    max_rad: f64,
-    mut allow: impl FnMut(Cell) -> bool,
-) -> Vec<f64> {
+pub fn distance_field(grid: &dyn Grid, sources: impl IntoIterator<Item = Cell>, max_rad: f64, mut allow: impl FnMut(Cell) -> bool) -> Vec<f64> {
     let mut dist = vec![f64::INFINITY; grid.len()];
     let mut heap = BinaryHeap::new();
     for s in sources {
@@ -340,12 +335,7 @@ pub fn distance_field(
 }
 
 /// Like [`distance_field`] but returns only the reached cells, in ascending cell order.
-pub fn cells_within(
-    grid: &dyn Grid,
-    sources: &[Cell],
-    max_rad: f64,
-    allow: impl FnMut(Cell) -> bool,
-) -> Vec<Cell> {
+pub fn cells_within(grid: &dyn Grid, sources: &[Cell], max_rad: f64, allow: impl FnMut(Cell) -> bool) -> Vec<Cell> {
     // Sparse Dijkstra: avoids allocating a full-grid vector for small regions.
     let mut allow = allow;
     let mut best: std::collections::HashMap<Cell, f64> = std::collections::HashMap::new();

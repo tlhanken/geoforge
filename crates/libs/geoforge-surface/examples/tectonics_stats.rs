@@ -26,17 +26,37 @@ fn main() {
         let (lc, ld, lt) = (len(BoundaryKind::Convergent), len(BoundaryKind::Divergent), len(BoundaryKind::Transform));
         let crust_v: Vec<CrustType> = owner.iter().map(|o| tk[o]).collect();
         let (age, _) = crust::crust_age(&grid, owner, &crust_v, &segs, r);
-        let mut oa = 0.0; let mut ow = 0.0; let mut max_o: f32 = 0.0;
-        for c in grid.cells() { if crust_v[c as usize] == CrustType::Oceanic { let w = grid.area_sr(c); oa += f64::from(age[c as usize]) * w; ow += w; max_o = max_o.max(age[c as usize]); } }
+        let mut oa = 0.0;
+        let mut ow = 0.0;
+        let mut max_o: f32 = 0.0;
+        for c in grid.cells() {
+            if crust_v[c as usize] == CrustType::Oceanic {
+                let w = grid.area_sr(c);
+                oa += f64::from(age[c as usize]) * w;
+                ow += w;
+                max_o = max_o.max(age[c as usize]);
+            }
+        }
         println!("seed {seed}: plates {} | largest {:.1}% 2nd {:.1}% 3rd {:.1}% smallest {:.2}%", sorted.len(), sorted[0], sorted[1], sorted[2], sorted.last().unwrap());
         println!("   continental area: v1 rule {:.1}%  target-fraction {:.1}%", v1_cont * 100.0, t_cont * 100.0);
         println!("   boundaries: {} segments, total {:.0} km (conv {:.0}, div {:.0}, transform {:.0}) [{:.0?}]", segs.len(), lc + ld + lt, lc, ld, lt, dt);
         let rates: Vec<f64> = segs.iter().filter(|s| s.kind != BoundaryKind::Transform).map(|s| s.rate_cm_yr).collect();
-        println!("   conv/div rates cm/yr: mean {:.1} max {:.1}; ocean crust mean age {:.0} Ma, max {:.0} Ma", rates.iter().sum::<f64>() / rates.len() as f64, rates.iter().cloned().fold(0.0, f64::max), oa / ow, max_o);
+        println!(
+            "   conv/div rates cm/yr: mean {:.1} max {:.1}; ocean crust mean age {:.0} Ma, max {:.0} Ma",
+            rates.iter().sum::<f64>() / rates.len() as f64,
+            rates.iter().cloned().fold(0.0, f64::max),
+            oa / ow,
+            max_o
+        );
         if let Some(d) = &dump {
             let bf = boundaries::boundary_kind_field(grid.len(), &segs);
             let mut f = std::fs::File::create(format!("{d}/s{seed}.bin")).unwrap();
-            for c in grid.cells() { let i = c as usize; f.write_all(&owner[i].to_le_bytes()).unwrap(); f.write_all(&[bf[i], crust_v[i] as u8]).unwrap(); f.write_all(&age[i].to_le_bytes()).unwrap(); }
+            for c in grid.cells() {
+                let i = c as usize;
+                f.write_all(&owner[i].to_le_bytes()).unwrap();
+                f.write_all(&[bf[i], crust_v[i] as u8]).unwrap();
+                f.write_all(&age[i].to_le_bytes()).unwrap();
+            }
         }
     }
 }
