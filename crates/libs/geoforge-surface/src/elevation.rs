@@ -72,7 +72,7 @@ pub fn gdh1_depth_m(t: f64) -> f64 {
     }
 }
 
-fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
+pub(crate) fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -82,7 +82,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 6;
+    const VERSION: u32 = 7;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -277,7 +277,10 @@ impl Generator for Elevation {
                     G::PaleoOrogen => {
                         let inside = interior_km.get(&c).copied().unwrap_or(0.0);
                         let s = smoothstep(0.0, (prov.width_km * 0.5).max(spacing_km), inside);
-                        z = base_cont + (250.0 + 1400.0 * (-prov.age_ma / 450.0).exp()) * s;
+                        // Higher and lower stretches along the belt (the Appalachians reach 2 km in
+                        // the Smokies and 600 m in Pennsylvania's ridges).
+                        let along = (0.6 + 1.6 * plateau_noise.fbm(grid.center(c), 9.0, 2)).clamp(0.25, 1.4);
+                        z = base_cont + (250.0 + 1400.0 * (-prov.age_ma / 450.0).exp()) * s * along;
                     }
                     G::AbyssalPlain | G::OceanicFractureZone | G::HotspotTrack => {}
                     // Rigid-lid kinds: drawn by `lid::LidElevation`.

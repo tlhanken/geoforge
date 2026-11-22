@@ -378,12 +378,13 @@ reproduce on the ETOPO-forced run or a generated Earth-like world.
 
 **Mountains** (none needs a full history; the mock-history case is the Appalachians):
 
-- **Paleo-orogens as sutures.** Today they are bowed lines between two random continental
-  points, one width and height end to end, and they can cross. Place them where blocks
-  collided instead: around craton margins, and parallel to passive margins a few hundred km
-  inland (oceans reopen along old sutures, the Wilson cycle); curved, segmented, never
-  crossing. Length is fine as is (Urals ~2,500 km, Appalachians ~2,400, Transantarctic
-  ~3,500). [Appalachians, Urals, Caledonides.]
+- **Paleo-orogens around cratons** — done. Belts run through the accreted ground between
+  the craton and the coast, parallel to both, at a share of the way out, on the side with
+  the most room toward a passive coast (an active margin's ground is its foreland); a
+  large continent's second on another side, older and closer in. They wander, swell and
+  pinch, vary in height along their length, thin out at their ends, and never cross a
+  craton or each other (the X across Australia is gone). Open: one craton per continent,
+  so no sutures *between* cratons (the Urals, the Trans-Hudson).
 - **Arcs vary along strike.** Width and height are now one value per boundary segment, set
   by its convergence rate. Vary them every few hundred km with slab age and dip; leave
   volcanic gaps over flat slabs and where ridges or young slab subduct. The volcanic front's

@@ -134,10 +134,24 @@ pub const INTRACRATONIC_BASIN_RADIUS_KM: f64 = 300.0;
 pub const PALEO_OROGEN_MIN_AREA_KM2: f64 = 3_000_000.0;
 pub const PALEO_OROGEN_COUNT_LARGE: usize = 2;
 pub const PALEO_OROGEN_COUNT_MEDIUM: usize = 1;
+/// Belt widths before swelling and pinching: the Appalachians are 150–500 km across with
+/// their foothills, the Urals' ranges 50–150 km within a wider deformed zone.
 pub const PALEO_OROGEN_MIN_WIDTH_KM: f64 = 200.0;
 pub const PALEO_OROGEN_WIDTH_RANGE_KM: f64 = 200.0;
-/// v1: endpoints at least 20 px apart (~450 km at 1800 px).
-pub const PALEO_OROGEN_MIN_LENGTH_KM: f64 = 450.0;
+/// Where the belt's axis runs, as a share of the way from the craton's edge to the coast:
+/// the younger, outer belt and an older one closer in (Grenville lies inside the
+/// Appalachians).
+pub const PALEO_OROGEN_OUTER_SHARE: (f64, f64) = (0.45, 0.65);
+pub const PALEO_OROGEN_INNER_SHARE: (f64, f64) = (0.2, 0.32);
+/// Accreted ground narrower than this beyond the craton holds no belt; wider than the
+/// maximum counts no more when choosing a side.
+pub const PALEO_OROGEN_MIN_ROOM_KM: f64 = 350.0;
+pub const PALEO_OROGEN_MAX_ROOM_KM: f64 = 1500.0;
+/// A coast within this of a plate boundary is an active margin.
+pub const PALEO_OROGEN_ACTIVE_MARGIN_KM: f64 = 300.0;
+/// Half the arc of the craton's outline a belt wraps, degrees (a 90–150° arc).
+pub const PALEO_OROGEN_MIN_HALF_ARC_DEG: f64 = 45.0;
+pub const PALEO_OROGEN_HALF_ARC_RANGE_DEG: f64 = 30.0;
 
 pub const PASSIVE_MARGIN_DIVERGENT_WIDTH_KM: f64 = 350.0;
 pub const PASSIVE_MARGIN_OTHER_WIDTH_KM: f64 = 130.0;

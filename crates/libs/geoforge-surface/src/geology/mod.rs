@@ -26,6 +26,7 @@
 pub mod lithology;
 pub mod provinces;
 
+use crate::elevation::smoothstep;
 use crate::tectonics::boundaries::{self, BoundaryParams};
 use geoforge_core::grid::{distance_field, Cell, Grid};
 use geoforge_core::key::Key;
@@ -65,7 +66,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 5;
+    const VERSION: u32 = 6;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -161,6 +162,8 @@ struct B<'a> {
     rng: StdRng,
     /// Smooth noise for varying belt widths along their length.
     width_noise: crate::noise::TerrainNoise,
+    /// Each plate's craton: its centre and cells.
+    cratons: BTreeMap<u32, (UnitVec3, Vec<Cell>)>,
 }
 
 impl B<'_> {
@@ -300,6 +303,7 @@ impl B<'_> {
             let sa = self.area(&shield);
             let mut prov = pc::craton(sa);
             prov.anchor = Some(pc0);
+            self.cratons.insert(k, (pc0, shield.clone()));
             self.push(shield, prov, None, max_age);
             // Intracratonic basin.
             if cont_area > pc::INTRACRATONIC_BASIN_MIN_AREA_KM2 && self.rng.r#gen::<f64>() < pc::INTRACRATONIC_BASIN_PROBABILITY {
@@ -339,34 +343,82 @@ impl B<'_> {
         }
     }
 
+    /// Old mountain belts, worn down, where blocks were stitched onto a craton. A continent
+    /// is its craton plus what accreted to it, so the belts run through that accreted
+    /// ground, between the craton and the coast and parallel to both (the Appalachians
+    /// between the Canadian Shield and the Atlantic, the Tasmanides east of Australia's
+    /// cratons): each at a share of the way out, on the side where the most ground lies
+    /// beyond the craton; a large continent's second on another side, older and closer in.
+    /// Belts wander, swell and pinch along their length, thin out at their ends, break where
+    /// there is no room, and never cross a craton or each other.
     fn paleo_orogens(&mut self) {
-        let plates: Vec<(u32, f64, f64)> = self.info.iter().map(|(&k, i)| (k, i.cont_area_km2, i.area_km2)).collect();
-        for (k, cont_area, area) in plates {
-            if cont_area < pc::PALEO_OROGEN_MIN_AREA_KM2 {
+        const BINS: usize = 72;
+        let plates: Vec<(u32, f64)> = self.info.iter().filter(|(_, i)| i.cont_area_km2 >= pc::PALEO_OROGEN_MIN_AREA_KM2).map(|(&k, i)| (k, i.area_km2)).collect();
+        let mut taken: std::collections::HashSet<Cell> = std::collections::HashSet::new();
+        for (k, area) in plates {
+            let Some((centre, craton)) = self.cratons.get(&k).cloned() else { continue };
+            let in_craton: std::collections::HashSet<Cell> = craton.iter().copied().collect();
+            let (owner, crust, grid) = (self.owner, self.crust, self.grid);
+            let continental = |c: Cell| owner[c as usize] == k && crust[c as usize] == CrustType::Continental;
+            let rim: Vec<Cell> = craton.iter().copied().filter(|&c| grid.neighbors(c).iter().any(|n| continental(n) && !in_craton.contains(&n))).collect();
+            if rim.is_empty() {
                 continue;
             }
-            let n = if area > pc::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 { pc::PALEO_OROGEN_COUNT_LARGE } else { pc::PALEO_OROGEN_COUNT_MEDIUM };
-            let cont = self.info[&k].cont.clone();
-            for _ in 0..n {
-                let mut ends = None;
-                for _ in 0..10 {
-                    let a = cont[self.rng.gen_range(0..cont.len())];
-                    let b = cont[self.rng.gen_range(0..cont.len())];
-                    if self.km(a, b) > pc::PALEO_OROGEN_MIN_LENGTH_KM {
-                        ends = Some((a, b));
-                        break;
-                    }
+            let out = self.reach(&rim, f64::INFINITY, |c| continental(c) && !in_craton.contains(&c));
+            let bin = |c: Cell| ((centre.bearing_to(grid.center(c)).rem_euclid(360.0) / 360.0 * BINS as f64) as usize).min(BINS - 1);
+            // How far the accreted ground reaches beyond the craton, by direction, smoothed.
+            // Ground running out to an active margin is that margin's foreland (the Amazon
+            // behind the Andes) and counts for little; old belts face passive coasts.
+            let mut reach = [(0.0f64, Cell::MAX); BINS];
+            for (&c, &d) in &out {
+                let r = &mut reach[bin(c)];
+                if d > r.0 || (d == r.0 && c < r.1) {
+                    *r = (d, c);
                 }
+            }
+            let reach: Vec<f64> = reach.iter().map(|&(d, c)| if c != Cell::MAX && self.edge_dist_km[c as usize] < pc::PALEO_OROGEN_ACTIVE_MARGIN_KM { d * 0.25 } else { d }).collect();
+            let room: Vec<f64> = (0..BINS).map(|b| (0..5).map(|o| reach[(b + BINS + o - 2) % BINS]).sum::<f64>() / 5.0).collect();
+            let n = if area > pc::HOTSPOT_LARGE_PLATE_THRESHOLD_KM2 { pc::PALEO_OROGEN_COUNT_LARGE } else { pc::PALEO_OROGEN_COUNT_MEDIUM };
+            let mut used: Vec<usize> = Vec::new();
+            for j in 0..n {
+                let half = pc::PALEO_OROGEN_MIN_HALF_ARC_DEG + self.rng.r#gen::<f64>() * pc::PALEO_OROGEN_HALF_ARC_RANGE_DEG;
+                let hb = (half / 360.0 * BINS as f64).round() as usize;
+                let apart = |b: usize| used.iter().all(|&u| (b + BINS - u) % BINS > BINS / 4 && (u + BINS - b) % BINS > BINS / 4);
+                let sector_room = |b: usize| (0..=2 * hb).map(|o| room[(b + BINS + o - hb) % BINS].min(pc::PALEO_OROGEN_MAX_ROOM_KM)).sum::<f64>();
+                let Some(toward) = (0..BINS).filter(|&b| apart(b)).max_by(|&a, &b| sector_room(a).total_cmp(&sector_room(b)).then(b.cmp(&a))) else { break };
+                used.push(toward);
+                let toward_deg = (toward as f64 + 0.5) * 360.0 / BINS as f64;
+                let (lo, hi) = if j == 0 { pc::PALEO_OROGEN_OUTER_SHARE } else { pc::PALEO_OROGEN_INNER_SHARE };
+                let share = lo + self.rng.r#gen::<f64>() * (hi - lo);
                 let width = pc::PALEO_OROGEN_MIN_WIDTH_KM + self.rng.r#gen::<f64>() * pc::PALEO_OROGEN_WIDTH_RANGE_KM;
-                let age = 300.0 + self.rng.r#gen::<f64>() * 900.0;
-                let Some((a, b)) = ends else { continue };
-                let bow = (self.rng.r#gen::<f64>() - 0.5) * 0.5;
-                let line = self.bowed_path(a, b, bow);
-                let m = self.reach(&line, width / 2.0, |c| self.owner[c as usize] == k && self.crust[c as usize] == CrustType::Continental);
-                let cells = Self::cells_of(&m, |c, _| self.owner[c as usize] == k && self.crust[c as usize] == CrustType::Continental);
+                let age = if j == 0 { 300.0 + self.rng.r#gen::<f64>() * 400.0 } else { 700.0 + self.rng.r#gen::<f64>() * 500.0 };
+                // Two smooth fields along the belt: where its axis lies, and how wide it is.
+                let wander = crate::noise::TerrainNoise::new(self.rng.r#gen());
+                let swell = crate::noise::TerrainNoise::new(self.rng.r#gen());
+                let mut cells: Vec<Cell> = out
+                    .iter()
+                    .filter(|(c, _)| !taken.contains(*c))
+                    .filter_map(|(&c, &d)| {
+                        let q = grid.center(c);
+                        let off = ((centre.bearing_to(q) - toward_deg + 540.0).rem_euclid(360.0) - 180.0).abs();
+                        let r = room[bin(c)];
+                        if off >= half || r < pc::PALEO_OROGEN_MIN_ROOM_KM {
+                            return None;
+                        }
+                        let ends = smoothstep(0.0, 0.25, 1.0 - off / half).sqrt();
+                        let axis = share * r * (1.0 + 0.4 * wander.fbm(q, 4.0, 2));
+                        // Swells to half again its width, pinches to half (never wider than the
+                        // ground allows), and breaks where the noise is lowest.
+                        let sw = swell.fbm(q, 6.0, 2);
+                        let w = if sw < -0.35 { 0.0 } else { (width * (1.0 + 1.5 * sw).clamp(0.5, 1.5)).min(0.6 * r) * ends };
+                        ((d - axis).abs() <= w / 2.0).then_some(c)
+                    })
+                    .collect();
+                cells.sort_unstable();
                 if self.area(&cells) < 50_000.0 {
                     continue;
                 }
+                taken.extend(cells.iter().copied());
                 let mid = UnitVec3::centroid(cells.iter().map(|&c| self.grid.center(c))).unwrap_or(UnitVec3::NORTH);
                 self.events.push(Event {
                     t_ma: age.round(),
@@ -379,47 +431,6 @@ impl B<'_> {
                 self.push(cells, pc::paleo_orogen(width), None, age);
             }
         }
-    }
-
-    /// A great-circle path bowed sideways by `bow` × its length at the middle (belts curve).
-    fn bowed_path(&self, a: Cell, b: Cell, bow: f64) -> Vec<Cell> {
-        let pa = self.grid.center(a);
-        let pb = self.grid.center(b);
-        let ang = pa.angle_to(pb);
-        let axis = pa.v().cross(pb.v()).normalized().unwrap_or(UnitVec3::NORTH);
-        let steps = ((ang / (self.grid.spacing_rad() * 0.5)).ceil() as usize).max(1);
-        let mut v: Vec<Cell> = (0..=steps)
-            .map(|i| {
-                let t = i as f64 / steps as f64;
-                let s = ang.sin().max(1e-12);
-                let q = (pa.v() * (((1.0 - t) * ang).sin() / s) + pb.v() * ((t * ang).sin() / s)).normalized().unwrap_or(pa);
-                let off = bow * ang * (std::f64::consts::PI * t).sin();
-                let q = (q.v() * off.cos() + axis.v() * off.sin()).normalized().unwrap_or(q);
-                self.grid.locate(q)
-            })
-            .collect();
-        v.dedup();
-        v
-    }
-
-    #[allow(dead_code)]
-    fn great_circle(&self, a: Cell, b: Cell) -> Vec<Cell> {
-        let pa = self.grid.center(a);
-        let pb = self.grid.center(b);
-        let ang = pa.angle_to(pb);
-        let steps = ((ang / (self.grid.spacing_rad() * 0.5)).ceil() as usize).max(1);
-        let mut v: Vec<Cell> = (0..=steps)
-            .map(|i| {
-                let t = i as f64 / steps as f64;
-                let s = ang.sin().max(1e-12);
-                let wa = ((1.0 - t) * ang).sin() / s;
-                let wb = (t * ang).sin() / s;
-                let p = (pa.v() * wa + pb.v() * wb).normalized().unwrap_or(pa);
-                self.grid.locate(p)
-            })
-            .collect();
-        v.dedup();
-        v
     }
 
     // ---------------------------------------------------------------- active features
@@ -805,6 +816,7 @@ pub fn build(
         events: vec![],
         rng: StdRng::seed_from_u64(seed),
         width_noise: crate::noise::TerrainNoise::new(seed ^ 0x0B1D_7A11),
+        cratons: BTreeMap::new(),
     };
 
     if p.oceanic {
