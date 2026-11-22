@@ -12,6 +12,7 @@
 //!   generated, patched, and then fed back so the rest of their layer is consistent with
 //!   the edit. Downstream layers always see the edited version.
 
+pub mod cache;
 pub mod place;
 pub mod registry;
 pub mod sky;
@@ -455,6 +456,11 @@ pub fn load_all(world: &World) -> Result<Products> {
 
 // ---------------------------------------------------------------- edit views
 
+/// The storm field, when a view needs it (the tropical cyclone map).
+fn storm_field_for(world: &World, views: &[View], stored: &Products, grid: &AnyGrid, body: &BodyContext) -> Option<storms::Atmosphere> {
+    views.contains(&View::Hazard(geoforge_surface::hazards::Hazard::Cyclones)).then(|| weather::atmosphere(world, stored, grid, body).ok()).flatten()
+}
+
 /// Default folder for edit views.
 #[must_use]
 pub fn edit_folder(world: &World) -> PathBuf {
@@ -577,7 +583,11 @@ pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[Produ
             out.push(f);
         }
     }
-    let source = views::Source::new(stored, &grid, &body);
+    let atm = storm_field_for(world, views, stored, &grid, &body);
+    let mut source = views::Source::new(stored, &grid, &body);
+    if let Some(a) = &atm {
+        source = source.with_storms(a);
+    }
     let sea_cells = source.sea();
     for &v in views {
         let relief = Some((stored, radius));
@@ -607,7 +617,11 @@ pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(Vie
     let grid = world.manifest.grid.build()?;
     let stored = load_all(world)?;
     let bref = BodyRef { name: body.name.clone(), radius_km: body.exterior.radius_km };
-    let source = views::Source::new(&stored, &grid, &body);
+    let atm = storm_field_for(world, views, &stored, &grid, &body);
+    let mut source = views::Source::new(&stored, &grid, &body);
+    if let Some(a) = &atm {
+        source = source.with_storms(a);
+    }
     let mut out = Vec::new();
     for &v in views {
         let name = v.name();

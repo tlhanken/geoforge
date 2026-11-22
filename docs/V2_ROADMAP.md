@@ -292,14 +292,34 @@ import at any 2:1 size; optional polar cap views (azimuthal equidistant, polewar
 georeferenced) merge back where painted; a Blender round-trip guide (`V2_PIPELINE.md`,
 Editing a layer). Open: caps for derived views; a cap edge other than 60°.
 
-## 8a. Weather and hazards as one — next
+## 8a. Weather and hazards as one — done
 
-The daily weather and the hazard rates are separate models. Make the storm field the
-source of `place`'s tropical cyclone rates (counted from tracks rather than the hazard
-layer's own genesis) and draw thunderstorms, lightning, hail and tornadoes in the daily
-weather from the hazard rates, concentrated where storms make them: warm sectors and cold
-fronts over warm plains, tropical cyclones' outer bands. Lows should merge or repel rather
-than pile up.
+`place` counts tropical cyclones from the storm field's tracks (and the cyclone map is their
+track density); the daily weather draws thunderstorms, tornadoes, floods, landslides,
+blizzards, wildfires, dust, fog, quakes, eruptions, tsunamis and auroras from the same
+yearly rates, on the days that favour them. Open: lows merging or repelling rather than
+piling up; hail; storm surge with cyclones; magnitudes for drawn quakes.
+
+## Refactoring — proposed
+
+- **A `geoforge-almanac` crate** for everything in time: the ephemeris and calendar (now in
+  core), eclipses, the sky (cosmos + pipeline), the storm field, daily weather and the
+  almanac (8d). `geoforge-pipeline` would go back to orchestration only (plan, generate,
+  edit, export), and `place` to a thin report over library calls.
+- **Split `geoforge-surface` in two, not per layer**: the stored-layer generators
+  (tectonics, geology, elevation, circulation, climate, erosion, hydrology, biomes,
+  resources) and the derived analyses (Köppen, ground, hazards, oceans, pressure, soils) as
+  `geoforge-analysis`. Per-layer crates would mostly add boilerplate: the layers share the
+  grid, products and helpers, and 10k lines compile fine as modules. Revisit when build
+  times hurt.
+- **Store**: `render.rs` into `render/{products, views, sky, weather}`; `edit.rs` into
+  `edit/{view, patch}`.
+- **CLI**: `main.rs` (800+ lines) into a module per command family (world, edit, look,
+  sky, weather).
+- **Retire v1** (`crates/bins/geoforge`, 11k lines) once the cutover is done; keep only what
+  the parity test needs, or drop that test.
+- **Caching**: the Ground and the views (Köppen, hazards) through `cache`, so commands that
+  read them start in under a second.
 
 ## 8c. Names — crate done; languages later
 

@@ -30,7 +30,7 @@ use crate::tectonics::boundaries::{analyze, BoundaryParams};
 use geoforge_core::geom::UnitVec3;
 use geoforge_core::grid::{cells_within, Cell, Grid};
 use geoforge_core::product::Products;
-use geoforge_core::surface::{BoundaryKind, CrustType};
+use geoforge_core::surface::{BoundaryKind, BoundarySegment, CrustType};
 
 /// A natural hazard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -153,6 +153,25 @@ pub struct Setting<'a> {
     pub products: &'a Products,
     /// The magnetic pole and the auroral ovals' magnetic latitude, if the world has a field.
     pub aurora: Option<(UnitVec3, f64)>,
+    /// Plate boundaries and the quake fields, worked out once on first need.
+    boundaries: std::cell::OnceCell<Vec<BoundarySegment>>,
+    quakes: std::cell::OnceCell<(Vec<f64>, Vec<f64>)>,
+}
+
+impl<'a> Setting<'a> {
+    #[must_use]
+    pub fn new(products: &'a Products, aurora: Option<(UnitVec3, f64)>) -> Self {
+        Self { products, aurora, boundaries: std::cell::OnceCell::new(), quakes: std::cell::OnceCell::new() }
+    }
+
+    fn boundaries(&self, grid: &dyn Grid, radius_km: f64) -> &[BoundarySegment] {
+        self.boundaries.get_or_init(|| self.products.plates().map_or_else(Vec::new, |p| analyze(grid, p, radius_km, &BoundaryParams::default())))
+    }
+
+    /// The magnitude 6+ rate and corner magnitude of every cell ([`earthquakes`]), worked out once.
+    pub fn quakes(&self, grid: &dyn Grid, radius_km: f64) -> &(Vec<f64>, Vec<f64>) {
+        self.quakes.get_or_init(|| quakes_from(grid, radius_km, self.products, self.boundaries(grid, radius_km)))
+    }
 }
 
 /// Rigidity of the crust, Pa.
@@ -191,12 +210,17 @@ fn class(kind: BoundaryKind, continental: bool, oceanic: bool) -> Class {
 /// cell, from the plates and crust in `products`.
 #[must_use]
 pub fn earthquakes(grid: &dyn Grid, radius_km: f64, products: &Products) -> (Vec<f64>, Vec<f64>) {
+    let segments = products.plates().map_or_else(Vec::new, |p| analyze(grid, p, radius_km, &BoundaryParams::default()));
+    quakes_from(grid, radius_km, products, &segments)
+}
+
+fn quakes_from(grid: &dyn Grid, radius_km: f64, products: &Products, segments: &[BoundarySegment]) -> (Vec<f64>, Vec<f64>) {
     let n = grid.len();
     let mut rate = vec![INTRAPLATE; n];
     let mut corner = vec![6.5; n];
-    let (Some(plates), Some(crust)) = (products.plates(), products.crust_type()) else { return (rate, corner) };
+    let Some(crust) = products.crust_type() else { return (rate, corner) };
     let area_km2 = |c: Cell| grid.area_sr(c) * radius_km * radius_km;
-    for seg in analyze(grid, plates, radius_km, &BoundaryParams::default()) {
+    for seg in segments {
         let continental = seg.cells.iter().any(|&c| crust.values[c as usize] == CrustType::Continental);
         let oceanic = seg.cells.iter().any(|&c| crust.values[c as usize] == CrustType::Oceanic);
         let k = class(seg.kind, continental, oceanic);
@@ -205,6 +229,7 @@ pub fn earthquakes(grid: &dyn Grid, radius_km: f64, products: &Products) -> (Vec
         let moment_rate = SHEAR_MODULUS * seg.length_km * 1e3 * k.depth_km * 1e3 * seg.rate_cm_yr.abs() * 1e-2 * k.coupling;
         let per_year = moment_rate * (1.0 - BETA) / (BETA * moment(6.0).powf(BETA) * moment(k.corner).powf(1.0 - BETA));
         let band = cells_within(grid, &seg.cells, k.band_km / radius_km, |_| true);
+
         let area: f64 = band.iter().map(|&c| area_km2(c)).sum();
         if area <= 0.0 {
             continue;
@@ -234,7 +259,7 @@ pub fn quake_rate_at_least(rate6: f64, corner: f64, m: f64) -> f64 {
 pub fn rate(g: &Ground, s: &Setting, hazard: Hazard) -> Vec<f64> {
     let n = g.len();
     match hazard {
-        Hazard::Earthquakes => earthquakes(g.grid, g.radius_km, s.products).0,
+        Hazard::Earthquakes => s.quakes(g.grid, g.radius_km).0.clone(),
         Hazard::Tsunamis => tsunamis(g, s),
         Hazard::Volcanoes => volcanoes(g, s),
         Hazard::Cyclones => cyclones(g.grid, g.radius_km, &g.sea, g.temperature, g.temperature_range),
@@ -316,11 +341,12 @@ fn winter_wind(p: &Products, c: usize, lat: f64) -> f64 {
 
 fn tsunamis(g: &Ground, s: &Setting) -> Vec<f64> {
     let n = g.len();
-    let (Some(plates), Some(crust)) = (s.products.plates(), s.products.crust_type()) else { return vec![0.0; n] };
-    let trench: Vec<Cell> = analyze(g.grid, plates, g.radius_km, &BoundaryParams::default())
-        .into_iter()
+    let Some(crust) = s.products.crust_type() else { return vec![0.0; n] };
+    let trench: Vec<Cell> = s
+        .boundaries(g.grid, g.radius_km)
+        .iter()
         .filter(|seg| seg.kind == BoundaryKind::Convergent && seg.cells.iter().any(|&c| crust.values[c as usize] == CrustType::Oceanic))
-        .flat_map(|seg| seg.cells)
+        .flat_map(|seg| seg.cells.iter().copied())
         .collect();
     let near = g.distance_over_land_or_sea_km(trench, 600.0);
     (0..n).map(|c| if g.coast(c) && g.elevation[c] < 50.0 && near[c].is_finite() { 0.02 * (1.0 - near[c] / 600.0) } else { 0.0 }).collect()
@@ -483,6 +509,19 @@ pub enum Lightning {
 
 impl Lightning {
     pub const ALL: [Self; 4] = [Self::Rare, Self::Basic, Self::Moderate, Self::Severe];
+
+    /// Days a year with thunder, typical of the tier (Earth: under 5 in the Arctic and
+    /// deserts' edges, ~20 in temperate lowlands, 60–80 in Florida, 100+ in the wet tropics;
+    /// WMO thunder-day climatology).
+    #[must_use]
+    pub fn thunder_days(self) -> f64 {
+        match self {
+            Self::Rare => 3.0,
+            Self::Basic => 20.0,
+            Self::Moderate => 50.0,
+            Self::Severe => 100.0,
+        }
+    }
 
     #[must_use]
     pub fn info(self) -> (&'static str, &'static str, [u8; 3]) {

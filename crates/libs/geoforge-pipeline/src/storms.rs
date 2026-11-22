@@ -40,6 +40,12 @@ pub const MAX_LIFE_DAYS: f64 = 10.0;
 const STEP_DAYS: f64 = 0.25;
 /// The storm climate's grid, degrees.
 const COARSE_DEG: f64 = 2.0;
+/// A tropical cyclone counts as passing within this distance of a place, km, while at least
+/// this deep, hPa.
+pub const CYCLONE_REACH_KM: f64 = 200.0;
+pub const PASSING_HPA: f64 = 10.0;
+/// Years of storms counted for tropical cyclone rates.
+pub const CYCLONE_YEARS: f64 = 10.0;
 /// Closest two lows are born on the same day, km.
 const SPACING_KM: f64 = 2000.0;
 /// Air density near the ground, kg/m³.
@@ -135,6 +141,9 @@ pub struct Atmosphere {
     height_m: Vec<f64>,
     wind_jan: Vec<[f64; 2]>,
     wind_jul: Vec<[f64; 2]>,
+    /// Lee genesis factors under the January and July winds.
+    lee_jan: Vec<f64>,
+    lee_jul: Vec<f64>,
     pub radius_km: f64,
     /// Rotation rate, rad/s.
     pub omega: f64,
@@ -171,6 +180,8 @@ impl Atmosphere {
             height_m: Vec::with_capacity(rows * cols),
             wind_jan: Vec::with_capacity(rows * cols),
             wind_jul: Vec::with_capacity(rows * cols),
+            lee_jan: Vec::new(),
+            lee_jul: Vec::new(),
             radius_km,
             omega: std::f64::consts::TAU / (rotation_h.abs().max(1.0) * 3600.0),
             year,
@@ -187,6 +198,8 @@ impl Atmosphere {
             a.wind_jan.push(l.wind_jan);
             a.wind_jul.push(l.wind_jul);
         }
+        a.lee_jan = (0..rows * cols).map(|i| a.lee_under(i, a.wind_jan[i])).collect();
+        a.lee_jul = (0..rows * cols).map(|i| a.lee_under(i, a.wind_jul[i])).collect();
         a
     }
 
@@ -245,8 +258,12 @@ impl Atmosphere {
     /// How much more readily lows form at cell `i` for the mountains upwind: up to double,
     /// 400 km downwind of 2 km of relief.
     fn lee(&self, i: usize, season: f64) -> f64 {
+        let mix = 0.5 * (1.0 + season);
+        self.lee_jan[i] * (1.0 - mix) + self.lee_jul[i] * mix
+    }
+
+    fn lee_under(&self, i: usize, w: [f64; 2]) -> f64 {
         let (lat, lon) = self.centre(i);
-        let w = self.wind(lat, lon, season);
         let speed = w[0].hypot(w[1]);
         if speed < 0.5 {
             return 1.0;
@@ -277,6 +294,43 @@ impl Atmosphere {
         let (s, c) = (heading + dev).to_radians().sin_cos();
         let slow = 1.0 - 0.3 * dev.abs() / 90.0;
         [speed * slow * s, speed * slow * c]
+    }
+
+    /// Tropical cyclones passing within 200 km of each cell a year (the hazard layer's unit:
+    /// passes across a 100 km region, counting a 300 km swath), over `years` from the present.
+    #[must_use]
+    pub fn cyclone_rates(&self, years: f64) -> Vec<f64> {
+        let span = years * self.year;
+        let mut count = vec![0.0; self.rows * self.cols];
+        let mut last = vec![usize::MAX; self.rows * self.cols];
+        let reach = CYCLONE_REACH_KM;
+        let dlat = (reach / self.radius_km).to_degrees();
+        for (k, s) in self.storms(0.0, span).iter().enumerate().filter(|(_, s)| s.kind == StormKind::TropicalCyclone) {
+            for f in s.track.iter().filter(|f| f.depth_hpa > PASSING_HPA) {
+                let dlon = dlat / f.lat.to_radians().cos().max(0.1);
+                let mut lat = f.lat - dlat;
+                while lat <= f.lat + dlat {
+                    let mut lon = f.lon - dlon;
+                    while lon <= f.lon + dlon {
+                        let i = self.cell(lat.clamp(-89.9, 89.9), lon);
+                        let (clat, clon) = self.centre(i);
+                        if last[i] != k && great_circle_km(clat, clon, f.lat, f.lon, self.radius_km) <= reach {
+                            last[i] = k;
+                            count[i] += 1.0;
+                        }
+                        lon += COARSE_DEG / 2.0;
+                    }
+                    lat += COARSE_DEG / 2.0;
+                }
+            }
+        }
+        count.iter().map(|c| c / years).collect()
+    }
+
+    /// The value of a coarse field at (lat, lon).
+    #[must_use]
+    pub fn at(&self, field: &[f64], lat: f64, lon: f64) -> f64 {
+        field[self.cell(lat, lon)]
     }
 
     /// Storms alive at any time from `from_day` to `to_day`.
@@ -518,6 +572,13 @@ fn poisson(mean: f64, u: &mut impl FnMut() -> f64) -> usize {
     }
 }
 
+/// Distinct storms of `kind` passing within `reach_km` of (lat, lon) while deeper than
+/// [`PASSING_HPA`].
+#[must_use]
+pub fn passes(storms: &[Storm], kind: StormKind, lat: f64, lon: f64, reach_km: f64, radius_km: f64) -> usize {
+    storms.iter().filter(|s| s.kind == kind && s.track.iter().any(|f| f.depth_hpa > PASSING_HPA && great_circle_km(f.lat, f.lon, lat, lon, radius_km) <= reach_km)).count()
+}
+
 /// An index drawn with probability ∝ `weights`.
 fn pick(weights: &[f64], u: f64) -> Option<usize> {
     let total: f64 = weights.iter().sum();
@@ -615,6 +676,19 @@ pub(crate) mod tests {
         // South of a northern low the wind blows from the west.
         let e = effect(std::slice::from_ref(&deep), 45.0, 0.0, 0.1, 6371.0, atm.omega);
         assert!(e.wind[0] > 8.0 && e.pressure_hpa < -15.0, "{e:?}");
+    }
+
+    /// Cyclone rates come out where the storms go: none in high latitudes, some in the
+    /// tropics; fast enough for ten years.
+    #[test]
+    fn cyclone_rates_follow_tracks() {
+        let atm = earthlike(6);
+        let start = std::time::Instant::now();
+        let rates = atm.cyclone_rates(10.0);
+        assert!(start.elapsed().as_secs_f64() < 10.0, "{:?}", start.elapsed());
+        assert_eq!(atm.at(&rates, 70.0, -60.0), 0.0);
+        let tropics: f64 = (-170..170).step_by(10).map(|lon| atm.at(&rates, 18.0, f64::from(lon))).sum();
+        assert!(tropics > 1.0, "{tropics}");
     }
 
     pub(crate) fn correlation(a: &[f64], b: &[f64]) -> f64 {

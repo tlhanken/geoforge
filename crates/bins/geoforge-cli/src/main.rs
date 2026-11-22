@@ -676,7 +676,13 @@ fn print_weather(f: &pipe::weather::Forecast) {
             d.high_c,
             d.wind_m_s,
             compass(d.wind_from_deg),
-            d.storm.as_ref().map_or_else(|| d.sky.to_string(), |name| format!("{} ({name}, {:.0} hPa)", d.sky, d.pressure_hpa))
+            {
+                let mut sky = d.storm.as_ref().map_or_else(|| d.sky.to_string(), |name| format!("{} ({name}, {:.0} hPa)", d.sky, d.pressure_hpa));
+                for e in d.events.iter().filter(|e| e.kind != "thunderstorm" || d.sky != "thunderstorm") {
+                    sky += &format!("; {}", e.what);
+                }
+                sky
+            }
         );
     }
 }

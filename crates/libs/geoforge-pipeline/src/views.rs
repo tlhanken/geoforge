@@ -160,13 +160,23 @@ pub struct Source<'a> {
     pub products: &'a Products,
     pub grid: &'a AnyGrid,
     pub body: &'a BodyContext,
+    /// The storm field, for the tropical cyclone map; without it the hazard layer's own
+    /// cyclone model is used.
+    pub storms: Option<&'a crate::storms::Atmosphere>,
     ground: std::cell::OnceCell<Option<Ground<'a>>>,
 }
 
 impl<'a> Source<'a> {
     #[must_use]
     pub fn new(products: &'a Products, grid: &'a AnyGrid, body: &'a BodyContext) -> Self {
-        Self { products, grid, body, ground: std::cell::OnceCell::new() }
+        Self { products, grid, body, storms: None, ground: std::cell::OnceCell::new() }
+    }
+
+    /// Count tropical cyclones from the storm field's tracks.
+    #[must_use]
+    pub fn with_storms(mut self, atm: &'a crate::storms::Atmosphere) -> Self {
+        self.storms = Some(atm);
+        self
     }
 
     fn sea_world(&self) -> bool {
@@ -214,7 +224,16 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
         }
         View::Hazard(h) => {
             let g = s.ground()?;
-            let lambda = hazards::rate(g, &hazards::Setting { products: s.products, aurora: aurora_of(s.body) }, h);
+            let lambda = match (h, s.storms) {
+                (Hazard::Cyclones, Some(atm)) => {
+                    let rates = atm.cyclone_rates(crate::storms::CYCLONE_YEARS);
+                    (0..g.len()).map(|c| {
+                        let ll = s.grid.center(c as geoforge_core::grid::Cell).to_lat_lon();
+                        atm.at(&rates, ll.lat_deg, ll.lon_deg)
+                    }).collect()
+                }
+                _ => hazards::rate(g, &hazards::Setting::new(s.products, aurora_of(s.body)), h),
+            };
             let m = h.measure();
             let meaning = match m {
                 Measure::Window(1.0) => format!("chance of {} in a 10,000 km² region in a year, 1 − e^(−λ)", h.event()),

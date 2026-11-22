@@ -23,12 +23,20 @@
 //!   (up to about one day-to-day spread), the rest of the spread staying local and random.
 //! - **Wind.** The prevailing wind between January's and July's by the season plus the
 //!   storms' winds, varying day to day.
+//! - **Phenomena.** Each hazard near the place (within 25 km) happens on a day with a
+//!   chance from its yearly rate in `place`, weighted toward the days that favour it and
+//!   normalised so the year's count is the rate: thunderstorms (thunder days from the
+//!   lightning tier) and tornadoes on warm days under fronts and warm sectors, floods and
+//!   landslides under heavy storm rain, blizzards on cold stormy days, wildfires on hot dry
+//!   windy days, dust storms on dry windy days, fog on calm days; earthquakes, eruptions,
+//!   tsunamis and auroras on any day. Tropical cyclones are the storm field's own.
 //!
 //! Draws are keyed by the day itself, and a month of spin-up runs before the window, so a
 //! date's weather does not depend on where the window starts (to within a thousandth of a
 //! degree, the anomaly's memory of the start).
 
 use crate::storms::{self, Atmosphere, Effect, StormKind};
+use geoforge_surface::hazards::Hazard;
 use crate::{PipelineError, Result};
 use geoforge_core::ephemeris::{self, Calendar, Equatorial};
 use geoforge_core::grid::Grid;
@@ -72,6 +80,52 @@ pub struct Day {
     pub storm: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub storm_kind: Option<StormKind>,
+    /// What else the day brings (thunderstorms, tornadoes, quakes, auroras …).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<Event>,
+}
+
+/// A phenomenon on a day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Event {
+    pub kind: &'static str,
+    pub what: &'static str,
+}
+
+/// Something a day can bring, at a rate a year near the place.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Phenomenon {
+    Thunderstorm,
+    Hazard(Hazard),
+}
+
+impl Phenomenon {
+    fn event(self) -> Event {
+        match self {
+            Self::Thunderstorm => Event { kind: "thunderstorm", what: "a thunderstorm" },
+            Self::Hazard(h) => Event { kind: h.slug(), what: h.event() },
+        }
+    }
+
+    /// How much a moment favours it, given the storms and the day's normal temperature.
+    fn likelihood(self, e: &Effect, normal_c: f64) -> f64 {
+        let warm = |base: f64| ((normal_c - base) / 10.0).max(0.0);
+        let wind = e.wind[0].hypot(e.wind[1]);
+        match self {
+            Self::Thunderstorm => warm(8.0) * (0.25 + 2.5 * e.rain),
+            Self::Hazard(h) => match h {
+                Hazard::Tornadoes => warm(12.0) * (0.05 + 3.0 * e.rain * (1.0 + e.warmth.max(0.0))),
+                Hazard::Floods | Hazard::Landslides => 0.05 + 3.0 * e.rain * e.rain,
+                Hazard::Wildfire => warm(5.0) * (1.0 - e.rain).powi(2) * (1.0 + wind / 10.0),
+                Hazard::Blizzards => ((2.0 - normal_c) / 5.0).max(0.0) * (0.05 + e.rain) * (1.0 + wind / 10.0),
+                Hazard::DustStorms => (1.0 - e.rain) * (1.0 + wind / 5.0),
+                Hazard::Fog => (1.0 - 0.7 * e.rain) / (1.0 + wind / 4.0),
+                // The storm field's own; never drawn here.
+                Hazard::Cyclones => 0.0,
+                Hazard::Earthquakes | Hazard::Tsunamis | Hazard::Volcanoes | Hazard::Auroras => 1.0,
+            },
+        }
+    }
 }
 
 /// The weather at a place over a run of days.
@@ -128,17 +182,35 @@ pub fn forecast(world: &World, lat: f64, lon: f64, from_day: f64, count: usize) 
     let year = calendar.year_days;
     let step_days = calendar.solar_day_h.map_or(1.0, |h| h / 24.0);
     let system = world.load_system()?;
-    let atm = Atmosphere::read(&p, &grid, &body, year, season_of(system.clone(), world.manifest.focus, &body, year), world.manifest.root_seed).ok_or_else(missing)?;
+    let atm = atmosphere(world, &p, &grid, &body)?;
+    let near = crate::place::hazards_near(world, lat, lon, NEAR_KM)?;
+    let rates: Vec<(Phenomenon, f64)> = std::iter::once((Phenomenon::Thunderstorm, near.thunder_days))
+        .chain(near.hazards.iter().filter_map(|h| Hazard::from_slug(h.hazard).map(|k| (Phenomenon::Hazard(k), h.per_year))))
+        .filter(|(p, r)| *r > 0.0 && *p != Phenomenon::Hazard(Hazard::Cyclones))
+        .collect();
     let to_day = from_day + count as f64 * step_days;
     let passing = atm.storms(from_day - step_days * SPIN_UP as f64, to_day);
     let place = Storminess::of(&atm, lat, lon, year);
     let storms_at = |t: f64| storms::effect(&passing, lat, lon, t, atm.radius_km, atm.omega);
     let seed = world.manifest.root_seed.child(b"weather").child_u64(b"cell", c as u64);
-    let mut days = simulate(&climate, season_of(system, world.manifest.focus, &body, year), year, step_days, from_day, count, seed, &storms_at, &place);
+    let mut days = simulate(&climate, season_of(system, world.manifest.focus, &body, year), year, step_days, from_day, count, seed, &storms_at, &place, &rates);
     for d in &mut days {
         (d.year, d.local_day) = calendar.date(d.day);
     }
     Ok(Forecast { lat, lon, at_sea, step_days, days })
+}
+
+/// Phenomena are counted within this distance of the place, km.
+pub const NEAR_KM: f64 = 25.0;
+
+/// The storm field of a world's climate.
+///
+/// # Errors
+/// If the climate is not generated yet.
+pub fn atmosphere(world: &World, p: &geoforge_core::product::Products, grid: &dyn geoforge_core::grid::Grid, body: &geoforge_core::BodyContext) -> Result<Atmosphere> {
+    let year = Calendar::new(body, &[]).year_days;
+    let season = season_of(world.load_system()?, world.manifest.focus, body, year);
+    Atmosphere::read(p, grid, body, year, season, world.manifest.root_seed).ok_or_else(|| PipelineError::Invalid("the climate is not generated yet: run generate".into()))
 }
 
 /// A storm on the weather map.
@@ -168,7 +240,7 @@ pub fn weather_map(world: &World, day: f64, width: u32, to: &std::path::Path) ->
     let year = Calendar::new(&body, &[]).year_days;
     let system = world.load_system()?;
     let season = season_of(system.clone(), world.manifest.focus, &body, year);
-    let atm = Atmosphere::read(&p, &grid, &body, year, season_of(system, world.manifest.focus, &body, year), world.manifest.root_seed).ok_or_else(missing)?;
+    let atm = atmosphere(world, &p, &grid, &body)?;
     let storms = atm.storms(day, day);
     // The season's pressure: January's and July's blended, a month behind the star.
     let source = crate::views::Source::new(&p, &grid, &body);
@@ -230,6 +302,8 @@ pub struct Storminess {
     mean_wet: f64,
     /// Mean warmth the storms bring.
     warmth: f64,
+    /// The storms' effects through the year: (Earth day, effect).
+    samples: Vec<(f64, Effect)>,
     /// Whether storms reach the place at all.
     stormy: bool,
 }
@@ -244,7 +318,7 @@ impl Storminess {
     #[must_use]
     pub fn calm() -> Self {
         let w = wetness(&Effect::default());
-        Self { wet: vec![w], mean_wet: w, warmth: 0.0, stormy: false }
+        Self { wet: vec![w], mean_wet: w, warmth: 0.0, stormy: false, samples: (0..24).map(|k| (f64::from(k) * 365.25 / 24.0, Effect::default())).collect() }
     }
 
     /// The chance of a wet day for a day whose normal wet share is `share`, under wetness `g`.
@@ -266,20 +340,22 @@ impl Storminess {
         let span = year.min(400.0);
         let reference = atm.storms(0.0, span);
         let n = 240;
-        let effects: Vec<Effect> = (0..n).map(|k| storms::effect(&reference, lat, lon, span * f64::from(k) / f64::from(n), atm.radius_km, atm.omega)).collect();
+        let times: Vec<f64> = (0..n).map(|k| span * f64::from(k) / f64::from(n)).collect();
+        let effects: Vec<Effect> = times.iter().map(|&t| storms::effect(&reference, lat, lon, t, atm.radius_km, atm.omega)).collect();
         let wet: Vec<f64> = effects.iter().map(wetness).collect();
         let mean_wet = wet.iter().sum::<f64>() / f64::from(n);
         let warmth = effects.iter().map(|e| e.warmth).sum::<f64>() / f64::from(n);
-        Self { wet, mean_wet, warmth, stormy: effects.iter().any(|e| e.rain > 0.05 || e.warmth.abs() > 0.05) }
+        let stormy = effects.iter().any(|e| e.rain > 0.05 || e.warmth.abs() > 0.05);
+        Self { wet, mean_wet, warmth, stormy, samples: times.into_iter().zip(effects).collect() }
     }
 }
 
 /// Draw `count` steps of `step_days` from `from_day` for `climate`, with `season(t)` the
 /// northern season (−1 to 1) on Earth day `t`, `year` the year in Earth days, `storms(t)`
-/// what the storms do here and `place` how stormy it is.
+/// what the storms do here, `place` how stormy it is and `rates` the phenomena near it a year.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_days: f64, from_day: f64, count: usize, seed: Seed, storms: &dyn Fn(f64) -> Effect, place: &Storminess) -> Vec<Day> {
+pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_days: f64, from_day: f64, count: usize, seed: Seed, storms: &dyn Fn(f64) -> Effect, place: &Storminess, rates: &[(Phenomenon, f64)]) -> Vec<Day> {
     let months = koppen::months(climate.mean_c, climate.range_c, climate.precipitation_mm, climate.warm_share);
     let lag = year / 12.0 * if climate.at_sea { 1.5 } else { 1.0 };
     let hemisphere = (climate.lat / 10.0).clamp(-1.0, 1.0);
@@ -296,6 +372,9 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
     let local = if place.stormy { 0.6 } else { 1.0 };
     let memory = TEMPERATURE_MEMORY.powf(step_days);
     let day_range = (9.0 + 9.0 * (-climate.precipitation_mm / 500.0).exp()) * if climate.at_sea { 0.25 } else { 1.0 } * step_days.sqrt().clamp(0.4, 3.0);
+    // Each phenomenon's chance on a step: its rate spread over the year, weighted by how much
+    // the moment favours it relative to the year's mean.
+    let mean_likelihood: Vec<f64> = rates.iter().map(|(p, _)| place.samples.iter().map(|(t, e)| p.likelihood(e, normal(*t).0)).sum::<f64>() / place.samples.len() as f64).collect();
     let first = (from_day / step_days).floor() as i64;
     let (mut anomaly, mut wet) = (0.0, false);
     let mut out = Vec::with_capacity(count);
@@ -342,6 +421,19 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
             _ if draw(b"cloud") < share => "cloudy",
             _ => "clear",
         };
+        let mut events = Vec::new();
+        for (k, (&(p, per_year), &mean)) in rates.iter().zip(&mean_likelihood).enumerate() {
+            // Rates are per year of Earth days, whatever the world's year.
+            let chance = if mean > 0.0 { per_year * step_days / crate::place::EARTH_YEAR_DAYS * p.likelihood(&e, normal_c) / mean } else { 0.0 };
+            if unit(seed.child_u64(b"event", k as u64).child_u64(b"step", n as u64)) < chance {
+                events.push(p.event());
+            }
+        }
+        if e.kind == Some(StormKind::TropicalCyclone) && e.rain > 0.3 {
+            events.push(Phenomenon::Hazard(Hazard::Cyclones).event());
+        }
+        let thunder = events.iter().any(|ev| ev.kind == "thunderstorm");
+        let sky = if thunder && wet && sky != "tropical cyclone" { "thunderstorm" } else { sky };
         let storm = e.storm.clone().filter(|_| e.rain > 0.3 || wind > 12.0);
         let storm_kind = storm.as_ref().and(e.kind);
         out.push(Day {
@@ -359,6 +451,7 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
             sky,
             storm,
             storm_kind,
+            events,
         });
     }
     out
@@ -380,7 +473,7 @@ mod tests {
     #[test]
     fn weather_adds_up_to_climate() {
         let c = temperate();
-        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(9), &|_| Effect::default(), &Storminess::calm());
+        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(9), &|_| Effect::default(), &Storminess::calm(), &[]);
         let n = days.len() as f64;
         let mean = days.iter().map(|d| d.mean_c).sum::<f64>() / n;
         let rain = days.iter().map(|d| d.precipitation_mm).sum::<f64>() / 10.0;
@@ -402,12 +495,12 @@ mod tests {
     #[test]
     fn a_date_has_one_weather() {
         let c = temperate();
-        let a = simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(3), &|_| Effect::default(), &Storminess::calm());
-        let b = simulate(&c, earth_season, 365.25, 1.0, 195.0, 15, Seed(3), &|_| Effect::default(), &Storminess::calm());
+        let a = simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(3), &|_| Effect::default(), &Storminess::calm(), &[]);
+        let b = simulate(&c, earth_season, 365.25, 1.0, 195.0, 15, Seed(3), &|_| Effect::default(), &Storminess::calm(), &[]);
         for (x, y) in a.iter().zip(&b[5..]) {
             assert!((x.mean_c - y.mean_c).abs() < 1e-3 && x.precipitation_mm == y.precipitation_mm && x.sky == y.sky, "{x:?} {y:?}");
         }
-        assert_ne!(a, simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(4), &|_| Effect::default(), &Storminess::calm()));
+        assert_ne!(a, simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(4), &|_| Effect::default(), &Storminess::calm(), &[]));
     }
 
     /// With storms passing, the years still add up to the climate, and two nearby places
@@ -420,7 +513,7 @@ mod tests {
         let run = |lat: f64, lon: f64, seed: u64| {
             let place = Storminess::of(&atm, lat, lon, 365.25);
             let at = |t: f64| storms::effect(&storms, lat, lon, t, atm.radius_km, atm.omega);
-            simulate(&Climate { lat, ..c }, earth_season, 365.25, 1.0, 0.0, 3653, Seed(seed), &at, &place)
+            simulate(&Climate { lat, ..c }, earth_season, 365.25, 1.0, 0.0, 3653, Seed(seed), &at, &place, &[])
         };
         let (a, near, far) = (run(50.0, -30.0, 1), run(50.5, -29.0, 2), run(50.0, 60.0, 3));
         let rain = a.iter().map(|d| d.precipitation_mm).sum::<f64>() / 10.0;
@@ -432,4 +525,31 @@ mod tests {
         assert!(near_r > 0.3 && far_r < 0.1, "near {near_r}, far {far_r}");
         assert!(a.iter().any(|d| d.storm.is_some()));
     }
+
+    /// Phenomena come at their yearly rates, on the days that favour them: thunder and
+    /// tornadoes in the warm season and under storms, blizzards in winter.
+    #[test]
+    fn phenomena_keep_their_rates() {
+        let atm = crate::storms::tests::earthlike(11);
+        let c = Climate { lat: 45.0, ..temperate() };
+        let storms = atm.storms(-20.0, 3653.0);
+        let place = Storminess::of(&atm, 45.0, -30.0, 365.25);
+        let at = |t: f64| storms::effect(&storms, 45.0, -30.0, t, atm.radius_km, atm.omega);
+        let rates = [(Phenomenon::Thunderstorm, 25.0), (Phenomenon::Hazard(Hazard::Tornadoes), 2.0), (Phenomenon::Hazard(Hazard::Blizzards), 4.0), (Phenomenon::Hazard(Hazard::Earthquakes), 1.0)];
+        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(2), &at, &place, &rates);
+        let count = |kind: &str, d: &[Day]| d.iter().filter(|x| x.events.iter().any(|e| e.kind == kind)).count() as f64;
+        for (kind, rate) in [("thunderstorm", 25.0), ("tornadoes", 2.0), ("blizzards", 4.0), ("earthquakes", 1.0)] {
+            let per_year = count(kind, &days) / 10.0;
+            assert!((per_year / rate - 1.0).abs() < 0.4, "{kind}: {per_year} a year against {rate}");
+        }
+        // Summer (days 60–150 from the March equinox) has most of the thunder, winter the blizzards.
+        let summer: Vec<Day> = days.iter().filter(|d| (60.0..150.0).contains(&d.day.rem_euclid(365.25))).cloned().collect();
+        assert!(count("thunderstorm", &summer) > 0.5 * count("thunderstorm", &days));
+        assert_eq!(count("blizzards", &summer), 0.0);
+        // Thunder comes with storms more than without.
+        let stormy = days.iter().filter(|d| d.storm.is_some()).count() as f64;
+        let thunder_stormy = days.iter().filter(|d| d.storm.is_some() && d.events.iter().any(|e| e.kind == "thunderstorm")).count() as f64;
+        assert!(thunder_stormy / stormy > count("thunderstorm", &days) / days.len() as f64);
+    }
 }
+

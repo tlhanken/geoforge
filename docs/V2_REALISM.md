@@ -380,7 +380,12 @@ per hemisphere drifting ~70° east over their lives (10–15 m/s), tropical cycl
 westward; storm rain at places 100 km apart correlates above 0.7 and 70° of longitude
 apart below 0.3; wet days at the near pair go together while the far pair's do not; ten
 years with storms still give the climate's rain within 15% and its mean within 0.8 K. A
-3000 m range across the westerlies stops deep lows crossing it (67 a year cross that
+Phenomena (`weather` test): over ten years at 45° with storms, thunder days, tornadoes,
+blizzard days and quakes come within 40% of their rates; most thunder falls in summer, no
+blizzards; thunder is likelier on stormy days. In a rainforest cell of Thumi IV, 40
+thunder days in its 168-day year (100 a year of Earth days).
+
+A 3000 m range across the westerlies stops deep lows crossing it (67 a year cross that
 stretch without it, none with it) and adds lows in its lee (13 against 10).
 
 Gaps: storms are drawn, not simulated: no blocking highs, no lows deepening on each other

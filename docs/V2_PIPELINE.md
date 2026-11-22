@@ -376,6 +376,17 @@ product's randomness. `seed <dir> <product>` prints it.
   local solar days. The storms passing raise the odds and amounts of rain, bring warm or
   cold air and add their winds, scaled by the place's own storminess over a year so the
   annual rain is unchanged; neighbours share the storms, so their weather goes together.
+  Each hazard within 25 km happens on a day with a chance from its yearly rate, weighted to
+  the days that favour it (thunder and tornadoes on warm days under fronts and warm sectors,
+  floods and landslides under heavy storm rain, blizzards on cold stormy days, wildfires on
+  hot dry windy days, dust on dry windy days, fog on calm days; quakes, eruptions,
+  tsunamis and auroras any day) and normalised so the year's count is the rate; tropical
+  cyclones are the storm field's own. `place` counts tropical cyclones from the same
+  storms' tracks over ten years, and the cyclone hazard map is their track density, so the
+  overview and the daily weather agree. Hazard rates are per year of Earth days.
+- **Derived cache** (`geoforge_pipeline::cache`): hazard rate fields are kept in
+  `cache/derived/` keyed by the body and every stored product's provenance, so a second
+  `weather` or `place` on a large grid takes seconds, not tens of seconds.
 - **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's
   dynamo lasts 10 Gyr·√M with plates, 1.5 Gyr·√M under a stagnant lid, 1 Gyr·√M under an
   episodic one (Mars's stopped ~4.1 Gyr ago); giants always have one. Surface field 30
