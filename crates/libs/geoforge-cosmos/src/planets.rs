@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(left.planets.len(), 2, "only planets beyond ~2 AU survive the giant phases");
         assert!((left.planets[0].a_au - 3.0 / wd.mass_solar).abs() < 1e-9, "orbits widen as the star loses mass");
         // Near the tip of the red giant branch, ~100 R☉: what orbits within 1.5 AU is gone.
-        let giant = evolve(1.0, 11.48, 0.0);
+        let giant = evolve(1.0, 11.398, 0.0);
         assert!(giant.radius_solar > 80.0, "{giant:?}");
         assert!(fate(&mut d, arch.clone(), &giant, giant.mass_solar, 1.0).planets.len() < arch.planets.len());
         let hole = evolve(40.0, 1.0, 0.0);

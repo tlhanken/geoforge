@@ -11,7 +11,7 @@
 //! Mass ratios are flat; orbits under 12 days are circular, wider ones evenly eccentric.
 
 use crate::draw::Draw;
-use crate::galaxy::{Galaxy, Imf, StarFormation};
+use crate::galaxy::{power_integral, Galaxy, Imf, StarFormation};
 use crate::stars::evolve;
 use geoforge_core::body::{GalacticSite, Star};
 use geoforge_core::seed::Seed;
@@ -127,15 +127,6 @@ fn draw_mass(d: &mut Draw, imf: &Imf) -> f64 {
         u -= w;
     }
     imf.breaks[imf.breaks.len() - 1]
-}
-
-/// ∫ m^(−α) dm from `lo` to `hi`.
-fn power_integral(lo: f64, hi: f64, alpha: f64) -> f64 {
-    if (alpha - 1.0).abs() < 1e-9 {
-        (hi / lo).ln()
-    } else {
-        (hi.powf(1.0 - alpha) - lo.powf(1.0 - alpha)) / (1.0 - alpha)
-    }
 }
 
 /// The mass at which ∫ m^(−α) from `lo` reaches fraction `v` of its total up to `hi`.

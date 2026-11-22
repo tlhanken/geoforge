@@ -14,7 +14,9 @@
 
 pub mod place;
 pub mod registry;
+pub mod sky;
 pub mod stats;
+pub mod weather;
 pub mod views;
 
 pub use registry::Implementation;

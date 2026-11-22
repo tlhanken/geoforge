@@ -9,7 +9,9 @@
 //! The main sequence lasts `10 Gyr · M/L` (the Sun: 10 Gyr; a 2 M☉ star: 1.25 Gyr; a red
 //! dwarf: longer than the universe is old), and the star brightens through it, from 0.72 of its
 //! mid-life luminosity to twice it (the Sun: 0.72 at birth, 1 now, 2 at the end). The giant
-//! phases take 15% as long again (10% for massive stars). Remnants then cool: white dwarfs by
+//! phases follow: the red giant branch takes 7% as long again, quickening toward its tip, then
+//! helium burns in the core for a fifth of the main-sequence life, at most 120 Myr (the red
+//! clump); massive stars spend 10% as long again as supergiants. Remnants then cool: white dwarfs by
 //! Mestel's law, with masses from the initial–final mass relation of Cummings et al. (2018).
 //!
 //! Brown dwarfs (under 0.08 M☉) are not stars here, and binary evolution (mass transfer,
@@ -22,9 +24,11 @@ use geoforge_core::derived::{effective_temperature_k, main_sequence_luminosity, 
 pub const WHITE_DWARF_LIMIT: f64 = 8.0;
 /// Stars born above this mass (M☉) end as black holes; between the limits, neutron stars.
 pub const BLACK_HOLE_LIMIT: f64 = 20.0;
-/// End of the subgiant phase and of the red giant phases, in main-sequence lifetimes.
+/// End of the subgiant phase and of the red giant branch, in main-sequence lifetimes.
 const SUBGIANT_END: f64 = 1.07;
-const GIANT_END: f64 = 1.15;
+const RED_GIANT_END: f64 = 1.14;
+/// How the red giant branch quickens: time per factor of luminosity ∝ L^−CLIMB.
+const CLIMB: f64 = 0.85;
 /// End of the supergiant phase of a massive star, in main-sequence lifetimes.
 const SUPERGIANT_END: f64 = 1.10;
 /// Neutron star mass (M☉) and radius (km).
@@ -47,8 +51,19 @@ pub fn main_sequence_lifetime_gyr(initial_mass: f64) -> f64 {
 /// When the star leaves the stage it is in now and enters the next, Gyr after its birth.
 #[must_use]
 pub fn end_of_life_gyr(initial_mass: f64) -> f64 {
-    let end = if initial_mass < WHITE_DWARF_LIMIT { GIANT_END } else { SUPERGIANT_END };
-    end * main_sequence_lifetime_gyr(initial_mass)
+    let t_ms = main_sequence_lifetime_gyr(initial_mass);
+    if initial_mass < WHITE_DWARF_LIMIT {
+        RED_GIANT_END * t_ms + helium_burning_gyr(t_ms)
+    } else {
+        SUPERGIANT_END * t_ms
+    }
+}
+
+/// How long a giant burns helium in its core, Gyr: a fifth of its main-sequence life, but no
+/// more than 120 Myr for stars whose cores ignite in a flash at a fixed mass (Schaller et
+/// al. 1992: 0.1 Gyr for the Sun, 0.25 Gyr for 2 M☉, 0.08 Gyr for 3 M☉).
+fn helium_burning_gyr(t_ms: f64) -> f64 {
+    (0.2 * t_ms).min(0.12)
 }
 
 /// Luminosity through the main sequence relative to the mass–luminosity relation's value,
@@ -95,18 +110,29 @@ pub fn evolve(initial_mass: f64, age_gyr: f64, metallicity_dex: f64) -> Star {
             let t = t_end + (t_end.min(5100.0) - t_end) * x;
             return make(StellarStage::Subgiant, m0, l, with_temperature(l, t));
         }
-        if f < GIANT_END {
-            // Up the giant branches: as much time per factor of luminosity, so most giants are
-            // the fainter ones; heavier stars start brighter and climb less far.
-            let x = (f - SUBGIANT_END) / (GIANT_END - SUBGIANT_END);
+        if f < RED_GIANT_END {
+            // Up the red giant branch, quickening as it brightens: the time spent per factor
+            // of luminosity falls as L^−0.85 (the core grows at a rate ∝ L, and L ∝ M_core^7),
+            // so most red giants are near its foot. Heavier stars start brighter and climb
+            // less far; the tip is 3600 K.
+            let y = (f - SUBGIANT_END) / (RED_GIANT_END - SUBGIANT_END);
             let base = (3.0 * l_end).max(10.0);
             let span = (2.2 - 0.4 * m0.log2().max(0.0)).clamp(1.0, 2.2);
-            let l = base * 10f64.powf(span * x);
-            let t = 5000.0 - 1700.0 * x;
-            return make(StellarStage::Giant, m0 * (1.0 - 0.2 * x), l, with_temperature(l, t));
+            let top = 10f64.powf(span);
+            let l = base * (1.0 - y * (1.0 - top.powf(-CLIMB))).powf(-1.0 / CLIMB);
+            let t = 5000.0 - 1400.0 * (l / base).log10() / span;
+            return make(StellarStage::Giant, m0 * (1.0 - 0.2 * y), l, with_temperature(l, t));
+        }
+        let helium_end = RED_GIANT_END * t_ms + helium_burning_gyr(t_ms);
+        if age_gyr < helium_end {
+            // Burning helium in the core: the red clump, 50 L☉ and 4800 K for Sun-like stars;
+            // heavier stars brighter and warmer (Capella's pair: 79 and 73 L☉, 4970 and 5730 K).
+            let l = (1.5 * l_end).max(50.0);
+            let t = (4800.0 + 400.0 * m0.log2().max(0.0)).min(5600.0);
+            return make(StellarStage::Giant, 0.8 * m0, l, with_temperature(l, t));
         }
         let mass = white_dwarf_mass(m0);
-        let cooling = (age_gyr - GIANT_END * t_ms).max(1e-3);
+        let cooling = (age_gyr - helium_end).max(1e-3);
         return make(StellarStage::WhiteDwarf, mass, white_dwarf_luminosity(mass, cooling), white_dwarf_radius(mass));
     }
     if f < SUPERGIANT_END {
@@ -191,7 +217,8 @@ fn mk_letter(teff: f64) -> (&'static str, u32) {
         t if t >= 3_700.0 => ("K", 3_700.0, 5_200.0),
         _ => ("M", 2_400.0, 3_700.0),
     };
-    (letter, ((hi - teff) / (hi - lo) * 10.0).clamp(0.0, 9.0) as u32)
+    // O2 is the earliest type in use.
+    (letter, ((hi - teff) / (hi - lo) * 10.0).clamp(if letter == "O" { 2.0 } else { 0.0 }, 9.0) as u32)
 }
 
 #[cfg(test)]

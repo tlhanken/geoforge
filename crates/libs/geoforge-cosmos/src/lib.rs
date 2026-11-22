@@ -17,6 +17,7 @@
 //! | `planets` | planets for any star at birth, and what survives the star's death |
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
+//! | [`sky`] | the naked-eye stars around a system and its galaxy's glow |
 //! | [`system`] | the habitable recipe's orbital tree: star, planets, belts, moons |
 //! | [`worlds`] | what each body is made of: shells, air, water, regime; the CO₂ thermostat |
 //! | [`context`] | the handoff for a body, belt members on demand, lookup by name |
@@ -30,6 +31,7 @@ pub mod galactic;
 pub mod galaxy;
 mod planets;
 pub mod population;
+pub mod sky;
 pub mod stars;
 pub mod system;
 pub mod worlds;

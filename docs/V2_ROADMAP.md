@@ -233,28 +233,35 @@ Also done: the `positions` command and export (every star, planet and moon's pla
 date, by Kepler orbits), and close binaries now share one orbit about their barycentre
 (each star had drawn its own tilt and phase).
 
-## 6. Sky, calendar and almanac — calendar done; the rest next
+## 6. Sky, calendar and almanac — done; refinements open
 
-Done: the focus's solar day, year and synodic months (`show`), its local date for any day
-and its moons' phases (`positions`). Next, for any date:
+Done: the focus's solar day, year and synodic months (`show`), its local date and moons'
+phases (`positions`), and for any date (`sky`, `weather`):
 
-- the star and moons in the sky: angular sizes, phases, eclipse type (total, annular,
-  none), **eclipses** (new or full moon near a node, with the nodes precessing);
-- sunrise, sunset and day length by place; seasons; tides;
-- a **star map**: the stellar neighbourhood drawn from the same galaxy population
-  (~0.1 stars per cubic parsec near the Sun), apparent magnitudes and colours,
-  constellations, the galaxy's band; a check that no supernova progenitor lies within
-  ~10 pc;
-- **weather on that day** at a place: a seeded weather generator (wet/dry spells,
-  temperature anomalies, storms) consistent with the climate's means and seasons;
-- natural phenomena on that date: cyclone season, monsoon onset, auroras, meteor showers.
+- its equatorial frame (the present is its northern spring equinox), so the star's
+  declination through the year drives the seasons, eccentric orbits included;
+- **eclipses** from the ephemeris: solar (total, annular, partial) and lunar, checked on
+  Sun–Earth–Moon (2.3 solar and 1.4 lunar a year against NASA's 2.38 and 1.45);
+- a **star map**: the stellar neighbourhood drawn from the same galaxy population at the
+  system's radius, apparent magnitudes and colours, the galaxy's band with a dust lane; a
+  chart and a catalogue; the system's stars, planets and moons on the date;
+- **weather on that day** at a place: seeded, adding back up to the climate's means,
+  rain and seasons.
+
+Open: constellations (named asterisms from the brightest stars); sunrise, sunset and day
+length by place; tides by date; the Moon's nodal precession (eclipse seasons drift);
+seasonal phenomena on a date (cyclone season, monsoon onset, meteor showers); a check
+that no supernova progenitor lies within ~10 pc; the Gould Belt (the Sun's sky has 9,110
+naked-eye stars, a smooth disk gives ~6,500: its young B and A stars are a local
+excess); proper motions.
 
 Artifexian (Log 6): tides scale as the moon's mass over its distance cubed, plus the
 star's (spring and neap tides). The calendar comes from the year (Kepler), the day, and the
 synodic month, 1/P_syn = 1/P_orbit − 1/P_year. His neighbourhood (Log 3) is a 12-light-year
 sphere at 0.004 stars per cubic light year (34 stars, 20 systems), with Raghavan et al.
 (2010)'s multiplicity for Sun-like stars (56% single, 33% binary, 8% triple, 3% more). We
-already draw multiplicity by star mass, which matters because red dwarfs are mostly single.
+draw 0.09 stars per cubic parsec (0.0026 per cubic light year), the RECONS 10-pc census of
+stars and white dwarfs.
 
 ## 7. Oceans — mostly done
 

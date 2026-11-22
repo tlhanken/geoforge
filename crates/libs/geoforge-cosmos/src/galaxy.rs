@@ -34,6 +34,32 @@ impl Imf {
     pub fn kroupa() -> Self {
         Self { breaks: vec![0.08, 0.5, 150.0], slopes: vec![1.3, 2.3] }
     }
+
+    /// Probability density of initial mass `m` (per M☉), zero outside the breaks.
+    #[must_use]
+    pub fn density(&self, m: f64) -> f64 {
+        let (mut k, mut total, mut at) = (1.0, 0.0, 0.0);
+        for (i, &alpha) in self.slopes.iter().enumerate() {
+            if i > 0 {
+                k *= self.breaks[i].powf(alpha - self.slopes[i - 1]);
+            }
+            let (lo, hi) = (self.breaks[i], self.breaks[i + 1]);
+            total += k * power_integral(lo, hi, alpha);
+            if (lo..=hi).contains(&m) && at == 0.0 {
+                at = k * m.powf(-alpha);
+            }
+        }
+        at / total
+    }
+}
+
+/// ∫ m^(−α) dm from `lo` to `hi`.
+pub(crate) fn power_integral(lo: f64, hi: f64, alpha: f64) -> f64 {
+    if (alpha - 1.0).abs() < 1e-9 {
+        (hi / lo).ln()
+    } else {
+        (hi.powf(1.0 - alpha) - lo.powf(1.0 - alpha)) / (1.0 - alpha)
+    }
 }
 
 /// When stars were born.
@@ -47,6 +73,27 @@ pub struct StarFormation {
     /// Share of all stars born in a recent burst, and the burst's length, Gyr.
     pub burst_share: f64,
     pub burst_gyr: f64,
+}
+
+impl StarFormation {
+    /// Probability density of a star's birth `lookback_gyr` ago (per Gyr): the burst's share
+    /// spread evenly over it, the rest following the rate's decline.
+    #[must_use]
+    pub fn lookback_density(&self, lookback_gyr: f64) -> f64 {
+        if !(0.0..=self.age_gyr).contains(&lookback_gyr) {
+            return 0.0;
+        }
+        let burst = if lookback_gyr < self.burst_gyr { self.burst_share / self.burst_gyr } else { 0.0 };
+        let steady = match self.decline_gyr {
+            // Rate ∝ e^(−t/τ) since the first stars: lookback density ∝ e^(lookback/τ).
+            Some(tau) if tau.abs() > 1e-6 => {
+                let k = (self.age_gyr / tau).clamp(-700.0, 700.0);
+                (lookback_gyr / tau).clamp(-700.0, 700.0).exp() / (tau * k.exp_m1())
+            }
+            _ => 1.0 / self.age_gyr,
+        };
+        burst + (1.0 - self.burst_share) * steady
+    }
 }
 
 /// How metal-rich a star is born: `[Fe/H] = at_reference + gradient·(R − R_ref) +
@@ -160,6 +207,27 @@ impl GalaxyPreset {
                 metals: Metallicity { at_reference_dex: 0.1, ..mw.metals.clone() },
                 ..mw
             },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Both densities integrate to one.
+    #[test]
+    fn densities_are_normalised() {
+        let imf = Imf::kroupa();
+        let n = 20_000;
+        let (lo, hi) = (0.08f64.ln(), 150f64.ln());
+        let step = (hi - lo) / f64::from(n);
+        let mass: f64 = (0..n).map(|i| (lo + (f64::from(i) + 0.5) * step).exp()).map(|m| imf.density(m) * m * step).sum();
+        assert!((mass - 1.0).abs() < 1e-3, "{mass}");
+        for preset in GalaxyPreset::ALL {
+            let h = preset.galaxy().history;
+            let age: f64 = (0..n).map(|i| h.lookback_density((f64::from(i) + 0.5) / f64::from(n) * h.age_gyr) * h.age_gyr / f64::from(n)).sum();
+            assert!((age - 1.0).abs() < 1e-2, "{} {age}", preset.name());
         }
     }
 }

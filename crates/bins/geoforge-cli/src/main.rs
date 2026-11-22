@@ -131,6 +131,35 @@ enum Cmd {
         #[arg(long)]
         to: Option<PathBuf>,
     },
+    /// The focus's night sky on a day: its brightest stars, the planets and moons in view,
+    /// and the eclipses of the year to come; with `--to`, a star chart (sky.png) and a
+    /// catalogue of every naked-eye star (sky.json).
+    Sky {
+        dir: PathBuf,
+        #[arg(long, default_value_t = 0.0)]
+        day: f64,
+        #[arg(long)]
+        to: Option<PathBuf>,
+        /// Chart width in pixels (half as tall).
+        #[arg(long, default_value_t = 2048)]
+        width: u32,
+    },
+    /// Day-by-day weather at a place from a day (Earth days from the present): drawn from
+    /// its climate and the season of the date, the same every time for the same date.
+    Weather {
+        dir: PathBuf,
+        #[arg(long, allow_hyphen_values = true)]
+        lat: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        lon: f64,
+        #[arg(long, default_value_t = 0.0)]
+        day: f64,
+        /// How many days (local days on a world with days).
+        #[arg(long, default_value_t = 14)]
+        days: usize,
+        #[arg(long)]
+        json: bool,
+    },
     /// Print the seed a product (or a product's entity) is generated from.
     Seed {
         dir: PathBuf,
@@ -325,6 +354,15 @@ fn run(cli: Cli) -> R<()> {
         }
         Cmd::Show { dir } => show(&World::open(&dir)?)?,
         Cmd::Positions { dir, day, to } => positions(&World::open(&dir)?, day, to.as_deref())?,
+        Cmd::Sky { dir, day, to, width } => sky(&World::open(&dir)?, day, to.as_deref(), width)?,
+        Cmd::Weather { dir, lat, lon, day, days, json } => {
+            let f = pipe::weather::forecast(&World::open(&dir)?, lat, lon, day, days)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&f)?);
+            } else {
+                print_weather(&f);
+            }
+        }
         Cmd::Place { dir, lat, lon, radius_km, from_day, days, json } => {
             let w = World::open(&dir)?;
             let days = days.unwrap_or_else(|| w.load_body().map_or(365.25, |b| b.irradiance.year_days));
@@ -581,6 +619,103 @@ fn positions(w: &World, day: f64, to: Option<&Path>) -> R<()> {
         let doc = serde_json::json!({ "day": day, "focus": body.name, "date": { "year": year, "day": local, "unit": unit }, "moons": lit, "bodies": bodies });
         std::fs::write(path, serde_json::to_string_pretty(&doc)?)?;
         println!("written to {}", path.display());
+    }
+    Ok(())
+}
+
+fn print_weather(f: &pipe::weather::Forecast) {
+    let step = if (f.step_days - 1.0).abs() < 1e-9 { "Earth day".to_string() } else { format!("local day of {:.1} h", 24.0 * f.step_days) };
+    println!("Weather at {:.2}°, {:.2}°{}, one row per {step}", f.lat, f.lon, if f.at_sea { " (at sea)" } else { "" });
+    println!("  {:>9} {:>12} {:>6} {:>6} {:>6} {:>8} {:>10}  sky", "day", "date", "low", "mean", "high", "precip", "wind");
+    for d in &f.days {
+        let precip = if d.precipitation_mm > 0.0 { format!("{:.1} mm", d.precipitation_mm) } else { "—".into() };
+        println!(
+            "  {:>9.2} {:>12} {:>6.1} {:>6.1} {:>6.1} {precip:>8} {:>4.0} m/s {:>3}  {}",
+            d.day,
+            format!("y{} d{:.0}", d.year, (d.local_day + 1e-6).floor()),
+            d.low_c,
+            d.mean_c,
+            d.high_c,
+            d.wind_m_s,
+            compass(d.wind_from_deg),
+            d.sky
+        );
+    }
+}
+
+/// "NNE" for 22.5°.
+fn compass(deg: f64) -> &'static str {
+    const POINTS: [&str; 16] = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+    POINTS[((deg.rem_euclid(360.0) / 22.5).round() as usize) % 16]
+}
+
+/// The sky on `day`, printed, and with `to` charted and catalogued.
+fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
+    use pipe::sky::Kind;
+    let sys = w.load_system()?.ok_or("this world has no solar system (an archetype or hand-made body)")?;
+    let body = w.load_body()?;
+    let calendar = calendar_of(&body);
+    let s = pipe::sky::sky(&sys, w.manifest.focus, day, calendar.year_days)?;
+    let (year, local) = calendar.date(day);
+    println!("The sky of {} on day {day} (year {year}, day {local:.1}): {} naked-eye stars; {} {:.1} kpc from its centre", body.name, s.stars.len(), s.galaxy, s.radius_kpc);
+    let radec = |o: &pipe::sky::Object| format!("RA {:>5.1}° Dec {:>+5.1}°", o.ra_deg, o.dec_deg);
+    println!("Brightest stars:");
+    for o in s.stars.iter().take(12) {
+        let name = o.name.clone().unwrap_or_default();
+        println!("  {name:<12} {:>5.2}  {:<7} {:>6.0} ly  {}", o.v, o.spectral_class.as_deref().unwrap_or(""), o.distance, radec(o));
+    }
+    println!("The system:");
+    for o in &s.bodies {
+        let name = o.name.clone().unwrap_or_default();
+        let kind = match o.kind {
+            Kind::Sun => "star",
+            Kind::Planet => "planet",
+            Kind::Moon => "moon",
+            Kind::Star => "",
+        };
+        let seen = match (o.kind, o.elongation_deg) {
+            (Kind::Sun, None) => "the sun".to_string(),
+            _ if o.v > geoforge_cosmos::sky::NAKED_EYE => "too faint".to_string(),
+            _ if !o.visible() => "lost in the glare".to_string(),
+            _ => "in view at night".to_string(),
+        };
+        let elong = o.elongation_deg.map_or(String::new(), |e| format!(", {e:.0}° from the sun"));
+        let lit = o.lit.map_or(String::new(), |l| format!(", {:.0}% lit", 100.0 * l));
+        println!("  {name:<12} {kind:<6} {:>7.2}  {}{elong}{lit}: {seen}", o.v, radec(o));
+    }
+    if s.eclipses.is_empty() {
+        println!("No eclipses in the year from day {day}.");
+    } else {
+        println!("Eclipses in the year from day {day}:");
+        for e in &s.eclipses {
+            let (y, d) = calendar.date(e.day);
+            println!(
+                "  day {:>8.2} (year {y}, day {d:.1}): {:?} {:?} eclipse of {} by {}, magnitude {:.2}",
+                e.day,
+                e.coverage,
+                e.kind,
+                if e.kind == geoforge_core::ephemeris::EclipseKind::Solar { &e.star } else { &e.body },
+                if e.kind == geoforge_core::ephemeris::EclipseKind::Solar { &e.body } else { &body.name },
+                e.magnitude
+            );
+        }
+    }
+    if let Some(dir) = to {
+        std::fs::create_dir_all(dir)?;
+        let (gw, gh) = (360, 180);
+        let glow = s.glow(gw, gh);
+        let points: Vec<geoforge_store::render::SkyPoint> = s
+            .stars
+            .iter()
+            .chain(s.bodies.iter().filter(|b| b.v <= geoforge_cosmos::sky::NAKED_EYE))
+            .map(|o| geoforge_store::render::SkyPoint { ra_deg: o.ra_deg, dec_deg: o.dec_deg, v: o.v, temperature_k: o.temperature_k, ring: matches!(o.kind, Kind::Planet | Kind::Moon) })
+            .collect();
+        let img = geoforge_store::render::render_sky(width, &glow, gw, &points, &s.ecliptic);
+        let chart = dir.join("sky.png");
+        img.save(&chart)?;
+        let json = dir.join("sky.json");
+        std::fs::write(&json, serde_json::to_string_pretty(&s)?)?;
+        println!("written {} and {}", chart.display(), json.display());
     }
     Ok(())
 }

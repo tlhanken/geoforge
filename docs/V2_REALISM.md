@@ -350,6 +350,36 @@ inflates the real one to 50–100); ice giants multipolar and steeply tilted. Mi
 weak field, Ganymede's dynamo, Saturn's weakness for its mass, and moons inside a giant's
 magnetosphere.
 
+### Sky and eclipses
+
+- Eclipses (`ephemeris` tests): Sun, Earth and Moon on their real orbits over 30 years give
+  2.3 solar and 1.4 lunar (umbral) eclipses a year, against 2.38 and 1.45 in NASA's
+  five-millennium catalogues, with total, annular and partial solar eclipses and total
+  lunar ones; solar magnitudes ≥ 1 for totals and 0.9–1 for annulars. The Sun's declination
+  reaches +23.44° 93 days after the March equinox and −23.44° in December.
+- Sky (`sky` tests): the Sun at −26.75, Jupiter at opposition −2.7 (observed −2.7), the
+  full Moon −13.0 (observed −12.7: moons get albedo 0.15 against the Moon's 0.12, and there
+  is no opposition surge). Drawn around a
+  Milky Way system at the Sun's radius: ~6,400 naked-eye stars (the Sun's sky: 9,110 in the
+  Bright Star Catalogue) and about 30 brighter than magnitude 1.5 (22). K giants are the most
+  common naked-eye stars, as in the catalogue; young B and A stars are too few, because the
+  Sun sits in the Gould Belt's local excess of them, which a smooth disk lacks. The
+  galaxy's band is 3–4 times the pole's brightness with a dust lane along it, brightest
+  toward the centre.
+- A system 1.7 kpc from the centre sees ~78,000 naked-eye stars (12 times the density).
+
+### Weather
+
+`weather` tests: ten years drawn for a temperate climate (10 °C, 20 K range, 800 mm, 60% in
+the warm half) come back within 0.6 K of the mean and 10% of the rain, with wet days 25–50%
+of days, July 15–21 K warmer than January, snow only in winter, and westerlies from the
+west. A date's weather is the same whatever window it is asked in.
+
+Gaps: no fronts or storms that move across the map (each place is drawn alone, so
+neighbours' weather is unrelated); no droughts or wet years beyond the daily chain; the
+anomaly's spread does not change with the season; tropical cyclones are not in the daily
+weather (they are in `place`'s hazards).
+
 ### Star systems
 
 `geoforge-cosmos`'s unit tests check systems drawn from the Milky Way model against the
@@ -370,6 +400,10 @@ Galaxy's census (`census` prints the same numbers for any galaxy and range of se
 
 Their gaps:
 
+- Giants: the red giant branch quickens toward its tip (time per factor of luminosity
+  ∝ L^−0.85), then helium burns in the core (the red clump: 50 L☉, 4800 K for Sun-like
+  stars) for a fifth of the main sequence, at most 120 Myr. No asymptotic giant branch,
+  blue loops or horizontal-branch colours.
 - No brown dwarfs, and no binary evolution: mass transfer, mergers and X-ray binaries are
   missing, and a supernova that blows off half a pair's mass always unbinds it (in fact
   ~8% of black holes keep a companion).

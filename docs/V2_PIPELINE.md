@@ -57,6 +57,8 @@ Other starting points:
 | `show <dir>` | The solar system (each body with its regime, air and water) and the focus: circulation, magnetic field, breathability, tides, calendar |
 | `place <dir> --lat L --lon L [--radius-km 100] [--from-day D] [--days N] [--json]` | What is at a place: climate, soil, timber, deposits likely within reach and how many a local map holds, the chance of each hazard over the days (default one local year) |
 | `positions <dir> [--day T] [--to FILE.json]` | Where every star, planet and moon is T Earth days from the present (Kepler orbits), the focus's local date, and how lit its moons are |
+| `sky <dir> [--day T] [--to DIR] [--width 2048]` | The focus's night sky on day T: brightest stars, the system's stars, planets and moons (magnitude, elongation, phase, in view or not) and the eclipses of the year to come; with `--to`, a star chart `sky.png` and a catalogue of every naked-eye star `sky.json` |
+| `weather <dir> --lat L --lon L [--day T] [--days 14] [--json]` | Day-by-day weather at a place from day T: low, mean and high, rain or snow, wind and sky, drawn from its climate and the season of the date (the same every time) |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
 | `census [--galaxy NAME] [--count N] [--from SEED]` | Draw many systems: kinds of star, planets, wet worlds, example seeds |
@@ -309,7 +311,31 @@ product's randomness. `seed <dir> <product>` prints it.
   orbit about its parent from its elements (no mutual perturbations); a pair's stars turn
   about their barycentre, opposite each other. Solar day 1/(1/spin − 1/year) (+ for a
   retrograde spinner: Venus 116.75 days), none for a world locked to its star; months are
-  synodic, 1/(1/orbit − 1/year).
+  synodic, 1/(1/orbit − 1/year). The present is the focus's northern spring equinox: its
+  pole leans by its obliquity from its orbit's normal, away from its motion, which fixes its
+  right ascension and declination and the star's declination through the year (the
+  seasons, eccentric orbits included).
+- **Eclipses** (`ephemeris::eclipses`): each moon (and, for a moon, its planet) stepped
+  against each star from the world's centre and refined at closest approach. A solar
+  eclipse is seen somewhere when the discs overlap within the parallax of the world's own
+  radius; total, annular or partial by the discs' sizes; lunar when the moon enters the
+  world's umbra. Orbits are fixed, so eclipse seasons do not drift (the Moon's nodes turn
+  in 18.6 years).
+- **Sky** (`geoforge_cosmos::sky`, `geoforge_pipeline::sky`, derived): the naked-eye stars
+  around the system drawn from its galaxy's population at its radius (0.09 stars pc⁻³ at
+  the Sun's, thinning outward with the disk; scale height 50 pc for young stars to 300 pc
+  for old; dust 1 mag/kpc; unresolved companions add their light), by importance sampling
+  kinds of star rather than drawing every star. Visual magnitudes from luminosity with
+  Torres (2010)'s bolometric corrections; the galaxy's glow integrated along each line of
+  sight through the disk and a thinner dust layer. The system's own stars, planets
+  (geometric albedos by class, Lambert phases) and moons on the date; a planet within 15°
+  of the star is lost in its glare.
+- **Weather** (`geoforge_pipeline::weather`, derived): the season from the star's
+  declination, lagging a month (1.5 at sea); the day's normal from the climate's rebuilt
+  months; an AR(1) temperature anomaly (0.7 a day, 1–5 K by continentality); wet days by a
+  two-state Markov chain (wet share r/(r + 4 mm), persistence 0.35) with exponential
+  amounts; snow below 0.5 °C; wind between January's and July's, Rayleigh speeds. Steps are
+  local solar days.
 - **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's
   dynamo lasts 10 Gyr·√M with plates, 1.5 Gyr·√M under a stagnant lid, 1 Gyr·√M under an
   episodic one (Mars's stopped ~4.1 Gyr ago); giants always have one. Surface field 30

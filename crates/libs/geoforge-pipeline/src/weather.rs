@@ -1,0 +1,240 @@
+//! Weather day by day at a place: drawn, seeded, from its climate and the season of the
+//! date, so that over the years it adds up to the climate the layers hold.
+//!
+//! - **Season.** The star's declination as the ephemeris has it, as a share of its yearly
+//!   swing, lagging a month behind over land and a month and a half over sea: 1 at the
+//!   height of summer, −1 in winter (the hemisphere's own). The day's normal temperature and
+//!   rain are the climate's month for that point of the season, as the Köppen view rebuilds
+//!   them (the warm half-year's share of rain kept).
+//! - **Temperature.** The normal plus an anomaly that carries from day to day (lag-one
+//!   correlation 0.7 a day, as for daily means at mid-latitudes; Wilks & Wilby 1999), its
+//!   spread growing with continentality: 1 K where the seasons are flat, 5 K in a
+//!   continental interior. The daily range is 9 K in wet climates to 18 K in deserts (rainforest
+//!   8–9 K, temperate 8–12 K, deserts 15–20 K), a quarter of that over open sea, 70% on
+//!   rainy days, scaled by the square root of the day's length.
+//! - **Rain.** Wet days follow a two-state Markov chain (Richardson 1981) whose wet share
+//!   comes from the day's normal rain, r/(r + 4 mm) (0.4 for 3 mm a day; Geng et al. 1986
+//!   give 0.3–0.5 for temperate climates), with a lag-one persistence of 0.35; a wet day's
+//!   amount is exponential about r divided by that share. Below 0.5 °C it falls as snow.
+//! - **Wind.** The prevailing wind between January's and July's by the season, its speed
+//!   varying day to day as a Rayleigh distribution (Weibull k = 2) and its bearing by 40°.
+//!
+//! Draws are keyed by the day itself, and a month of spin-up runs before the window, so a
+//! date's weather does not depend on where the window starts (to within a thousandth of a
+//! degree, the anomaly's memory of the start).
+
+use crate::{PipelineError, Result};
+use geoforge_core::ephemeris::{self, Calendar, Equatorial};
+use geoforge_core::grid::Grid;
+use geoforge_core::seed::{unit, Seed};
+use geoforge_core::UnitVec3;
+use geoforge_store::World;
+use geoforge_surface::koppen;
+use serde::Serialize;
+
+/// Lag-one correlation of daily mean temperature anomalies, per Earth day.
+const TEMPERATURE_MEMORY: f64 = 0.7;
+/// Lag-one correlation of wet and dry days.
+const RAIN_PERSISTENCE: f64 = 0.35;
+/// Daily rain at which half of days are wet, mm.
+const HALF_WET_MM: f64 = 4.0;
+/// Steps simulated before the window.
+const SPIN_UP: i64 = 30;
+
+/// One day's weather.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Day {
+    /// Earth days from the present, at the step's start.
+    pub day: f64,
+    /// The local date: year and day of the year.
+    pub year: i64,
+    pub local_day: f64,
+    pub mean_c: f64,
+    pub high_c: f64,
+    pub low_c: f64,
+    /// Rain or the water of snow, mm.
+    pub precipitation_mm: f64,
+    pub snow: bool,
+    pub wind_m_s: f64,
+    /// The bearing the wind blows from, degrees.
+    pub wind_from_deg: f64,
+    pub sky: &'static str,
+}
+
+/// The weather at a place over a run of days.
+#[derive(Debug, Clone, Serialize)]
+pub struct Forecast {
+    pub lat: f64,
+    pub lon: f64,
+    pub at_sea: bool,
+    /// Earth days per step: the solar day, or one Earth day on a world without days.
+    pub step_days: f64,
+    pub days: Vec<Day>,
+}
+
+/// A place's climate, as the weather is drawn from it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Climate {
+    /// Annual mean, °C; warmest-to-coldest month, °C; annual rain, mm; and its share in the
+    /// warm half-year.
+    pub mean_c: f64,
+    pub range_c: f64,
+    pub precipitation_mm: f64,
+    pub warm_share: f64,
+    pub at_sea: bool,
+    /// Prevailing winds in January and July (east, north), m/s.
+    pub wind_jan: [f64; 2],
+    pub wind_jul: [f64; 2],
+    /// Latitude, degrees: which hemisphere's season applies.
+    pub lat: f64,
+}
+
+/// `count` days of weather at (`lat`, `lon`) from `from_day` (Earth days from the present).
+///
+/// # Errors
+/// If the world's climate is not generated yet.
+pub fn forecast(world: &World, lat: f64, lon: f64, from_day: f64, count: usize) -> Result<Forecast> {
+    let body = world.load_body()?;
+    let grid = world.manifest.grid.build()?;
+    let p = crate::load_all(world)?;
+    let missing = || PipelineError::Invalid("the climate is not generated yet: run generate".into());
+    let c = grid.locate(UnitVec3::from_lat_lon(lat, lon)) as usize;
+    let wind = |f: Option<&geoforge_core::shapes::Field<[f32; 2]>>| f.map_or([0.0; 2], |f| f.values[c].map(f64::from));
+    let at_sea = body.interior.has_surface_liquid_water() && f64::from(p.elevation().ok_or_else(missing)?.values[c]) < 0.0;
+    let climate = Climate {
+        mean_c: f64::from(p.temperature().ok_or_else(missing)?.values[c]),
+        range_c: f64::from(p.temperature_range().ok_or_else(missing)?.values[c]),
+        precipitation_mm: f64::from(p.precipitation().ok_or_else(missing)?.values[c]),
+        warm_share: f64::from(p.precipitation_warm_share().ok_or_else(missing)?.values[c]),
+        at_sea,
+        wind_jan: wind(p.wind_jan()),
+        wind_jul: wind(p.wind_jul()),
+        lat,
+    };
+    let calendar = Calendar::new(&body, &[]);
+    let year = calendar.year_days;
+    let obliquity = body.exterior.obliquity_deg.to_radians().sin().abs();
+    // The star's declination as a share of its swing, northern sense; a plain sinusoid from
+    // the equinox for a world without a system.
+    let system = world.load_system()?;
+    let focus = world.manifest.focus;
+    let frame = system.as_ref().and_then(|s| Some((s, Equatorial::of(s, focus)?, ephemeris::light_source(s, focus)?)));
+    let season = move |t: f64| match &frame {
+        _ if obliquity < 0.02 => 0.0,
+        Some((s, f, star)) => f.star_declination(s, focus, *star, t).to_radians().sin() / obliquity,
+        None => (std::f64::consts::TAU * t / year).sin(),
+    };
+    let step_days = calendar.solar_day_h.map_or(1.0, |h| h / 24.0);
+    let seed = world.manifest.root_seed.child(b"weather").child_u64(b"cell", c as u64);
+    let mut days = simulate(&climate, season, year, step_days, from_day, count, seed);
+    for d in &mut days {
+        (d.year, d.local_day) = calendar.date(d.day);
+    }
+    Ok(Forecast { lat, lon, at_sea, step_days, days })
+}
+
+/// Draw `count` steps of `step_days` from `from_day` for `climate`, with `season(t)` the
+/// northern season (−1 to 1) on Earth day `t` and `year` the year in Earth days.
+#[must_use]
+pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_days: f64, from_day: f64, count: usize, seed: Seed) -> Vec<Day> {
+    let months = koppen::months(climate.mean_c, climate.range_c, climate.precipitation_mm, climate.warm_share);
+    let lag = year / 12.0 * if climate.at_sea { 1.5 } else { 1.0 };
+    let hemisphere = (climate.lat / 10.0).clamp(-1.0, 1.0);
+    // The month for a point of the season: 1 is month 0 (the warmest), −1 month 6.
+    let normal = |t: f64| {
+        let s = (season(t - lag) * hemisphere).clamp(-1.0, 1.0);
+        let k = 6.0 * s.acos() / std::f64::consts::PI;
+        let (i, f) = (k.floor() as usize, k.fract());
+        let (a, b) = (months[i.min(6)], months[(i + 1).min(6)]);
+        (a.t + f * (b.t - a.t), (a.rain + f * (b.rain - a.rain)) * 12.0 / year, s)
+    };
+    let spread = (0.8 + 0.12 * climate.range_c).clamp(0.8, 6.0);
+    let memory = TEMPERATURE_MEMORY.powf(step_days);
+    let day_range = (9.0 + 9.0 * (-climate.precipitation_mm / 500.0).exp()) * if climate.at_sea { 0.25 } else { 1.0 } * step_days.sqrt().clamp(0.4, 3.0);
+    let first = (from_day / step_days).floor() as i64;
+    let (mut anomaly, mut wet) = (0.0, false);
+    let mut out = Vec::with_capacity(count);
+    for n in first - SPIN_UP..first + count as i64 {
+        let t = n as f64 * step_days;
+        let draw = |label: &[u8]| unit(seed.child_u64(label, n as u64));
+        let gauss = |label: &[u8]| {
+            let (u1, u2) = (draw(label).max(1e-12), unit(seed.child_u64(label, n as u64).child(b"2")));
+            (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
+        };
+        let (normal_c, rain_mm_day, s) = normal(t);
+        anomaly = memory * anomaly + spread * (1.0 - memory * memory).sqrt() * gauss(b"temperature");
+        let rain = rain_mm_day * step_days;
+        let share = rain / (rain + HALF_WET_MM * step_days.max(1.0));
+        let p_wet = if wet { share + RAIN_PERSISTENCE * (1.0 - share) } else { share * (1.0 - RAIN_PERSISTENCE) };
+        wet = draw(b"wet") < p_wet;
+        let amount = if wet { -(rain / share.max(1e-9)) * draw(b"amount").max(1e-12).ln() } else { 0.0 };
+        if n < first {
+            continue;
+        }
+        let mean_c = normal_c + anomaly;
+        let half = 0.5 * day_range * if wet { 0.7 } else { 1.0 };
+        let mix = 0.5 * (1.0 + s * hemisphere.signum());
+        let prevailing = [0, 1].map(|k| climate.wind_jan[k] * (1.0 - mix) + climate.wind_jul[k] * mix);
+        let rayleigh = (-draw(b"wind").max(1e-12).ln()).sqrt() * 2.0 / std::f64::consts::PI.sqrt();
+        let wind = (prevailing[0].hypot(prevailing[1]) + 2.0) * rayleigh;
+        let from = ((-prevailing[0]).atan2(-prevailing[1]).to_degrees() + 40.0 * gauss(b"bearing")).rem_euclid(360.0);
+        let snow = wet && mean_c < 0.5;
+        let sky = match () {
+            _ if wind > 17.0 && wet => "storm",
+            _ if snow => "snow",
+            _ if amount > 20.0 => "heavy rain",
+            _ if wet => "rain",
+            _ if draw(b"cloud") < share => "cloudy",
+            _ => "clear",
+        };
+        out.push(Day { day: t, year: 0, local_day: 0.0, mean_c, high_c: mean_c + half, low_c: mean_c - half, precipitation_mm: amount, snow, wind_m_s: wind, wind_from_deg: from, sky });
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temperate() -> Climate {
+        Climate { mean_c: 10.0, range_c: 20.0, precipitation_mm: 800.0, warm_share: 0.6, at_sea: false, wind_jan: [6.0, 0.0], wind_jul: [3.0, 0.0], lat: 50.0 }
+    }
+
+    fn earth_season(t: f64) -> f64 {
+        (std::f64::consts::TAU * t / 365.25).sin()
+    }
+
+    /// Ten years of weather add back up to the climate: its mean, its rain, its seasons.
+    #[test]
+    fn weather_adds_up_to_climate() {
+        let c = temperate();
+        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(9));
+        let n = days.len() as f64;
+        let mean = days.iter().map(|d| d.mean_c).sum::<f64>() / n;
+        let rain = days.iter().map(|d| d.precipitation_mm).sum::<f64>() / 10.0;
+        let wet = days.iter().filter(|d| d.precipitation_mm > 0.0).count() as f64 / n;
+        assert!((mean - 10.0).abs() < 0.6, "mean {mean}");
+        assert!((rain / 800.0 - 1.0).abs() < 0.1, "rain {rain}");
+        assert!((0.25..0.5).contains(&wet), "wet share {wet}");
+        // July (days 100–130 from the March equinox) is about the range warmer than January.
+        let avg = |lo: usize, hi: usize| (0..10).flat_map(|y| days[y * 365 + lo..y * 365 + hi].iter()).map(|d| d.mean_c).sum::<f64>() / (10 * (hi - lo)) as f64;
+        let swing = avg(110, 140) - avg(290, 320);
+        assert!((15.0..21.0).contains(&swing), "swing {swing}");
+        // Winter brings snow, summer none; westerlies blow from the west.
+        assert!(days.iter().any(|d| d.snow) && days[100..160].iter().all(|d| !d.snow));
+        let west = days.iter().filter(|d| (180.0..360.0).contains(&d.wind_from_deg)).count() as f64 / n;
+        assert!(west > 0.8, "{west}");
+    }
+
+    /// A date's weather is the same whatever the window, and the same seed repeats it.
+    #[test]
+    fn a_date_has_one_weather() {
+        let c = temperate();
+        let a = simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(3));
+        let b = simulate(&c, earth_season, 365.25, 1.0, 195.0, 15, Seed(3));
+        for (x, y) in a.iter().zip(&b[5..]) {
+            assert!((x.mean_c - y.mean_c).abs() < 1e-3 && x.precipitation_mm == y.precipitation_mm && x.sky == y.sky, "{x:?} {y:?}");
+        }
+        assert_ne!(a, simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(4)));
+    }
+}
