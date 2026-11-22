@@ -13,9 +13,11 @@ G=${GEOFORGE:-geoforge}
 rm -rf "$WORLD"
 "$G" new "$WORLD" --seed 1 --width "$WIDTH" --archetype earth >/dev/null
 "$G" generate "$WORLD" --until elevation >/dev/null
-"$G" export "$WORLD" elevation >/dev/null
-python3 -I "$HERE/inject.py" "$DATA/earth-topography-10arcmin.nc" "$WORLD"
-"$G" import "$WORLD" elevation --authored >/dev/null
+# The climate reads rough_elevation; with erosion off, elevation is the same map.
+"$G" export "$WORLD" rough_elevation >/dev/null
+python3 -I "$HERE/inject.py" "$DATA/earth-topography-10arcmin.nc" "$WORLD" rough_elevation
+"$G" import "$WORLD" rough_elevation --authored >/dev/null
+sed -i 's/^k = .*/k = 0.0/' "$WORLD/world.toml"
 "$G" generate "$WORLD" --render >/dev/null
 "$G" export "$WORLD" all >/dev/null
 "$G" stats "$WORLD" > "$WORLD/stats.json"

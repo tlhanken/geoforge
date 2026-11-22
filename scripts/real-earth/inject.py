@@ -42,7 +42,8 @@ def fill_enclosed(e):
 
 def main():
     nc, world = sys.argv[1], Path(sys.argv[2])
-    side = json.loads((world / "edit" / "elevation.edit.json").read_text())
+    product = sys.argv[3] if len(sys.argv) > 3 else "rough_elevation"
+    side = json.loads((world / "edit" / f"{product}.edit.json").read_text())
     w, h = side["grid"]["width"], side["grid"]["height"]
     if side["grid"]["kind"] != "equirect":
         sys.exit("inject.py needs an equirectangular world")
@@ -50,7 +51,7 @@ def main():
     raised = fill_enclosed(e)
     enc = side["encoding"]
     px = np.clip(np.rint((e - enc["offset"]) / enc["scale"]), 0, 65535).astype(np.uint16)
-    Image.fromarray(px).save(world / "edit" / "elevation.png")
+    Image.fromarray(px).save(world / "edit" / f"{product}.png")
     print(f"ETOPO1 at {w}×{h}: {raised} enclosed below-sea cells raised to +1 m; range {e.min():.0f}…{e.max():.0f} m")
 
 

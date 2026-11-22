@@ -2,8 +2,8 @@
 
 Runs the climate, ocean, hydrology and biome layers on Earth's actual topography and
 compares each layer with the observed Earth. The world is an `--archetype earth` world. Its
-elevation is replaced by ETOPO1 through `import --authored`, and everything downstream of
-elevation is generated as usual.
+`rough_elevation` is replaced by ETOPO1 through `import --authored`, erosion is switched off
+(`k = 0`) so `elevation` is the same map, and everything downstream is generated as usual.
 
 ```sh
 cargo build --profile iter -p geoforge-cli
