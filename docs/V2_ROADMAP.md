@@ -256,7 +256,13 @@ sphere at 0.004 stars per cubic light year (34 stars, 20 systems), with Raghavan
 (2010)'s multiplicity for Sun-like stars (56% single, 33% binary, 8% triple, 3% more). We
 already draw multiplicity by star mass, which matters because red dwarfs are mostly single.
 
-## 7. Oceans — next
+## 7. Oceans — mostly done
+
+Done as derived views (`geoforge_surface::oceans`): sea ice, coral reefs and atolls,
+productivity, checked on the Earth run (`V2_REALISM.md`, Oceans). Open: deep-water
+formation; sea ice feeding back on albedo and coastal climate (it would need to be stored
+and read by the climate layer); reefs on finer grids than the shelf shows. The plan
+follows.
 
 - **Sea ice**: winter and summer extent from SST and air temperature; feeds albedo and
   coastal climate.

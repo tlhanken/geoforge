@@ -202,7 +202,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights; earthquake rates and corner magnitudes | 58 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure | 223 | 51 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure; sea ice, reefs, productivity | 245 | 55 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -316,6 +316,18 @@ South Pacific (1022) highs and the Australian heat low (997); in July the Azores
 Australian highs. Gaps: the Siberian high comes out 1020 hPa (observed ~1036), because the
 modelled Siberian winter is 5–15 K too warm; the Antarctic trough is 1000 hPa (observed
 ~987), because the modelled westerlies peak at 40–45°S, not 50–55°S.
+
+### Oceans
+
+On the ETOPO-forced Earth run: Arctic sea ice 15.6 million km² in March (NSIDC 1991–2020
+~15) and 8.5 in September (~6); Antarctic 16.0 in September (~18.5) and 1.4 in February
+(~3); perennial ice at the North Pole, seasonal in the Bering Sea. Coral reefs on the Great
+Barrier Reef, in the Red Sea and round Jamaica, none off Peru, at the Amazon's mouth or in
+the Mediterranean. Productivity high on the Peru and Benguela upwellings and the North Sea,
+low in the North and South Pacific gyres. Gaps: no winter ice in the Sea of Okhotsk or the
+Baltic and ice in the Norwegian Sea, all from the climate (a too-warm Siberian winter, a
+Baltic warmed as part of the North Atlantic, a North Atlantic Current that stops short of
+Norway); the Maldives' atolls are smaller than a one-degree cell.
 
 ### Hazards
 

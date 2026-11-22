@@ -130,11 +130,15 @@ the products they read instead):
 | `earthquakes`, `tsunamis`, `volcanoes`, `cyclones`, `tornadoes`, `floods`, `wildfire`, `landslides` | Chance of one in a 10,000 km² region over a window that suits it (a year for storms, a decade for quakes, floods and fires, a century for tsunamis) | grayscale PNG + note |
 | `blizzards`, `dust_storms`, `fog`, `auroras` | Share of the year's days (nights) with one | grayscale PNG + note |
 | `lightning` | Artifexian's four tiers, under 1 to over 15 flashes per km² a year | class PNG + legend |
+| `sea_ice` | Sea ice: open water, ice in winter, ice all year | class PNG + legend |
+| `reefs` | Coral reefs and atolls | class PNG + legend |
+| `productivity` | How much life the sea holds, 0 (gyre desert) to 1 (upwelling coast) | grayscale PNG + note |
 | `pressure_jan`, `pressure_jul` | Sea-level pressure, hPa; previews blue below the mean to red above, isobars every 4 hPa | 16-bit grayscale PNG + `<view>.json` with the units and range |
 
 Every view has a world file and projection (`.pgw`, `.prj`). The groups `climate_maps`
-(Köppen, pressure), `resources` and `hazards` name all of theirs at once
-(`render <dir> hazards`).
+(Köppen, pressure), `oceans`, `resources` and `hazards` name all of theirs at once
+(`render <dir> hazards`). Legends give each class's share of the area mapped (the land,
+for land maps).
 
 The Köppen–Geiger view has 30 classes by Peel et al. (2007)'s rules: arid (B) first, then
 polar, tropical, and temperate or continental at a 0 °C coldest month
@@ -268,6 +272,13 @@ product's randomness. `seed <dir> <product>` prints it.
   temperature (brought to sea level along the lapse rate) adds a dome: 1.5 hPa per kelvin
   colder, 0.6 per kelvin warmer, plus the sea-level reduction's p·g·z/(R·T²) per kelvin on
   ground up to 2 km. The mean is the world's surface pressure.
+- **Oceans** (`geoforge_surface::oceans`, derived views): sea ice in winter where the
+  coldest month's air is under −4 °C, all year where the warmest's is under −6 °C (set to
+  NSIDC's extents on the Earth run: the modelled polar seasons are muted). Coral reefs on
+  shallow or shore cells with a coldest month of at least 18 °C and a warmest of at most
+  31 °C, clear of cold upwelling and big rivers' plumes; atolls on hotspot tracks more than
+  300 km behind the active end. Productivity from upwelling (cold sea-surface anomaly),
+  winter mixing poleward of ~40°, shelves and coasts.
 - **Resources** (`geoforge_surface::resources`, derived views): for each deposit kind, λ
   (expected deposits per 10,000 km²) summed over the settings it forms in: banded iron in
   2.6–1.8 Ga cratonic rock, skarns where granite meets limestone, laterites on basalt in

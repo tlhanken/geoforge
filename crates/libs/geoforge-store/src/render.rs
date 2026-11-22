@@ -333,8 +333,8 @@ pub fn render_classes(colors: &[Option<[u8; 3]>], grid: &AnyGrid, relief: Option
 /// Preview ramp for chance maps: white for 0 through gold and orange to dark red for 1.
 const CHANCE_RAMP: [(f64, [u8; 3]); 5] = [(0.0, [250, 250, 245]), (0.1, [250, 225, 140]), (0.35, [240, 150, 60]), (0.7, [200, 50, 40]), (1.0, [110, 0, 30])];
 
-/// A preview of a chance map (values 0–1; `None` drawn as plain sea), hillshaded with
-/// `relief`; values at sea (cells where `sea` is set) are tinted blue.
+/// A preview of a chance map (values 0–1), hillshaded with `relief`; values at sea (cells
+/// where `sea` is set) are tinted blue, and cells without a value drawn as plain sea or land.
 ///
 /// # Errors
 /// For grids without a raster form.
@@ -342,8 +342,11 @@ pub fn render_chances(values: &[Option<f64>], sea: &[bool], grid: &AnyGrid, reli
     let colors: Vec<Option<[u8; 3]>> = values.iter().map(|v| v.map(|x| ramp(&CHANCE_RAMP, x.clamp(0.0, 1.0)))).collect();
     let mut img = render_classes(&colors, grid, relief)?;
     for (i, p) in img.pixels_mut().enumerate() {
-        if sea[i] && values[i].is_some() {
-            *p = Rgb(blend(p.0, [150, 180, 215], 0.45));
+        match (sea[i], values[i]) {
+            (true, Some(_)) => *p = Rgb(blend(p.0, [150, 180, 215], 0.45)),
+            // A sea map's land.
+            (false, None) => *p = Rgb([205, 200, 190]),
+            _ => {}
         }
     }
     Ok(img)

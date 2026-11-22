@@ -15,6 +15,7 @@ use geoforge_core::BodyContext;
 use geoforge_surface::ground::{self, Ground};
 use geoforge_surface::hazards::{self, Hazard, Lightning, Measure};
 use geoforge_surface::koppen::{self, Koppen, KoppenRules};
+use geoforge_surface::oceans::{Reef, SeaIce};
 use geoforge_surface::resources::{self, Deposit, Soil};
 use serde::Serialize;
 
@@ -36,6 +37,12 @@ pub enum View {
     Lightning,
     /// Sea-level pressure in January (`false`) or July (`true`).
     Pressure { july: bool },
+    /// Sea ice: none, seasonal or perennial.
+    SeaIce,
+    /// Coral reefs and atolls.
+    Reefs,
+    /// The sea's productivity.
+    Productivity,
 }
 
 impl View {
@@ -47,15 +54,17 @@ impl View {
         v.extend(Hazard::ALL.map(Self::Hazard));
         v.push(Self::Lightning);
         v.extend([Self::Pressure { july: false }, Self::Pressure { july: true }]);
+        v.extend([Self::SeaIce, Self::Reefs, Self::Productivity]);
         v
     }
 
-    /// Views by group name: `climate_maps` (Köppen, pressure), `resources` (deposits, soils,
-    /// fertility, timber) or `hazards`.
+    /// Views by group name: `climate_maps` (Köppen, pressure), `oceans` (sea ice, reefs,
+    /// productivity), `resources` (deposits, soils, fertility, timber) or `hazards`.
     #[must_use]
     pub fn group(name: &str) -> Option<Vec<Self>> {
         match name {
             "climate_maps" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Koppen | Self::Pressure { .. })).collect()),
+            "oceans" => Some(vec![Self::SeaIce, Self::Reefs, Self::Productivity]),
             "resources" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Soil | Self::Fertility | Self::Timber | Self::Deposit(_))).collect()),
             "hazards" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Hazard(_) | Self::Lightning)).collect()),
             _ => None,
@@ -74,6 +83,9 @@ impl View {
             Self::Lightning => "lightning",
             Self::Pressure { july: false } => "pressure_jan",
             Self::Pressure { july: true } => "pressure_jul",
+            Self::SeaIce => "sea_ice",
+            Self::Reefs => "reefs",
+            Self::Productivity => "productivity",
         }
     }
 
@@ -89,18 +101,19 @@ impl View {
             Self::Koppen => &[ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation, ProductId::PrecipitationWarmShare],
             Self::Pressure { july: false } => &[ProductId::WindJan, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
             Self::Pressure { july: true } => &[ProductId::WindJul, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
+            Self::SeaIce | Self::Reefs | Self::Productivity => &[ProductId::Elevation, ProductId::Temperature, ProductId::TemperatureRange, ProductId::SstAnomaly],
             _ => &ground::READS,
         }
     }
 }
 
-/// One class of a class map, with its share of the land.
+/// One class of a class map, with its share of the mapped area (the land, for land maps).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Class {
     pub code: String,
     pub name: String,
     pub color: [u8; 3],
-    pub land_share: f64,
+    pub area_share: f64,
 }
 
 /// A class map: each cell's class (an index into `legend`), `None` at sea.
@@ -228,6 +241,17 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             let cells = sea_level_pressure(s.grid, &planet, &Air { wind: &wind.values, temperature: &season_t, elevation, land: &land });
             Map::Quantity(Quantity { cells, units: "hPa", contour: 4.0 })
         }
+        View::SeaIce | View::Reefs | View::Productivity => {
+            let sea = geoforge_surface::oceans::Sea::read(s.products, s.grid, s.body.exterior.radius_km, s.sea_world())?;
+            if !s.sea_world() {
+                return None;
+            }
+            match view {
+                View::SeaIce => Map::Classes(tally(s.grid, &sea.ice().into_iter().map(Some).collect::<Vec<_>>(), SeaIce::info, &SeaIce::ALL)),
+                View::Reefs => Map::Classes(tally(s.grid, &sea.reefs().into_iter().map(Some).collect::<Vec<_>>(), Reef::info, &Reef::ALL)),
+                _ => chances(sea.productivity(), "how much life the sea holds, 0 (gyre desert) to 1 (upwelling coast)".into()),
+            }
+        }
     })
 }
 
@@ -253,7 +277,7 @@ fn tally<T: Copy + PartialEq>(grid: &AnyGrid, cells: &[Option<T>], info: impl Fn
         .iter()
         .map(|&k| {
             let (code, name, color) = info(order[k]);
-            Class { code: code.into(), name: name.into(), color, land_share: area[k] / land }
+            Class { code: code.into(), name: name.into(), color, area_share: area[k] / land }
         })
         .collect();
     let cells = index.into_iter().map(|c| c.map(|k| present.iter().position(|&p| p == k).expect("present"))).collect();
@@ -273,7 +297,7 @@ mod tests {
         }
         let names: std::collections::BTreeSet<&str> = all.iter().map(|v| v.name()).collect();
         assert_eq!(names.len(), all.len(), "names are unique");
-        let grouped: usize = ["climate_maps", "resources", "hazards"].iter().map(|g| View::group(g).unwrap().len()).sum();
+        let grouped: usize = ["climate_maps", "oceans", "resources", "hazards"].iter().map(|g| View::group(g).unwrap().len()).sum();
         assert_eq!(grouped, all.len(), "every view is in one group");
     }
 
@@ -284,6 +308,6 @@ mod tests {
         let cells = [Some(1), Some(1), Some(2), None, Some(1), Some(1), Some(1), Some(1)];
         let c = tally(&grid, &cells, |v: i32| (["0", "1", "2"][v as usize], "", [0; 3]), &[0, 1, 2]);
         assert_eq!(c.legend.iter().map(|x| x.code.as_str()).collect::<Vec<_>>(), ["1", "2"]);
-        assert!((c.legend[0].land_share - 6.0 / 7.0).abs() < 1e-9 && c.cells[3].is_none() && c.cells[2] == Some(1));
+        assert!((c.legend[0].area_share - 6.0 / 7.0).abs() < 1e-9 && c.cells[3].is_none() && c.cells[2] == Some(1));
     }
 }

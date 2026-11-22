@@ -187,7 +187,7 @@ fn parse_targets(what: &[String]) -> R<(Vec<ProductId>, Vec<View>)> {
             vs.extend(group);
         } else {
             let views = View::all().into_iter().map(View::name).collect::<Vec<_>>().join(", ");
-            return Err(format!("unknown product, layer or view `{w}` (views: {views}, or the groups climate_maps, resources and hazards; products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
+            return Err(format!("unknown product, layer or view `{w}` (views: {views}, or the groups climate_maps, oceans, resources and hazards; products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
         }
     }
     ps.sort();

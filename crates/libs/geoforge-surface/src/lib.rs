@@ -15,6 +15,7 @@ pub mod hydrology;
 pub mod koppen;
 pub mod lid;
 pub mod noise;
+pub mod oceans;
 pub mod preconditions;
 pub mod pressure;
 pub mod relief;

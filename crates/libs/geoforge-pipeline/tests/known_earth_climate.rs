@@ -649,8 +649,7 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
         ("savanna", 0.10, 0.20),
         ("mediterranean_woodland", 0.01, 0.04),
     ] {
-        s.range("biomes", format!("{slug}, share of land"), share(slug), lo..=hi, "")
-            .gap_if_listed(slug, &[("savanna", "the Sahel comes out rainforest (the West African monsoon reaches too far north), so savanna runs short")]);
+        s.range("biomes", format!("{slug}, share of land"), share(slug), lo..=hi, "");
     }
     for (name, lat, lon, want) in [
         ("Sahara", 23.0, 10.0, &["hot_desert"][..]),
@@ -688,6 +687,62 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
             .gap_if_listed(name, PLACE_GAPS);
     }
 }
+
+/// Sea ice against NSIDC's 1991–2020 extents, reefs against the Allen Coral Atlas, and the
+/// sea's productivity against the great fisheries and the gyre deserts.
+fn oceans(s: &mut Scorecard, e: &Earth) {
+    use geoforge_surface::oceans::{Reef, Sea, SeaIce};
+    let sea = Sea::read(&e.p, &e.grid, 6371.0, true).unwrap();
+    let ice = sea.ice();
+    let (max_n, max_s) = sea.ice_area_km2(&ice, &[SeaIce::Seasonal, SeaIce::Perennial]);
+    let (min_n, min_s) = sea.ice_area_km2(&ice, &[SeaIce::Perennial]);
+    s.range("oceans", "Arctic sea ice in March, million km² (NSIDC ~15)", max_n / 1e6, 13.0..=18.0, "");
+    s.range("oceans", "Arctic sea ice in September, million km² (NSIDC ~6)", min_n / 1e6, 4.0..=9.0, "");
+    s.range("oceans", "Antarctic sea ice in September, million km² (NSIDC ~18.5)", max_s / 1e6, 14.0..=22.0, "");
+    s.range("oceans", "Antarctic sea ice in February, million km² (NSIDC ~3)", min_s / 1e6, 0.5..=5.0, "").gap_if_listed("Antarctic February", OCEAN_GAPS);
+    let at = |lat: f64, lon: f64| e.grid.locate(geoforge_core::UnitVec3::from_lat_lon(lat, lon)) as usize;
+    let ice_name = |i: SeaIce| i.info().0;
+    for (name, lat, lon, want) in [
+        ("central Arctic (85°N 0°)", 85.0, 0.0, SeaIce::Perennial),
+        ("Bering Sea (58°N 175°W)", 58.0, -175.0, SeaIce::Seasonal),
+        ("Sea of Okhotsk (55°N 150°E)", 55.0, 150.0, SeaIce::Seasonal),
+        ("Baltic (60°N 20°E)", 60.0, 20.0, SeaIce::Seasonal),
+        ("Norwegian Sea (68°N 5°E)", 68.0, 5.0, SeaIce::Open),
+        ("North Sea (56°N 3°E)", 56.0, 3.0, SeaIce::Open),
+    ] {
+        s.one_of("oceans", format!("sea ice, {name}"), ice_name(ice[at(lat, lon)]), &[ice_name(want)]).gap_if_listed(name, OCEAN_GAPS);
+    }
+    let reefs = sea.reefs();
+    let reef_near = |lat: f64, lon: f64| cells_in(&e.grid, (lat - 2.0)..=(lat + 2.0), lon - 2.0, lon + 2.0).iter().any(|&c| matches!(reefs[c as usize], Reef::Reef | Reef::Atoll));
+    for (name, lat, lon, want) in [
+        ("Great Barrier Reef (18°S 147°E)", -18.0, 147.0, true),
+        ("Red Sea (20°N 38°E)", 20.0, 38.0, true),
+        ("Jamaica (18°N 77°W)", 18.0, -77.0, true),
+        ("Maldives (4°N 73°E)", 4.0, 73.0, true),
+        ("Peru coast (12°S 78°W)", -12.0, -78.0, false),
+        ("Amazon mouth (1°N 49°W)", 1.0, -49.0, false),
+        ("Mediterranean (35°N 18°E)", 35.0, 18.0, false),
+    ] {
+        s.one_of("oceans", format!("coral reefs, {name}"), if reef_near(lat, lon) { "reef" } else { "none" }, &[if want { "reef" } else { "none" }]).gap_if_listed(name, OCEAN_GAPS);
+    }
+    let life = sea.productivity();
+    for (name, lat, lon, want) in [
+        ("Peru upwelling (12°S 79°W)", -12.0, -79.0, 0.5..=1.0),
+        ("Benguela upwelling (25°S 14°E)", -25.0, 14.0, 0.5..=1.0),
+        ("North Sea (56°N 3°E)", 56.0, 3.0, 0.5..=1.0),
+        ("North Pacific gyre (25°N 150°W)", 25.0, -150.0, 0.0..=0.25),
+        ("South Pacific gyre (25°S 120°W)", -25.0, -120.0, 0.0..=0.25),
+    ] {
+        s.range("oceans", format!("productivity, {name}"), life[at(lat, lon)].unwrap_or(0.0), want, "").gap_if_listed(name, OCEAN_GAPS);
+    }
+}
+
+const OCEAN_GAPS: &[(&str, &str)] = &[
+    ("Sea of Okhotsk (55°N 150°E)", "the modelled January there is 0 °C (observed about −12): the Siberian winter is too warm"),
+    ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic (a +6.6 °C sea surface anomaly), so its coldest month is +1.6 °C (observed about −3)"),
+    ("Norwegian Sea (68°N 5°E)", "the modelled North Atlantic Current does not reach the Norwegian Sea: its coldest month is −8.7 °C (observed about +3)"),
+    ("Maldives (4°N 73°E)", "the atolls are far smaller than a one-degree cell, which averages to deep water"),
+];
 
 /// Sea-level pressure recovered from the modelled winds, against ERA5's 1991–2020 seasonal
 /// means: the great highs and lows, within 8 hPa.
@@ -795,6 +850,7 @@ fn scorecard() -> &'static Scorecard {
         known::dump("climate_precipitation", e.precip.iter().copied());
         known::dump("climate_warm_share", e.warm_share.iter().copied());
         known::dump("climate_t_range", e.t_range.iter().copied());
+        known::dump("climate_elevation", e.elev.iter().copied());
         known::dump(
             "climate_koppen",
             (0..e.t.len()).map(|c| match e.elev[c] < 0.0 {
@@ -815,6 +871,7 @@ fn scorecard() -> &'static Scorecard {
         biomes(&mut s, e);
         cyclones(&mut s, e);
         pressure(&mut s, e);
+        oceans(&mut s, e);
         classifier(&mut s);
         s
     })
