@@ -69,6 +69,7 @@ pub(crate) fn encode(data: &ProductData) -> Result<(Option<Vec<u8>>, Option<serd
         ProductData::Watersheds(p) => (Some(u32_bytes(&p.owner.values)), Some(serde_json::to_value(&p.table)?)),
         ProductData::TectonicEvents(t) | ProductData::GeologyEvents(t) => (None, Some(serde_json::to_value(t)?)),
         ProductData::Rivers(n) => (None, Some(serde_json::to_value(n)?)),
+        ProductData::Deposits(t) => (None, Some(serde_json::to_value(t)?)),
         _ => unreachable!("fields handled above"),
     })
 }
@@ -173,6 +174,7 @@ pub fn decode(p: ProductId, grid: GridSpec, bin: Option<&[u8]>, doc: Option<serd
         ProductId::TectonicEvents => ProductData::TectonicEvents(serde_json::from_value(doc.unwrap_or_default())?),
         ProductId::GeologyEvents => ProductData::GeologyEvents(serde_json::from_value(doc.unwrap_or_default())?),
         ProductId::Rivers => ProductData::Rivers(serde_json::from_value(doc.unwrap_or_default())?),
+        ProductId::Deposits => ProductData::Deposits(serde_json::from_value(doc.unwrap_or_default())?),
         _ if p.value_type() == Some(ValueType::V2F32) => {
             let v = decode_f32(need_bin(8)?).chunks_exact(2).map(|c| [c[0], c[1]]).collect();
             ProductData::from_vector(p, Field::from_values(grid, v)).expect("vector product")

@@ -2,13 +2,13 @@
 //! cell, gathered once from the stored products.
 
 use crate::koppen::{self, Koppen, KoppenRules};
-use geoforge_core::grid::{AnyGrid, Cell, Grid};
+use geoforge_core::grid::{Cell, Grid};
 use geoforge_core::product::{ProductId, Products};
 use geoforge_core::surface::GeologicProvince;
 
 /// A world's ground, cell by cell.
 pub struct Ground<'a> {
-    pub grid: &'a AnyGrid,
+    pub grid: &'a dyn Grid,
     pub radius_km: f64,
     /// Below sea level on a world with seas.
     pub sea: Vec<bool>,
@@ -54,7 +54,7 @@ pub const READS: [ProductId; 12] = [
 impl<'a> Ground<'a> {
     /// `None` until every product in [`READS`] is stored.
     #[must_use]
-    pub fn read(p: &'a Products, grid: &'a AnyGrid, radius_km: f64, sea_world: bool) -> Option<Self> {
+    pub fn read(p: &'a Products, grid: &'a dyn Grid, radius_km: f64, sea_world: bool) -> Option<Self> {
         let elev: Vec<f64> = p.elevation()?.values.iter().map(|&v| f64::from(v)).collect();
         let n = grid.len();
         let provinces = p.provinces()?;

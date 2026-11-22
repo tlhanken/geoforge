@@ -47,15 +47,15 @@ highs and summer heat lows sit in the interiors, subpolar lows at ~60° in winte
 ITCZ hugs the equator at sea but swings poleward over hot land. Our winds come from the
 cells, so the pressure view is drawn from them, and should land in the same places.
 
-## 3. Resources and soils — views done; giant-deposit catalog next
+## 3. Resources and soils — done; refinements open
 
 Done as derived views (`geoforge_surface::resources`; see `V2_PIPELINE.md`): prospectivity
 for iron, copper, tin, lead–zinc–silver, gold, coal, salt, peat and gemstones, soils with
 fertility, and timber; `place` reports what is within reach of a point and draws how many
 deposits a local map holds. Next:
 
-- The **giant-deposit catalog**, the one stored and editable part: a few per kind drawn
-  globally (place, grade, size, depth, age), as a resources layer after biomes.
+- Done since: the **giant-deposit catalog** (the resources layer, `deposits`), the one
+  stored and editable part.
 - An Earth check against USGS deposit data on the ETOPO-forced run (porphyry belts on the
   Andes, banded iron on the Pilbara, salt in the Permian and Zechstein basins).
 - Loess, mercury, sulfur, obsidian, flint, clay, building stone, aquifers; organic

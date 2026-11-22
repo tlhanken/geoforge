@@ -207,6 +207,24 @@ pub mod hex_color {
     }
 }
 
+/// A giant ore deposit: a row of the deposits table. Smaller deposits are not stored; local
+/// maps draw them from the prospectivity views.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GiantDeposit {
+    /// What it yields: a deposit kind's slug (`copper`, `gold`, …).
+    pub kind: String,
+    /// How it formed (`porphyry`, `banded iron formation`, …).
+    pub setting: String,
+    pub lat_deg: f64,
+    pub lon_deg: f64,
+    /// Ore, million tonnes.
+    pub ore_mt: f64,
+    /// Depth to the top of the ore, m (0: at the surface).
+    pub depth_m: f64,
+    /// Age of the host rock, Ma.
+    pub age_ma: f64,
+}
+
 /// A river node: a cell the network passes through.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RiverNode {

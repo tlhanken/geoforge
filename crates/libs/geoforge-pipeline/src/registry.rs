@@ -23,6 +23,7 @@ pub enum Implementation {
     Erosion,
     Hydrology,
     Biomes,
+    GiantDeposits,
     GiantBands,
 }
 
@@ -74,6 +75,10 @@ macro_rules! dispatch {
                 type $g = surface::Biomes;
                 $body
             }
+            Implementation::GiantDeposits => {
+                type $g = surface::GiantDeposits;
+                $body
+            }
             Implementation::GiantBands => {
                 type $g = surface::GiantBands;
                 $body
@@ -84,7 +89,7 @@ macro_rules! dispatch {
 
 impl Implementation {
     /// In order of preference within each layer.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Tectonics,
         Self::LidTectonics,
         Self::Geology,
@@ -96,6 +101,7 @@ impl Implementation {
         Self::Erosion,
         Self::Hydrology,
         Self::Biomes,
+        Self::GiantDeposits,
         Self::GiantBands,
     ];
 

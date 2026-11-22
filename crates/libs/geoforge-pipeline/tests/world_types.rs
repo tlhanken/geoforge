@@ -22,15 +22,15 @@ fn regimes_pick_their_generators() {
     use I::*;
     let archetype = |a: Archetype| world(a.slug(), Some(a.context(Key(1), a.name())), None);
     let cases = [
-        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Erosion), Some(Hydrology), Some(Biomes), None]),
-        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None]),
-        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None]),
-        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None, None]),
-        (Archetype::Europa, vec![None; 9]),
-        (Archetype::GasGiant, [vec![None; 8], vec![Some(GiantBands)]].concat()),
-        (Archetype::IceGiant, [vec![None; 8], vec![Some(GiantBands)]].concat()),
+        (Archetype::Earth, vec![Some(Tectonics), Some(Geology), Some(Elevation), Some(Circulation), Some(Climate), Some(Erosion), Some(Hydrology), Some(Biomes), Some(GiantDeposits), None]),
+        (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
+        (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
+        (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None, None, None]),
+        (Archetype::Europa, vec![None; 10]),
+        (Archetype::GasGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
+        (Archetype::IceGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
     ];
-    assert_eq!(LayerId::ALL.len(), 9);
+    assert_eq!(LayerId::ALL.len(), 10);
     for (a, want) in cases {
         assert_eq!(fillers(&archetype(a)), want, "{a}");
     }
@@ -81,4 +81,27 @@ fn giants_get_bands() {
     assert!(p1.zonal_wind().unwrap().values.iter().any(|&u| u > 50.0) && p1.elevation().is_none());
     let (lo, hi) = bands.values.iter().fold((1.0f32, 0.0f32), |(l, h), &v| (l.min(v), h.max(v)));
     assert!(lo < 0.3 && hi > 0.8, "dark belts and bright zones: {lo}..{hi}");
+}
+
+/// Giant deposits: the same each time, on land, each where its kind's prospectivity is.
+#[test]
+fn giant_deposits_follow_the_ground() {
+    let a = Archetype::Earth;
+    let mut w1 = world("deposits-1", Some(a.context(Key(1), a.name())), None);
+    let mut w2 = world("deposits-2", Some(a.context(Key(1), a.name())), None);
+    let (p1, _) = pipe::generate(&mut w1, &GenerateOptions::default(), |_| {}).unwrap();
+    let (p2, _) = pipe::generate(&mut w2, &GenerateOptions::default(), |_| {}).unwrap();
+    let deposits = p1.deposits().unwrap();
+    assert_eq!(Some(deposits), p2.deposits());
+    assert!(!deposits.rows.is_empty());
+    let body = w1.load_body().unwrap();
+    let grid = w1.manifest.grid.build().unwrap();
+    let g = geoforge_surface::ground::Ground::read(&p1, &grid, body.exterior.radius_km, true).unwrap();
+    for d in deposits.rows.values() {
+        let c = geoforge_core::Grid::locate(&grid, geoforge_core::UnitVec3::from_lat_lon(d.lat_deg, d.lon_deg)) as usize;
+        let kind = geoforge_surface::resources::Deposit::from_slug(&d.kind).unwrap();
+        assert!(!g.sea[c], "{} at sea", d.kind);
+        assert!(geoforge_surface::resources::prospectivity(&g, kind)[c] > 0.0, "{} ({}) where none forms", d.kind, d.setting);
+        assert!(d.ore_mt > 0.0 && d.depth_m >= 0.0);
+    }
 }

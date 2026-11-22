@@ -527,6 +527,9 @@ fn print_place(r: &pipe::place::PlaceReport) {
             println!("  {:<18} {:>6.2} {:>5.0}% {:>3}  {settings}", d.kind, d.expected, 100.0 * d.chance, d.drawn);
         }
     }
+    for (d, km) in &r.giants {
+        println!("  giant {} deposit ({}), {:.0} Mt of ore, {:.0} m down, host rock {:.0} Ma, {km:.0} km away", d.kind, d.setting, d.ore_mt, d.depth_m, d.age_ma);
+    }
     println!("hazards over {:.0} days from day {:.0}: a year, in the window, chance of any", r.days, r.from_day);
     for h in &r.hazards {
         println!("  {:<12} {:>9.3} {:>9.3} {:>5.1}%  ({})", h.hazard, h.per_year, h.expected, 100.0 * h.chance, h.event);

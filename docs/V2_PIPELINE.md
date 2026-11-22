@@ -91,6 +91,7 @@ exactly that layer and everything after it stale.
 | erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | rocky crust |
 | hydrology | `hydrology` | `hydrology` | liquid water on the surface |
 | biomes | `biomes` | `biomes` | liquid water on the surface |
+| resources | `giant_deposits` | `giant_deposits` | liquid water on the surface |
 | bands | — | — | no solid surface, an atmosphere: `giant_bands` |
 
 So Earth runs everything; Mars and Venus get a surface, winds and a climate but no rivers
@@ -111,6 +112,7 @@ new kind of body is a new `Generator` registered in `geoforge-pipeline/src/regis
 | erosion | `elevation`: the final heightmap, valleys cut where the rain runs off (m) | field |
 | hydrology | `rivers`, `lakes`, `watersheds` | network, partition, partition |
 | biomes | `biome` (biome catalog) | catalog partition |
+| resources | `deposits`: the giant deposits (kind, setting, place, ore in Mt, depth, host-rock age); edited as JSON | table |
 | bands | `zonal_wind` (m/s, eastward), `cloud_bands` (cloud-top brightness, 0 darkest belt – 1 brightest zone or oval) | fields |
 
 Derived values (plate boundaries, slope, sea level, flow directions) are recomputed, not stored.
@@ -268,7 +270,10 @@ product's randomness. `seed <dir> <product>` prints it.
   basins of the last 360 Myr; rock salt, salt flats in closed arid basins, sea salt on dry
   coasts; peat in cool wet lowlands; diamonds in old cratons. Tin and gold wash into rivers
   as placers up to 300 km below. Rates are orders of magnitude. Local maps draw each cell's
-  deposits as a seeded Poisson draw (`place` shows the count), so every zoom agrees. Soils:
+  deposits as a seeded Poisson draw (`place` shows the count), so every zoom agrees. The
+  resources layer stores only the giant deposits: one per 50 expected deposits of a kind
+  (at most 12), placed in proportion to λ, with log-normal sizes about the kind's typical
+  giant (copper 1500 Mt of ore, gold 80 Mt, …). Soils:
   ten WRB groups with a fertility; timber by biome below Artifexian's tree line (4000 m to
   30°, −130 m/° to 50°, −75 m/° beyond).
 - **Hazards** (`geoforge_surface::hazards`, derived views): earthquakes from each boundary's

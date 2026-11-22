@@ -13,11 +13,21 @@
 //!
 //! Coal needs land plants: on Earth, swamps of the last ~360 Myr. Other worlds are given the
 //! same window.
+//!
+//! The one stored part is the **giant deposits** ([`GiantDeposits`], the resources layer): a
+//! few per kind, as many as one in 50 of the kind's expected deposits, placed where the ground
+//! favours the kind, with a size (log-normal about the kind's typical giant), a depth and the
+//! host rock's age. Edit them like any table.
 
-use crate::ground::Ground;
+use crate::ground::{self, Ground};
 use geoforge_core::grid::Cell;
-use geoforge_core::seed::Seed;
-use geoforge_core::surface::GeologicProvince as P;
+use geoforge_core::key::Key;
+use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
+use geoforge_core::seed::{unit, Seed};
+use geoforge_core::shapes::Table;
+use geoforge_core::surface::{GeologicProvince as P, GiantDeposit};
+use geoforge_core::{BodyContext, Error};
+use serde::{Deserialize, Serialize};
 
 /// A kind of deposit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -231,6 +241,106 @@ pub fn draw_count(mean: f64, seed: Seed) -> u32 {
         }
         k += 1;
     }
+}
+
+/// Typical ore of a giant deposit of each kind, million tonnes (the median; sizes spread
+/// log-normally about it, a factor e either way).
+fn giant_ore_mt(kind: Deposit) -> f64 {
+    match kind {
+        Deposit::Iron => 2000.0,
+        Deposit::Copper => 1500.0,
+        Deposit::Tin => 50.0,
+        Deposit::LeadZincSilver => 150.0,
+        Deposit::Gold => 80.0,
+        Deposit::Coal => 10_000.0,
+        Deposit::Salt => 20_000.0,
+        Deposit::Peat => 500.0,
+        Deposit::Gemstones => 20.0,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DepositsParams {
+    /// One giant per this many expected deposits of a kind.
+    pub deposits_per_giant: f64,
+    /// At most this many giants per kind.
+    pub most_per_kind: u32,
+}
+
+impl Default for DepositsParams {
+    fn default() -> Self {
+        Self { deposits_per_giant: 50.0, most_per_kind: 12 }
+    }
+}
+
+/// The resources layer: the giant deposits.
+pub struct GiantDeposits;
+
+impl Generator for GiantDeposits {
+    type Params = DepositsParams;
+    const NAME: &'static str = "giant_deposits";
+    const VERSION: u32 = 1;
+    const LAYER: LayerId = LayerId::Resources;
+
+    fn needs() -> &'static [ProductId] {
+        &ground::READS
+    }
+    fn applies(body: &BodyContext) -> Result<(), Precondition> {
+        crate::preconditions::surface_water(body)
+    }
+
+    fn run(ctx: &RunContext<'_>, inputs: &Products, p: &DepositsParams) -> Result<Products, Error> {
+        let mut out = Products::new();
+        if inputs.deposits().is_some() {
+            return Ok(out);
+        }
+        let g = Ground::read(inputs, ctx.grid, ctx.radius_km(), ctx.body.interior.has_surface_liquid_water()).ok_or(Error::MissingInput(ProductId::Biome))?;
+        let mut table = Table::new();
+        let seed = ctx.seed(ProductId::Deposits);
+        for kind in Deposit::ALL {
+            for d in giants(&g, kind, seed.child(kind.slug().as_bytes()), p) {
+                table.insert(Key(table.rows.len() as u64 + 1), d);
+            }
+        }
+        out.insert(ProductData::Deposits(table));
+        Ok(out)
+    }
+}
+
+/// The giant deposits of `kind`: placed cell by cell in proportion to λ × area.
+fn giants(g: &Ground, kind: Deposit, seed: Seed, p: &DepositsParams) -> Vec<GiantDeposit> {
+    let lambda = prospectivity(g, kind);
+    let weight: Vec<f64> = (0..g.len()).map(|c| lambda[c] * g.area_km2(c) / 1e4).collect();
+    let total: f64 = weight.iter().sum();
+    let count = draw_count(total / p.deposits_per_giant.max(1.0), seed.child(b"count")).min(p.most_per_kind);
+    let mut cumulative = Vec::with_capacity(weight.len());
+    let mut run = 0.0;
+    for w in &weight {
+        run += w;
+        cumulative.push(run);
+    }
+    (0..count)
+        .map(|i| {
+            let s = seed.child_u64(b"giant", u64::from(i));
+            let target = unit(s.child(b"where")) * total;
+            let c = cumulative.partition_point(|&x| x < target).min(g.len() - 1);
+            let ll = g.grid.center(c as Cell).to_lat_lon();
+            let setting = settings_at(g, kind, c).into_iter().max_by(|a, b| a.1.total_cmp(&b.1)).map_or("placer", |s| s.0);
+            // Box–Muller for the log-normal size.
+            let normal = (-2.0 * unit(s.child(b"size-a")).max(1e-12).ln()).sqrt() * (std::f64::consts::TAU * unit(s.child(b"size-b"))).cos();
+            let surface = matches!(setting, "placer" | "salt flats" | "sea salt by the sun" | "peatland" | "fen and bog in wetlands" | "laterite" | "bog iron");
+            GiantDeposit {
+                kind: kind.slug().into(),
+                setting: setting.into(),
+                lat_deg: ll.lat_deg,
+                lon_deg: ll.lon_deg,
+                ore_mt: giant_ore_mt(kind) * normal.exp(),
+                depth_m: if surface { 0.0 } else { -300.0 * unit(s.child(b"depth")).max(1e-12).ln() },
+                age_ma: f64::from(g.rock_age[c]),
+            }
+        })
+        .collect()
 }
 
 /// Soil classes (after the WRB's reference groups), with fertility for farming (0–1).

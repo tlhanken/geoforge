@@ -329,7 +329,7 @@ pub fn default_encoding(p: ProductId) -> Result<Encoding> {
 /// If files are missing, the image size does not match the grid, or colours are unknown.
 pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
     let name = p.name();
-    if matches!(p.shape(), Shape::Timeline | Shape::Network) {
+    if matches!(p.shape(), Shape::Timeline | Shape::Network | Shape::Table) {
         let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{name}.json")))?)?;
         return Ok(View { product: p, values: ViewValues::Doc(doc), table: BTreeMap::new(), snapped: 0 });
     }

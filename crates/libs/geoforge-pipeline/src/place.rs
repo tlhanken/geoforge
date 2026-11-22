@@ -59,12 +59,17 @@ pub struct PlaceReport {
     pub from_day: f64,
     pub days: f64,
     pub deposits: Vec<DepositHere>,
+    /// The giant deposits within the area, and how far each is, km.
+    pub giants: Vec<(geoforge_core::surface::GiantDeposit, f64)>,
     pub hazards: Vec<HazardHere>,
     /// Chance of a quake of magnitude 7 and 8 or more in the window, and the largest likely.
     pub quake_7: f64,
     pub quake_8: f64,
     pub largest_quake: f64,
 }
+
+/// Width of a tropical cyclone's damaging swath, km.
+const CYCLONE_SWATH_KM: f64 = 300.0;
 
 /// Report on the area within `radius_km` of (`lat`, `lon`) over `days` Earth days from
 /// `from_day` (days from the present).
@@ -106,8 +111,15 @@ pub fn report(world: &World, lat: f64, lon: f64, radius_km: f64, from_day: f64, 
             continue;
         }
         let rate = hazards::rate(&g, &setting, h);
-        // Days of fog or dust at a spot do not add up over the area: average them.
-        let per_year = if h.measure() == Measure::Days { sum(&rate) * 1e4 / area_km2 } else { sum(&rate) };
+        let mean = sum(&rate) * 1e4 / area_km2;
+        let per_year = match h {
+            // Days of fog or dust at a spot do not add up over the area: average them.
+            _ if h.measure() == Measure::Days => mean,
+            // A storm's ~300 km swath crosses many regions at once: count passes across the
+            // area's width rather than its regions.
+            Hazard::Cyclones => mean * (2.0 * radius_km + CYCLONE_SWATH_KM) / (100.0 + CYCLONE_SWATH_KM),
+            _ => sum(&rate),
+        };
         if per_year <= 0.0 {
             continue;
         }
@@ -122,6 +134,17 @@ pub fn report(world: &World, lat: f64, lon: f64, radius_km: f64, from_day: f64, 
     }
     let (rate6, corner) = hazards::earthquakes(&grid, body.exterior.radius_km, &stored);
     let quake = |m: f64| 1.0 - (-area.iter().map(|&k| hazards::quake_rate_at_least(rate6[k as usize], corner[k as usize], m) * g.area_km2(k as usize) / 1e4).sum::<f64>() * window_years).exp();
+    let here = UnitVec3::from_lat_lon(lat, lon);
+    let giants = stored
+        .deposits()
+        .map(|t| {
+            t.rows
+                .values()
+                .map(|d| (d.clone(), here.angle_to(UnitVec3::from_lat_lon(d.lat_deg, d.lon_deg)) * body.exterior.radius_km))
+                .filter(|(_, km)| *km <= radius_km)
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(PlaceReport {
         lat,
         lon,
@@ -136,6 +159,7 @@ pub fn report(world: &World, lat: f64, lon: f64, radius_km: f64, from_day: f64, 
         from_day,
         days,
         deposits,
+        giants,
         hazards: hazards_here,
         quake_7: quake(7.0),
         quake_8: quake(8.0),

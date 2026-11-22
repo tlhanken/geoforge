@@ -29,4 +29,5 @@ pub use erosion::Erosion;
 pub use geology::Geology;
 pub use hydrology::Hydrology;
 pub use lid::{LidElevation, LidGeology, LidTectonics};
+pub use resources::GiantDeposits;
 pub use tectonics::Tectonics;

@@ -238,6 +238,35 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             let top = f.values.iter().fold(1.0_f32, |m, v| m.max(v.abs()));
             image_of(spec, |i| ramp(&[(-1.0, [40, 70, 170]), (0.0, [240, 240, 240]), (1.0, [180, 40, 40])], f64::from(f.values[i] / top)))?
         }
+        ProductData::Deposits(t) => {
+            // Markers over the land, coloured by what they yield.
+            let mut img = match elev {
+                Some(e) => image_of(spec, |i| {
+                    let v = f64::from(e[i]);
+                    let c = if is_sea(i) { [200, 212, 225] } else { blend(dry_elevation_color(v.max(0.0)), [235, 235, 235], 0.5) };
+                    lit(i, c)
+                })?,
+                None => image_of(spec, |_| [235, 235, 235])?,
+            };
+            let (w, h) = (img.width() as i64, img.height() as i64);
+            let r = (w / 400).max(2);
+            for d in t.rows.values() {
+                let x0 = ((d.lon_deg + 180.0) / 360.0 * w as f64) as i64;
+                let y0 = ((90.0 - d.lat_deg) / 180.0 * h as f64) as i64;
+                for dy in -r - 1..=r + 1 {
+                    for dx in -r - 1..=r + 1 {
+                        let d2 = dx * dx + dy * dy;
+                        let y = y0 + dy;
+                        if d2 > (r + 1) * (r + 1) || !(0..h).contains(&y) {
+                            continue;
+                        }
+                        let col = if d2 > r * r { [30, 30, 30] } else { deposit_color(&d.kind) };
+                        img.put_pixel((x0 + dx).rem_euclid(w) as u32, y as u32, Rgb(col));
+                    }
+                }
+            }
+            img
+        }
         ProductData::TectonicEvents(_) | ProductData::GeologyEvents(_) => return Ok(None),
     };
     // Overlays.
@@ -332,6 +361,22 @@ pub fn gray_chances(values: &[Option<f64>], grid: &AnyGrid) -> Result<image::Gra
         let v = values[(y * width + x) as usize].unwrap_or(0.0);
         image::Luma([(v.clamp(0.0, 1.0) * 255.0).round() as u8])
     }))
+}
+
+/// Marker colour of a deposit kind.
+fn deposit_color(kind: &str) -> [u8; 3] {
+    match kind {
+        "iron" => [170, 60, 30],
+        "copper" => [20, 150, 140],
+        "tin" => [110, 110, 120],
+        "lead_zinc_silver" => [120, 140, 200],
+        "gold" => [230, 180, 0],
+        "coal" => [20, 20, 20],
+        "salt" => [250, 250, 250],
+        "peat" => [100, 70, 40],
+        "gemstones" => [200, 40, 200],
+        _ => [255, 0, 0],
+    }
 }
 
 /// Sparse direction arrows over a vector field.

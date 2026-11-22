@@ -28,7 +28,7 @@
 use crate::ground::Ground;
 use crate::tectonics::boundaries::{analyze, BoundaryParams};
 use geoforge_core::geom::UnitVec3;
-use geoforge_core::grid::{cells_within, AnyGrid, Cell, Grid};
+use geoforge_core::grid::{cells_within, Cell, Grid};
 use geoforge_core::product::Products;
 use geoforge_core::surface::{BoundaryKind, CrustType};
 
@@ -190,7 +190,7 @@ fn class(kind: BoundaryKind, continental: bool, oceanic: bool) -> Class {
 /// Earthquakes: magnitude 6+ a year per 10,000 km², and the largest magnitude likely, per
 /// cell, from the plates and crust in `products`.
 #[must_use]
-pub fn earthquakes(grid: &AnyGrid, radius_km: f64, products: &Products) -> (Vec<f64>, Vec<f64>) {
+pub fn earthquakes(grid: &dyn Grid, radius_km: f64, products: &Products) -> (Vec<f64>, Vec<f64>) {
     let n = grid.len();
     let mut rate = vec![INTRAPLATE; n];
     let mut corner = vec![6.5; n];
@@ -358,7 +358,7 @@ const TRACK_STEP: f64 = 2.0;
 /// Tropical cyclones passing a year per 10,000 km², from the sea's annual mean temperature and
 /// range (its warm season is the mean plus half the range).
 #[must_use]
-pub fn cyclones(grid: &AnyGrid, radius_km: f64, sea: &[bool], temperature: &[f32], range: &[f32]) -> Vec<f64> {
+pub fn cyclones(grid: &dyn Grid, radius_km: f64, sea: &[bool], temperature: &[f32], range: &[f32]) -> Vec<f64> {
     let (w, h) = ((360.0 / TRACK_STEP) as usize, (180.0 / TRACK_STEP) as usize);
     let at = |i: usize, j: usize| {
         let (lat, lon) = (90.0 - (j as f64 + 0.5) * TRACK_STEP, -180.0 + (i as f64 + 0.5) * TRACK_STEP);

@@ -6,8 +6,8 @@
 use crate::body::BodyContext;
 use crate::grid::Grid;
 use crate::seed::Seed;
-use crate::shapes::{Field, Network, Partition, Timeline};
-use crate::surface::{BiomeClass, CrustType, Lake, Plate, Province, RiverNode, RiverReach, Rock, Watershed};
+use crate::shapes::{Field, Network, Partition, Table, Timeline};
+use crate::surface::{BiomeClass, CrustType, GiantDeposit, Lake, Plate, Province, RiverNode, RiverReach, Rock, Watershed};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -24,12 +24,14 @@ pub enum LayerId {
     Erosion,
     Hydrology,
     Biomes,
+    /// The giant ore deposits, drawn from where the ground favours them.
+    Resources,
     /// The banded cloud tops of a world without a surface (giants).
     Bands,
 }
 
 impl LayerId {
-    pub const ALL: [LayerId; 9] = [
+    pub const ALL: [LayerId; 10] = [
         LayerId::Tectonics,
         LayerId::Geology,
         LayerId::Elevation,
@@ -38,6 +40,7 @@ impl LayerId {
         LayerId::Erosion,
         LayerId::Hydrology,
         LayerId::Biomes,
+        LayerId::Resources,
         LayerId::Bands,
     ];
     #[must_use]
@@ -51,6 +54,7 @@ impl LayerId {
             LayerId::Erosion => "erosion",
             LayerId::Hydrology => "hydrology",
             LayerId::Biomes => "biomes",
+            LayerId::Resources => "resources",
             LayerId::Bands => "bands",
         }
     }
@@ -114,10 +118,11 @@ pub enum ProductId {
     Biome,
     ZonalWind,
     CloudBands,
+    Deposits,
 }
 
 impl ProductId {
-    pub const ALL: [ProductId; 24] = [
+    pub const ALL: [ProductId; 25] = [
         ProductId::Plates,
         ProductId::CrustType,
         ProductId::CrustAge,
@@ -142,6 +147,7 @@ impl ProductId {
         ProductId::Biome,
         ProductId::ZonalWind,
         ProductId::CloudBands,
+        ProductId::Deposits,
     ];
 
     /// Stable name: used in file names and seed derivation. Frozen.
@@ -172,6 +178,7 @@ impl ProductId {
             ProductId::Biome => "biome",
             ProductId::ZonalWind => "zonal_wind",
             ProductId::CloudBands => "cloud_bands",
+            ProductId::Deposits => "deposits",
         }
     }
 
@@ -192,6 +199,7 @@ impl ProductId {
             ProductId::Rivers | ProductId::Lakes | ProductId::Watersheds => LayerId::Hydrology,
             ProductId::Biome => LayerId::Biomes,
             ProductId::ZonalWind | ProductId::CloudBands => LayerId::Bands,
+            ProductId::Deposits => LayerId::Resources,
         }
     }
 
@@ -218,6 +226,7 @@ impl ProductId {
             | ProductId::CloudBands => Shape::Field,
             ProductId::TectonicEvents | ProductId::GeologyEvents => Shape::Timeline,
             ProductId::Rivers => Shape::Network,
+            ProductId::Deposits => Shape::Table,
         }
     }
 
@@ -413,6 +422,7 @@ pub enum ProductData {
     Biome(Partition<BiomeClass>),
     ZonalWind(Field<f32>),
     CloudBands(Field<f32>),
+    Deposits(Table<GiantDeposit>),
 }
 
 impl ProductData {
@@ -443,6 +453,7 @@ impl ProductData {
             ProductData::Biome(_) => ProductId::Biome,
             ProductData::ZonalWind(_) => ProductId::ZonalWind,
             ProductData::CloudBands(_) => ProductId::CloudBands,
+            ProductData::Deposits(_) => ProductId::Deposits,
         }
     }
 
@@ -596,6 +607,7 @@ getters! {
     biome => Biome: Partition<BiomeClass>,
     zonal_wind => ZonalWind: Field<f32>,
     cloud_bands => CloudBands: Field<f32>,
+    deposits => Deposits: Table<GiantDeposit>,
 }
 
 impl Products {
