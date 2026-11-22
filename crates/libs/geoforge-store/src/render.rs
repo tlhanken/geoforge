@@ -407,12 +407,15 @@ pub fn render_quantity(values: &[f64], sea: &[bool], contour: f64, span: f64, gr
     Ok(img)
 }
 
+/// A 16-bit grayscale image.
+pub type Gray16 = image::ImageBuffer<image::Luma<u16>, Vec<u16>>;
+
 /// An exact 16-bit grayscale image of a quantity map and the range it spans: 0 is `min`,
 /// 65535 is `max`.
 ///
 /// # Errors
 /// For grids without a raster form.
-pub fn gray_quantity(values: &[f64], grid: &AnyGrid) -> Result<(image::ImageBuffer<image::Luma<u16>, Vec<u16>>, f64, f64)> {
+pub fn gray_quantity(values: &[f64], grid: &AnyGrid) -> Result<(Gray16, f64, f64)> {
     let GridSpec::Equirect { width, height } = grid.spec() else {
         return Err(StoreError::Invalid("exports need an equirectangular grid".into()));
     };

@@ -100,13 +100,13 @@ pub fn sea_level_pressure(grid: &dyn Grid, planet: &Planet, air: &Air) -> Vec<f6
     for j in 0..h {
         let row: Vec<f64> = (0..w).map(|i| warmth[j * w + i] / sum[j * w + i].3.max(1e-30)).collect();
         let zonal = row.iter().sum::<f64>() / w as f64;
-        for i in 0..w {
+        for (i, &t) in row.iter().enumerate() {
             let k = j * w + i;
             let area = sum[k].3.max(1e-30);
             let (land_share, z) = (sum[k].2 / area, (height[k] / area).min(REDUCTION_MAX_M));
-            let departure = row[i] - zonal;
+            let departure = t - zonal;
             let dome = if departure < 0.0 { COLD_HPA_PER_K } else { WARM_HPA_PER_K };
-            let column_k = (row[i] + 273.15).max(150.0);
+            let column_k = (t + 273.15).max(150.0);
             let reduction = mean_hpa * planet.gravity_m_s2 * z / (DRY_AIR_J_KG_K * column_k * column_k);
             p[k] -= (dome + reduction) * 100.0 * land_share * departure;
         }
