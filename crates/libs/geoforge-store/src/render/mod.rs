@@ -77,10 +77,14 @@ const SALT_LAKE: [u8; 3] = [120, 170, 190];
 const STREAM: [u8; 3] = [110, 160, 230];
 const GREAT_RIVER: [u8; 3] = [10, 40, 150];
 
-/// Wind and current speed: calm white to dark blue at `top`, m/s.
+/// Wind speed: calm white to dark blue at `top`, m/s.
 fn speed_stops(top: f64) -> [(f64, [u8; 3]); 4] {
     [(0.0, [235, 238, 245]), (top * 0.3, [170, 200, 230]), (top * 0.7, [70, 120, 200]), (top, [40, 40, 140])]
 }
+
+/// Current speed, m/s: stretched at the slow end, where gyres' broad legs flow at a tenth of
+/// their western boundary currents' speed.
+const CURRENT_SPEED: [(f64, [u8; 3]); 4] = [(0.0, [235, 238, 245]), (0.08, [170, 200, 230]), (0.3, [70, 120, 200]), (1.0, [40, 40, 140])];
 
 /// What a render's colours mean, for a key beside it.
 #[derive(Debug, Clone, PartialEq)]
@@ -115,7 +119,7 @@ pub fn legend(p: ProductId, ctx: &Products, sea: bool) -> Option<Legend> {
         ProductData::SstAnomaly(_) => ramp_of(&SST_ANOMALY, "K from the zonal mean"),
         ProductData::PrecipitationWarmShare(_) => ramp_of(&WARM_SHARE, "share falling in the warm half-year"),
         ProductData::WindJan(_) | ProductData::WindJul(_) => ramp_of(&speed_stops(15.0), "m/s"),
-        ProductData::OceanCurrents(_) => ramp_of(&speed_stops(1.0), "m/s"),
+        ProductData::OceanCurrents(_) => ramp_of(&CURRENT_SPEED, "m/s"),
         ProductData::CrustType(_) => classes(<geoforge_core::surface::CrustType as Category>::ALL.iter().map(|c| (c.name().to_string(), c.color())).collect()),
         ProductData::Lithology(pt) => classes(pt.table.rows.values().map(|r| (r.name.clone(), r.color)).collect()),
         ProductData::Biome(pt) => classes(pt.table.rows.values().map(|r| (r.name.clone(), r.color)).collect()),
@@ -262,7 +266,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             let mut img = image_of(spec, |i| {
                 let v = f.values[i];
                 let sp = f64::from(v[0]).hypot(f64::from(v[1]));
-                let base = ramp(&speed_stops(top), sp);
+                let base = if ocean { ramp(&CURRENT_SPEED, sp) } else { ramp(&speed_stops(top), sp) };
                 match is_sea(i) {
                     false => {
                         if ocean {

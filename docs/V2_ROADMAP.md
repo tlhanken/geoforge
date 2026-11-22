@@ -405,10 +405,39 @@ reproduce on the ETOPO-forced run or a generated Earth-like world.
 - **Great escarpments** on rifted margins (optional). [Drakensberg, Western Ghats, Serra
   do Mar.]
 
-**Oceans**: the interior flow is right to be mostly zonal, but the gyres do not visibly
-close. Western boundary currents show as small patches and the cold eastern legs barely
-show. Strengthen and widen the eastern boundary currents and their upwelling, and add the
-equatorial SST tilt the trades set up (warm pool west, cold tongue east).
+**Oceans** — mostly done. The interior flow is right to be mostly zonal; the gyres now
+close:
+- an equatorward jet runs along shores where the winds upwell (the eastern legs);
+- upwelling counts every season with equatorward wind (a summer of it chills California
+  all year) and needs an ocean-wide sea;
+- the trades upwell a cold tongue along the equator in a wide basin's east, which leaves
+  the warm pool warm;
+- western boundary currents leave the coast midway between where the westerlies begin
+  and the gyre front, then climb across the basin, and poleward of that a cold current
+  comes down the coast to meet them (the Labrador Current, Oyashio, Malvinas);
+- a current carries heat across the gradient only ~1,500 km before it mixes;
+- the current map's colours stretch the slow end, so the eastern legs show.
+
+On the ETOPO-forced Earth, the SST departure boxes (observed in brackets) are:
+
+| Box | Before | Now | Observed |
+|---|---|---|---|
+| California | −1.9 | −3.8 | −4.2 |
+| Benguela | −2.5 | −3.8 | −4.4 |
+| Humboldt | −3.9 | −4.4 | −4.9 |
+| Canary | −3.0 | −3.9 | −3.0 |
+
+On the A/B chain, the western Pacific warm pool goes from +0.1 to +1.1 (+1.3) and the
+pattern correlation from 0.33 to 0.46.
+
+Open:
+- The NE Atlantic is half as warm as it should be (+2.4 vs +4.4): there is no overturning
+  circulation to pull extra warm water into a basin that opens to the polar sea.
+- The Brazil Current runs warm (+4 to +5 °C off southern Brazil vs +1.4).
+- Western Australia and the Timor Sea upwell where the Indonesian Throughflow keeps them
+  warm (the Leeuwin Current).
+- Somalia and Oman upwell only in the summer monsoon, which an annual anomaly cannot
+  show.
 
 **Weak climates**: the layer-by-layer Earth A/B (`scripts/real-earth/ab.sh`, November 2026)
 fed the climate real winds and sea temperatures, which splits the misses:
@@ -416,8 +445,8 @@ fed the climate real winds and sea temperatures, which splits the misses:
 - *Circulation's*: Phoenix 806 → 237 mm (real 200) and Tehran 406 → 224 mm (230) on real
   winds, so the dry Southwest US and Iran fail upstream (winter storms reach too far
   south). Mumbai 1,003 → 1,707 mm (2,200): the weak monsoon is mostly the winds too. The
-  cold eastern currents run at half strength (California −1.8 K vs −4.2, Benguela −2.4 vs
-  −4.4).
+  cold eastern currents ran at half strength (California −1.8 K vs −4.2, Benguela −2.4 vs
+  −4.4); see Oceans above.
 - *Climate's own*: Lima stays wet on real winds and sea (1,025 → 766 mm, real 15); Yakutsk's
   winter stays mild (range 45 vs 58 K) and its rain near 0 (240); Antarctic seasonal ranges
   are about double; typical land rain is half of GPCP's while some coasts (London 1,949 mm

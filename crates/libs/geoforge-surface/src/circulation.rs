@@ -10,13 +10,17 @@
 //!   eastern side (dry west coasts).
 //! - **Currents**: wind-driven gyres from the Sverdrup balance (transport set by the curl of
 //!   the zonal wind stress, integrated westward from each basin's eastern shore) closed by a
-//!   narrow western boundary current (Stommel), which crosses the basin where the gyres
-//!   meet and runs up the far shore (the North Atlantic Drift); plus equatorial currents and
-//!   a circumpolar current where an ocean band has no shores.
+//!   narrow western boundary current (Stommel), which leaves the coast short of where the
+//!   gyres meet, climbs across the basin and runs up the far shore (the Gulf Stream and North
+//!   Atlantic Drift), met at the coast by a cold current from the subpolar gyre (the
+//!   Labrador Current); an equatorward jet along shores where the winds upwell (the
+//!   California Current); plus equatorial currents and a circumpolar current where an ocean
+//!   band has no shores.
 //! - **SST anomaly**: currents carry water across the temperature gradient (poleward
-//!   western boundary currents run warm, equatorward eastern ones cold), and that heat is
-//!   carried downstream along the current; coastal upwelling under equatorward winds cools
-//!   eastern margins further.
+//!   western boundary currents run warm, equatorward eastern ones cold), as far as a
+//!   boundary current runs before it mixes, and that heat is carried downstream along the
+//!   current; upwelling cools eastern margins under equatorward winds, in any season that
+//!   has them, and the equator under the trades, most in a basin's east.
 //!
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
@@ -250,6 +254,16 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             continue;
         }
         let lat = g.lat(y);
+        let hemi = lat.signum();
+        let gyre = if hemi > 0.0 { fronts.0 } else { fronts.1 };
+        // Poleward of where the western boundary current separates, the cold current coming
+        // down from the subpolar gyre takes its place along the coast (the Labrador Current,
+        // Oyashio and Malvinas Current), slower than the warm current it meets.
+        if let Some(f) = gyre {
+            if v.1 * hemi > 0.0 && lat.abs() < f.front + 1.0 {
+                v.1 *= 1.0 - (1.0 + SUBPOLAR_COAST_SHARE) * smoothstep(f.separation, f.separation + 3.0, lat.abs());
+            }
+        }
         let drift = wind_drift(annual[i], lat);
         v.0 += drift.0;
         v.1 += drift.1;
@@ -258,6 +272,11 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         let eq = (-(lat / 7.0).powi(2)).exp();
         let counter = (-((lat - 6.0) / 2.5).powi(2)).exp();
         v.0 += 0.3 * annual[i].0.min(0.0) * eq + 0.35 * counter;
+        // An equatorward jet along shores where the winds upwell: the eastern legs that close
+        // the subtropical gyres.
+        if !b.open_row[y] {
+            v.1 -= lat.signum() * EASTERN_CURRENT_M_S * upwelling_drive([annual[i]; 2], lat, b.west_km[i] + b.east_km[i]) * (-b.east_km[i] / EASTERN_CURRENT_KM).exp();
+        }
         // A circumpolar current where the ocean band has no shores (spread over the band).
         if open_band[y] > 0.0 {
             v.0 += 0.6 * open_band[y] * annual[i].0.max(0.0);
@@ -269,14 +288,18 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         // Currents). Only in a basin of a gyre's width: across a wider stretch of open water
         // (the Atlantic and Indian Oceans together at 45°S) the current joins the circumpolar
         // flow instead.
-        let hemi = lat.signum();
-        let front = if hemi > 0.0 { fronts.0 } else { fronts.1 };
-        if let Some(front) = front {
+        if let Some(GyreFront { front, separation }) = gyre {
             let basin = 1.0 - open_band[y];
             let width = b.west_km[i] + b.east_km[i];
             let crossing = 1.0 - smoothstep(MAX_GYRE_KM, 1.5 * MAX_GYRE_KM, width);
             let x_rel = if b.open_row[y] { 0.0 } else { b.west_km[i] / width.max(1.0) };
-            let jet = (-((lat.abs() - front) / 5.0).powi(2)).exp();
+            // The jet leaves the coast at the separation latitude and climbs to the front over
+            // the first part of the basin (Cape Hatteras to the Grand Banks), flowing along
+            // its path.
+            let path = separation + (front - separation) * smoothstep(0.0, JET_RISE_SHARE, x_rel);
+            let rise_km = (front - separation) * smoothstep_slope(0.0, JET_RISE_SHARE, x_rel) / width.max(1.0) * radius_km.to_radians();
+            let jet = (-((lat.abs() - path) / 5.0).powi(2)).exp();
+            v.1 += hemi * basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel) * rise_km.min(1.0);
             let beyond = ((lat.abs() - front) / 5.0).clamp(0.0, 1.0) * ((front + 28.0 - lat.abs()) / 6.0).clamp(0.0, 1.0);
             // An eastern shore the current can run up: a coast that also reaches ~5° toward
             // the equator (Norway, Alaska, southern Chile), not Antarctica's, which runs
@@ -297,6 +320,16 @@ fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// d[`smoothstep`]/dx.
+fn smoothstep_slope(e0: f64, e1: f64, x: f64) -> f64 {
+    let t = (x - e0) / (e1 - e0);
+    if (0.0..=1.0).contains(&t) {
+        6.0 * t * (1.0 - t) / (e1 - e0)
+    } else {
+        0.0
+    }
+}
+
 /// Wind drift (m/s): ~3% of the wind speed, turned 30° to the right of the wind in the north
 /// and to the left in the south (Ekman).
 fn wind_drift(wind: (f64, f64), lat: f64) -> (f64, f64) {
@@ -305,24 +338,80 @@ fn wind_drift(wind: (f64, f64), lat: f64) -> (f64, f64) {
     (wu * turn.cos() - wv * turn.sin(), wu * turn.sin() + wv * turn.cos())
 }
 
-/// Latitude of the strongest westerly stress in each hemisphere (north, south), between 25°
-/// and 65°: where the subtropical and subpolar gyres meet.
-fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<f64>, Option<f64>) {
+/// Where the subtropical and subpolar gyres meet in a hemisphere, and where the western
+/// boundary current leaves the coast, degrees of latitude.
+#[derive(Debug, Clone, Copy)]
+struct GyreFront {
+    /// Under the strongest westerly stress, between 25° and 65°.
+    front: f64,
+    /// Where the western boundary current separates, short of the front: its momentum carries
+    /// it off the coast before the gyres' boundary (the Gulf Stream at Cape Hatteras, 35°N,
+    /// the Brazil Current at 38°S).
+    separation: f64,
+}
+
+/// Each hemisphere's (north, south) gyre front.
+fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<GyreFront>, Option<GyreFront>) {
     let best = |north: bool| {
-        (0..g.h)
-            .filter(|&y| {
-                let lat = g.lat(y);
-                (lat > 0.0) == north && (25.0..65.0).contains(&lat.abs())
-            })
-            .filter(|&y| tau[y] > 0.0)
-            .max_by(|&a, &b| tau[a].total_cmp(&tau[b]))
-            .map(|y| g.lat(y).abs())
+        let rows = || (0..g.h).filter(move |&y| (g.lat(y) > 0.0) == north);
+        let front = rows().filter(|&y| (25.0..65.0).contains(&g.lat(y).abs()) && tau[y] > 0.0).max_by(|&a, &b| tau[a].total_cmp(&tau[b])).map(|y| g.lat(y).abs())?;
+        // The westerlies' equatorward edge: the last row with easterly stress short of the front.
+        let start = rows().filter(|&y| g.lat(y).abs() < front && tau[y] <= 0.0).map(|y| g.lat(y).abs()).fold(0.0, f64::max);
+        Some(GyreFront { front, separation: start + SEPARATION_SHARE * (front - start) })
     };
     (best(true), best(false))
 }
 
 /// How far offshore coastal upwelling cools the sea, km (e-folding).
 const UPWELLING_KM: f64 = 400.0;
+/// Farthest a current carries water across the temperature gradient before it mixes with
+/// the water beside it, km (soft limit).
+const MAX_REACH_KM: f64 = 1500.0;
+/// Equatorward wind along the shore, averaged over the year's upwelling seasons, at which
+/// coastal upwelling and its jet are at full strength, in units of [`WIND_REF_M_S`] (3 m/s).
+const UPWELLING_WIND: f64 = 0.375;
+/// Speed of the equatorward jet along an upwelling shore (the California, Humboldt, Canary
+/// and Benguela Currents), m/s.
+const EASTERN_CURRENT_M_S: f64 = 0.2;
+/// Width of that jet, km (e-folding from the shore).
+const EASTERN_CURRENT_KM: f64 = 500.0;
+/// Speed of the cold coastal current poleward of a western boundary current's separation,
+/// as a share of the warm current's.
+const SUBPOLAR_COAST_SHARE: f64 = 0.25;
+/// How far from where the westerlies begin toward the gyre front a western boundary current
+/// separates from the coast.
+const SEPARATION_SHARE: f64 = 0.5;
+/// Share of a basin's width over which the separated jet climbs from its separation latitude
+/// to the gyre front.
+const JET_RISE_SHARE: f64 = 0.5;
+/// Half-width of the band where the trades upwell cold water along the equator, degrees.
+const EQUATORIAL_UPWELLING_DEG: f64 = 4.0;
+/// Equatorial upwelling's cooling as a share of a coast's.
+const EQUATORIAL_UPWELLING_SHARE: f64 = 0.5;
+
+/// How hard the seasons' winds drive upwelling along the eastern shore of a sea `width_km`
+/// across (0–1): the equatorward wind along the shore, which drags the water offshore, from
+/// ~6° to ~45° of latitude, off an ocean (a narrow sea has no deep cold water to bring up).
+/// Each season upwells on its own and the opposite wind does not undo it, so a summer of
+/// upwelling chills a coast all year (California, Iberia).
+fn upwelling_drive(seasons: [(f64, f64); 2], lat: f64, width_km: f64) -> f64 {
+    let equatorward = |w: (f64, f64)| (-w.1 * lat.signum()).max(0.0);
+    let band = smoothstep(4.0, 8.0, lat.abs()) * (1.0 - smoothstep(40.0, 48.0, lat.abs()));
+    let year = 0.5 * (equatorward(seasons[0]) + equatorward(seasons[1]));
+    (year / UPWELLING_WIND).min(1.0) * band * smoothstep(1000.0, 3000.0, width_km)
+}
+
+/// How hard the trades drive upwelling along the equator (0–1): annual mean easterly wind,
+/// near the equator, in an ocean wide enough for the trades to tilt its warm layer, growing
+/// toward the basin's east where that layer is thin (the cold tongues of the eastern Pacific
+/// and Atlantic; none among the Indonesian islands).
+fn equatorial_drive(annual: (f64, f64), lat: f64, west_km: f64, east_km: f64) -> f64 {
+    let easterly = (-annual.0 / UPWELLING_WIND).clamp(0.0, 1.0);
+    let width = west_km + east_km;
+    let x_rel = west_km / width.max(1.0);
+    easterly * (-(lat / EQUATORIAL_UPWELLING_DEG).powi(2)).exp() * smoothstep(0.2, 0.9, x_rel) * smoothstep(2000.0, 5000.0, width)
+}
+
 /// Freezing point of seawater, °C.
 const SEA_FREEZE_C: f64 = -1.8;
 /// Latitude span over which the sea-surface anomaly's zonal mean is taken off, degrees.
@@ -349,31 +438,41 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
             }
         })
         .collect();
-    let source: Vec<f64> = (0..g.len())
+    // What the currents carry across the temperature gradient, and what the winds bring up.
+    let (carried, upwelled): (Vec<f64>, Vec<f64>) = (0..g.len())
         .map(|i| {
             if a.land[i] >= 0.5 {
-                return 0.0;
+                return (0.0, 0.0);
             }
             let y = i / g.w;
             let (yn, ys) = (y.saturating_sub(1), (y + 1).min(g.h - 1));
             // The sea surface follows the zonal temperature down only to freezing: over the ice
             // at high latitudes its gradient is the air's, not the water's.
             let sst = |t: f64| t.max(SEA_FREEZE_C);
-            let dtdy = (sst(tz[yn]) - sst(tz[ys])) / ((ys - yn).max(1) as f64 * dy_km * 1000.0); // °C per m northward
-            let mut s = -(cur[i].1 - v_mean[y]) * dtdy * p.heat_memory_days * 86_400.0;
+            // °C per m northward.
+            let dtdy = (sst(tz[yn]) - sst(tz[ys])) / ((ys - yn).max(1) as f64 * dy_km * 1000.0);
+            // How far the water has come across the gradient: a current carries it for
+            // `heat_memory_days`, but no further than a boundary current runs before eddies
+            // mix it into the water beside it.
+            let reach_m = (cur[i].1 - v_mean[y]) * p.heat_memory_days * 86_400.0;
+            let reach_m = MAX_REACH_KM * 1000.0 * (reach_m / (MAX_REACH_KM * 1000.0)).tanh();
             let lat = g.lat(y);
-            // Upwelling: equatorward wind along an eastern shore, in the subtropics, all year (a
-            // monsoon's reversing winds upwell only half the year, and not off India).
-            let equatorward = seasons.iter().all(|w| w[i].1 * lat.signum() < 0.0);
-            if equatorward && (8.0..42.0).contains(&lat.abs()) && !b.open_row[y] {
-                s -= p.upwelling_c * (-b.east_km[i] / UPWELLING_KM).exp();
+            // Upwelling: along an eastern shore where the winds blow equatorward, and along the
+            // equator under the trades.
+            let mut up = 0.0;
+            if !b.open_row[y] {
+                let (winds, width) = ([seasons[0][i], seasons[1][i]], b.west_km[i] + b.east_km[i]);
+                let annual = (0.5 * (winds[0].0 + winds[1].0), 0.5 * (winds[0].1 + winds[1].1));
+                up += upwelling_drive(winds, lat, width) * (-b.east_km[i] / UPWELLING_KM).exp();
+                up += EQUATORIAL_UPWELLING_SHARE * equatorial_drive(annual, lat, b.west_km[i], b.east_km[i]);
             }
-            s
+            (-reach_m * dtdy, -p.upwelling_c * up)
         })
-        .collect();
+        .unzip();
     // Carry the anomaly along the currents (one atmosphere cell per step at 0.5 m/s): water
     // keeps its warmth for months, so the Gulf Stream's reaches Norway.
     let flow: Vec<(f64, f64)> = cur.iter().map(|v| (v.0 / 0.5, v.1 / 0.5)).collect();
+    let source: Vec<f64> = carried.iter().zip(&upwelled).map(|(c, u)| c + u).collect();
     let mut anom = carry_along(g, &flow, &source, &a.land, 200, 0.97);
     diffuse_sea(g, &mut anom, &a.land, 0.3);
     // A departure from the zonal temperature averages to zero round each latitude circle.
@@ -450,7 +549,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 7;
+    const VERSION: u32 = 8;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -546,18 +645,35 @@ mod tests {
     use super::*;
     use crate::atmosphere::Cells;
 
-    /// One ocean basin between two meridional continents, Earth-like body: a clockwise
-    /// subtropical gyre in the north with a fast poleward western boundary current, an
-    /// anticlockwise one in the south, warm water on the western side and cold upwelling on
-    /// the eastern side.
-    #[test]
-    fn gyre_has_western_intensification() {
+    /// East and north components on the atmosphere grid.
+    type Vectors = Vec<(f64, f64)>;
+
+    /// One ocean basin between two meridional continents (x 40–120) on an Earth-like body,
+    /// with its annual winds and currents.
+    fn one_basin() -> (Atmo, CirculationParams, Vectors, Vectors) {
         let g = AtmoGrid::new(1.0);
         let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
         let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 6371.0, 23.0, 0.0), 0.0, g.w), &p);
         let cur = currents(&a, &annual, 6371.0, &p);
+        (a, p, annual, cur)
+    }
+
+    fn sst_of(a: &Atmo, p: &CirculationParams, annual: &[(f64, f64)], cur: &[(f64, f64)]) -> Vec<f64> {
+        let lats: Vec<f64> = (0..a.g.h).map(|y| a.g.lat(y)).collect();
+        let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
+        let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
+        sst_anomaly(a, cur, [annual, annual], &tz, 6371.0, p)
+    }
+
+    /// A clockwise subtropical gyre in the north with a fast poleward western boundary
+    /// current, an anticlockwise one in the south, warm water on the western side and cold
+    /// upwelling on the eastern side.
+    #[test]
+    fn gyre_has_western_intensification() {
+        let (a, p, annual, cur) = one_basin();
+        let g = a.g;
         let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
         // Western boundary (x just east of 40) at 30°N: strong northward flow.
         let wbc = at(31.0, 41);
@@ -567,12 +683,33 @@ mod tests {
         assert!(interior.1 < 0.0 && interior.1.abs() < wbc.1 / 10.0, "interior {interior:?}");
         // Southern hemisphere western boundary current runs south.
         assert!(at(-31.0, 41).1 < -0.8);
-        let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
-        let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
-        let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
-        let sst = sst_anomaly(&a, &cur, [&annual, &annual], &tz, 6371.0, &p);
+        let sst = sst_of(&a, &p, &annual, &cur);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
-        assert!(s(38.0, 43) > 1.0, "warm western boundary {}", s(38.0, 43));
+        assert!(s(40.0, 43) > 1.0, "warm western boundary {}", s(40.0, 43));
         assert!(s(25.0, 119) < -0.5, "cool eastern boundary {}", s(25.0, 119));
+    }
+
+    /// The gyres close: an equatorward current along the eastern shore in both hemispheres,
+    /// and, poleward of where the western boundary current leaves the coast, a cold current
+    /// coming down the western shore to meet it. The trades upwell cold water along the
+    /// equator, most in the east of the basin.
+    #[test]
+    fn gyres_close_and_the_equator_upwells() {
+        let (a, p, annual, cur) = one_basin();
+        let g = a.g;
+        let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
+        for lat in [25.0, 32.0] {
+            assert!(at(lat, 118).1 < -0.1, "eastern leg at {lat}°N {:?}", at(lat, 118));
+            assert!(at(-lat, 118).1 > 0.1, "eastern leg at {lat}°S {:?}", at(-lat, 118));
+        }
+        let (north, _) = gyre_fronts(&g, &(0..g.h).map(|y| annual[y * g.w + 80].0 * annual[y * g.w + 80].0.abs()).collect::<Vec<_>>());
+        let f = north.expect("a gyre front");
+        assert!(f.separation > 30.0 && f.separation < f.front - 5.0, "{f:?}");
+        let coast = at(f.separation + 4.0, 41);
+        assert!(coast.1 < 0.0, "cold coastal current poleward of separation {coast:?}");
+        let sst = sst_of(&a, &p, &annual, &cur);
+        let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
+        assert!(s(f.separation + 4.0, 41) < s(f.separation - 4.0, 41) - 2.0, "warm current meets cold at the separation");
+        assert!(s(0.5, 112) < s(0.5, 50) - 1.0, "equatorial cold tongue in the east: {} vs {}", s(0.5, 112), s(0.5, 50));
     }
 }

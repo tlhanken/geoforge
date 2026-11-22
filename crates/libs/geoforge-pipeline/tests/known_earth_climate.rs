@@ -86,7 +86,11 @@ const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range 
 const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 45 °C (observed 58)";
 const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 1600 mm at 40°N 117°W, observed ~250)";
 const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
-const ARABIA: &str = "the summer rain belt reaches into Arabia (600 mm at 22°N 47°E, all of it in summer), which cools it";
+const ARABIA: &str =
+    "the summer rain belt reaches into Arabia (350 mm at 22°N 47°E, all of it in summer), which cools it; the northern Arabian Sea, no longer 2 °C too cold, rains 870 mm at 20°N 62°E (observed ~100)";
+const PAMPAS: &str = "Buenos Aires gets half its rain (570 mm, observed 1200): it had leaned on a Brazil Current 8 °C too warm offshore (35°S 54°W, observed about −1), which is now +6.5 °C, and the land's rain comes short";
+const NORTHWEST_AUSTRALIA: &str = "the seas off north-western Australia upwell under the dry-season trades (Timor Sea −3 °C, observed +2; off Western Australia −4, observed +0.5) where real ones keep a deep warm layer fed from the Pacific through Indonesia (the Leeuwin Current): the Kimberley falls from 1130 to 740 mm and Alice Springs to 140 mm (observed 285)";
+const SOUTH_ATLANTIC: &str = "the modelled tropical South Atlantic is warm enough for storms (26.7 °C at 15°S 25°W, observed ~26), and the wind shear that stops real storms there is not modelled";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
 const ICELAND: &str = "cold East Greenland water chills the air reaching Iceland: Reykjavik is 7 °C cold";
 const KAZAKHSTAN: &str = "the Kazakh steppe is three times too wet and less continental than observed (990 mm, range 22 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
@@ -115,9 +119,11 @@ const RAIN_GAPS: &[(&str, &str)] = &[
     ("Astana", KAZAKHSTAN),
     ("Nairobi", "the East African highlands are drenched (2800 mm, observed 870)"),
     ("Lhasa", TIBET),
+    ("Buenos Aires", PAMPAS),
+    ("Riyadh", ARABIA),
+    ("Alice Springs", NORTHWEST_AUSTRALIA),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
-    ("Siberian taiga", "central Siberia is too dry for taiga (230 mm at 60°N 100°E, observed ~400–500)"),
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
     ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
     ("Sahel", WEST_AFRICA),
@@ -458,6 +464,7 @@ const OCEAN_GAPS: &[(&str, &str)] = &[
     ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic (a +6.6 °C sea surface anomaly), so its coldest month is +1.6 °C (observed about −3)"),
     ("Norwegian Sea (68°N 5°E)", "the modelled North Atlantic Current does not reach the Norwegian Sea: its coldest month is −8.7 °C (observed about +3)"),
     ("Maldives (4°N 73°E)", "the atolls are far smaller than a one-degree cell, which averages to deep water"),
+    ("Bering Sea (58°N 175°W)", "with its water no longer 2 °C too cold (−1.3 °C under the zonal mean, observed −1.4) the Bering Sea's coldest month is −2.3 °C, short of the −4 °C that freezes it: its real ice forms in the north and is blown south by the winter northerlies, which the model does not carry"),
 ];
 
 /// Sea-level pressure recovered from the modelled winds, against ERA5's 1991–2020 seasonal
@@ -509,10 +516,7 @@ const PRESSURE_GAPS: &[(&str, &str)] = &[
     ("Antarctic trough (65°S 90°E)", "the modelled westerlies peak at 40–45°S (observed 50–55°S), so the trough is shallower"),
 ];
 
-const CYCLONE_GAPS: &[(&str, &str)] = &[(
-    "South Atlantic (20°S 25°W)",
-    "the modelled tropical South Atlantic summer is warm and wet (28 °C, 1400 mm at 15°S; observed ~26 °C and dry), and the wind shear that stops real storms there is not modelled",
-)];
+const CYCLONE_GAPS: &[(&str, &str)] = &[("South Atlantic (20°S 25°W)", SOUTH_ATLANTIC)];
 
 /// Tropical cyclone tracks from the modelled sea temperatures, against IBTrACS: the western
 /// Pacific busiest, the Gulf and Caribbean busy, none in the South Atlantic or off Peru.
@@ -558,10 +562,7 @@ fn storm_field(s: &mut Scorecard, e: &Earth) {
     s.range("storms", "mid-latitude lows formed a day, world".to_string(), lows, 3.0..=8.0, "");
 }
 
-const STORM_GAPS: &[(&str, &str)] = &[(
-    "Philippine Sea (15°N 130°E)",
-    "the modelled western Pacific warm pool is too cool (25 °C at 15°N 135°E, observed ~29), so storms form only in its far east (5–10°N, 155–165°E) and few reach the Philippine Sea still deep",
-)];
+const STORM_GAPS: &[(&str, &str)] = &[("South Atlantic (20°S 25°W)", SOUTH_ATLANTIC)];
 
 /// The classifier alone, fed station normals: its own errors, apart from the climate's.
 fn classifier(s: &mut Scorecard) {
