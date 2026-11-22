@@ -2,10 +2,12 @@
 //! belts in the gaps, and moons.
 
 use crate::draw::{name, Draw};
+use crate::dynamics::{self, HasOrbit};
+use crate::planets::Formed;
 use crate::stars::spectral_class;
 use geoforge_core::body::{
     BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, AU_KM,
-    EARTH_MASS_KG, EARTH_RADIUS_KM,
+    EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
 };
 use geoforge_core::derived::{effective_temperature_k, frost_line_au, habitable_zone_au, main_sequence_luminosity, main_sequence_radius, orbital_period_days};
 use geoforge_core::key::{Key, KeyAllocator};
@@ -65,12 +67,8 @@ pub fn generate_system(seed: Seed) -> Generated {
     }
     orbits.sort_by(f64::total_cmp);
 
-    let mut focus = Key(0);
-    let mut first_giant_a = None;
-    let mut last_rock_a: f64 = 0.0;
-    let mut planets = Vec::new();
-    for (i, &a) in orbits.iter().enumerate() {
-        let key = keys.fresh();
+    let mut drafts = Vec::new();
+    for &a in &orbits {
         let is_focus = (a - focus_a).abs() < 1e-12;
         let (class, mass_e) = if is_focus {
             (BodyClass::Terrestrial, d.range(0.6, 1.6))
@@ -83,12 +81,6 @@ pub fn generate_system(seed: Seed) -> Generated {
         } else {
             (BodyClass::SmallBody, d.range(0.001, 0.02))
         };
-        if matches!(class, BodyClass::GasGiant | BodyClass::IceGiant) && first_giant_a.is_none() {
-            first_giant_a = Some(a);
-        }
-        if class == BodyClass::Terrestrial {
-            last_rock_a = last_rock_a.max(a);
-        }
         let radius_e = planet_radius_earth(class, mass_e);
         let ext = BodyExterior {
             class,
@@ -108,45 +100,52 @@ pub fn generate_system(seed: Seed) -> Generated {
             argp_deg: d.range(0.0, 360.0),
             m0_deg: d.range(0.0, 360.0),
         };
+        drafts.push(Draft { orbit: Formed { a_au: a, e: el.e, class, mass_earth: mass_e }, ext, el });
+    }
+    // Crowded neighbours move apart or scatter; the focus stays where it is.
+    dynamics::settle(&mut Draw::new(seed.child(b"dynamics")), &mut drafts, m, Some(focus_a));
+
+    let mut focus = Key(0);
+    let mut planets = Vec::new();
+    for (i, draft) in drafts.iter().enumerate() {
+        let key = keys.fresh();
         let nm = format!("{sys_name} {}", ROMAN.get(i).copied().unwrap_or("+"));
-        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(ext), elements: Some(el) });
-        planets.push((key, nm, ext));
-        if is_focus {
+        let el = Elements { a_au: draft.orbit.a_au, e: draft.orbit.e, ..draft.el };
+        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(draft.ext), elements: Some(el) });
+        planets.push((key, nm, draft.ext, draft.orbit.a_au));
+        if (draft.orbit.a_au - focus_a).abs() < 1e-12 {
             focus = key;
         }
     }
+    let giants: Vec<f64> = drafts.iter().filter(|p| matches!(p.orbit.class, BodyClass::GasGiant | BodyClass::IceGiant)).map(|p| p.orbit.a_au).collect();
+    let last_rock = drafts.iter().filter(|p| p.orbit.class == BodyClass::Terrestrial && giants.first().is_none_or(|&g| p.orbit.a_au < g)).map(|p| p.orbit.a_au).fold(0.0, f64::max);
 
-    // Asteroid belt between the last rocky planet and the first giant, if the gap is wide.
-    if let Some(g) = first_giant_a {
-        if g / last_rock_a.max(1e-9) > 2.2 {
-            let inner = last_rock_a * 1.35;
-            let outer = g * 0.72;
-            if outer > inner {
-                nodes.push(OrbitalNode {
-                    key: keys.fresh(),
-                    name: format!("{sys_name} Belt"),
-                    parent: Some(star_key),
-                    node: NodeKind::Belt(Population {
-                        inner_au: inner,
-                        outer_au: outer,
-                        count_estimate: 10f64.powf(d.range(5.5, 6.5)),
-                        size_law: PowerLaw { min_km: 1.0, max_km: d.range(400.0, 950.0), exponent: 3.5 },
-                        composition: Composition::from_weights(&[(Species::Silicate, 0.75), (Species::Iron, 0.15), (Species::Ice, 0.10)]),
-                    }),
-                    elements: None,
-                });
-            }
-        }
+    // An asteroid belt inside the first giant, between its 4:1 and 2:1 resonances.
+    if let Some((inner, outer)) = giants.first().and_then(|&g| dynamics::asteroid_belt(g, last_rock)) {
+        nodes.push(OrbitalNode {
+            key: keys.fresh(),
+            name: format!("{sys_name} Belt"),
+            parent: Some(star_key),
+            node: NodeKind::Belt(Population {
+                inner_au: inner,
+                outer_au: outer,
+                count_estimate: 10f64.powf(d.range(5.5, 6.5)),
+                size_law: PowerLaw { min_km: 1.0, max_km: d.range(400.0, 950.0), exponent: 3.5 },
+                composition: Composition::from_weights(&[(Species::Silicate, 0.75), (Species::Iron, 0.15), (Species::Ice, 0.10)]),
+            }),
+            elements: None,
+        });
     }
-    // Outer icy belt beyond the last planet.
-    let last = *orbits.last().unwrap_or(&30.0);
+    // An outer icy belt: the outermost giant's 3:2 to 2:1 resonances, else beyond the planets.
+    let last = drafts.last().map_or(30.0, |p| p.orbit.a_au);
+    let (outer_in, outer_out) = giants.last().map_or((last * 1.3, last * 1.9), |&g| dynamics::kuiper_belt(g));
     nodes.push(OrbitalNode {
         key: keys.fresh(),
         name: format!("{sys_name} Outer Belt"),
         parent: Some(star_key),
         node: NodeKind::Belt(Population {
-            inner_au: last * 1.3,
-            outer_au: last * 1.9,
+            inner_au: outer_in,
+            outer_au: outer_out,
             count_estimate: 10f64.powf(d.range(8.0, 9.0)),
             size_law: PowerLaw { min_km: 1.0, max_km: d.range(1000.0, 2500.0), exponent: 3.0 },
             composition: Composition::from_weights(&[(Species::Ice, 0.6), (Species::Silicate, 0.4)]),
@@ -154,8 +153,9 @@ pub fn generate_system(seed: Seed) -> Generated {
         elements: None,
     });
 
-    // Moons.
-    for (key, nm, ext) in &planets {
+    // Moons, inside each planet's Hill sphere.
+    for (key, nm, ext, a_au) in &planets {
+        let hill = hill_km(*a_au, ext.mass_kg, m);
         let moons = match ext.class {
             // Galilean-like: 2–5 large moons holding ~2×10⁻⁴ of the planet's mass.
             BodyClass::GasGiant => {
@@ -170,16 +170,58 @@ pub fn generate_system(seed: Seed) -> Generated {
             // The focus world: a large moon half the time.
             BodyClass::Terrestrial if *key == focus && d.u() < 0.55 => {
                 let mass_kg = ext.mass_kg * d.range(0.004, 0.02);
-                let a_km = d.range(30.0, 80.0) * ext.radius_km;
-                vec![moon(&mut d, keys.fresh(), *key, ext.mass_kg, MoonSpec { name: format!("{nm} a"), mass_kg, a_km, density_g_cc: 3.3 })]
+                let drawn = d.range(30.0, 80.0) * ext.radius_km;
+                big_moon_orbit_km(drawn, ext, hill)
+                    .map(|a_km| moon(&mut d, keys.fresh(), *key, ext.mass_kg, MoonSpec { name: format!("{nm} a"), mass_kg, a_km, density_g_cc: 3.3 }))
+                    .into_iter()
+                    .collect()
             }
             _ => Vec::new(),
         };
-        nodes.extend(moons);
+        nodes.extend(moons.into_iter().filter(|n| n.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
     let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: None };
     Generated { system: SolarSystem { root, nodes }, focus }
+}
+
+/// A planet being placed: its orbit, settled with its neighbours before it gets a key.
+struct Draft {
+    orbit: Formed,
+    ext: BodyExterior,
+    el: Elements,
+}
+
+impl HasOrbit for Draft {
+    fn orbit(&self) -> &Formed {
+        &self.orbit
+    }
+    fn orbit_mut(&mut self) -> &mut Formed {
+        &mut self.orbit
+    }
+}
+
+/// Moons stay inside this share of their planet's Hill radius: prograde orbits are stable to
+/// about half of it (Domingos et al. 2006).
+pub(crate) const MOON_HILL_SHARE: f64 = 0.4;
+
+/// Hill radius of a planet of `planet_kg` at `a_au` from a star of `star_solar` M☉, km.
+pub(crate) fn hill_km(a_au: f64, planet_kg: f64, star_solar: f64) -> f64 {
+    a_au * AU_KM * (planet_kg / (3.0 * star_solar * SOLAR_MASS_KG)).cbrt()
+}
+
+/// Fluid Roche limit of a moon of density `moon_g_cc` around `p`, km (the Moon's around
+/// Earth: 18,000 km).
+pub(crate) fn roche_km(p: &BodyExterior, moon_g_cc: f64) -> f64 {
+    let planet_g_cc = p.mass_kg / (4.0 / 3.0 * std::f64::consts::PI * (p.radius_km * 1e5).powi(3)) * 1000.0;
+    2.44 * p.radius_km * (planet_g_cc / moon_g_cc).cbrt()
+}
+
+/// Orbit of a big moon drawn at `drawn_km` from a rocky planet: brought inside the Hill
+/// sphere if it lies beyond, `None` if that leaves it near the Roche limit.
+pub(crate) fn big_moon_orbit_km(drawn_km: f64, p: &BodyExterior, hill_km: f64) -> Option<f64> {
+    let a = drawn_km.min(0.9 * MOON_HILL_SHARE * hill_km);
+    (a > 2.0 * roche_km(p, 3.3)).then_some(a)
 }
 
 /// Radius (Earth radii) of a planet of `class` and `mass_e` Earth masses.

@@ -229,12 +229,16 @@ product's randomness. `seed <dir> <product>` prints it.
   to stable orbits (Holman & Wiegert 1999); giants swallow what is within three of their
   radii, white dwarfs keep only what formed beyond ~2 AU, on widened orbits, neutron stars
   only rare second-generation planets (PSR B1257+12), black holes nothing. Planets within
-  0.35 AU·M^(1/3) of their star are tidally locked. The focus is the most Earth-like solid
+  0.35 AU·M^(1/3) of their star are tidally locked. Neighbours are kept 8 mutual Hill radii
+  apart; closer than 5 they scatter (the lighter thrown out, the survivor eccentric). The
+  asteroid belt lies between the first giant's 4:1 and 2:1 resonances, the Kuiper belt
+  between the outermost giant's 3:2 and 2:1; moons between the Roche limit and 0.4 of the
+  Hill radius. The focus is the most Earth-like solid
   body (surface water first, then plates and air, then starlight and mass near Earth's).
   Against the Milky Way near the Sun: 75% red dwarfs, 6% white dwarfs, 0.5% neutron stars,
   0.2% black holes, 25% of red dwarfs and 46% of Sun-like stars multiple.
 - **Solar system, habitable recipe** (`--habitable`): an F8–K5 star; planets on a geometric
-  ladder through the habitable zone with the focus world in it; belts in the gaps; 2–5 large moons per gas giant, 0–2 per ice
+  ladder through the habitable zone with the focus world in it, settled by the same spacing rules (the focus stays put); belts at the giants' resonances; 2–5 large moons per gas giant, 0–2 per ice
   giant, sometimes a large moon for the focus. What each body is follows from its mass,
   starlight and where it formed: airless rock (Mercury, the Moon), runaway greenhouse (Venus:
   ~90 bar CO₂, episodic lid), ocean and plate tectonics (Earth), thin CO₂ (Mars); icy bodies

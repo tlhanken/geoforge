@@ -85,8 +85,13 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
         icy: year.a_au > star.frost_au,
         tidally_heated: parent.is_some_and(|(_, pb)| orbit.a_au * AU_KM < TIDAL_HEATING_RADII * pb.radius_km),
     };
-    // Tides: a moon feels its planet; a planet feels its moons.
-    let tides = match parent {
+    // Tides: a moon feels its planet, a planet its moons; both feel the star.
+    let star_tide = TidalPartner {
+        name: system.node(planet.parent?).map_or_else(String::new, |n| n.name.clone()),
+        mass_kg: star.mass_solar * SOLAR_MASS_KG,
+        distance_km: year.a_au * AU_KM,
+    };
+    let mut tides: Vec<TidalPartner> = match parent {
         Some((p, pb)) => vec![TidalPartner { name: p.name.clone(), mass_kg: pb.mass_kg, distance_km: orbit.a_au * AU_KM }],
         None => system
             .children(key)
@@ -97,6 +102,7 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
             })
             .collect(),
     };
+    tides.push(star_tide);
     let mut ctx = BodyContext {
         key,
         name: node.name.clone(),

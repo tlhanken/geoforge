@@ -17,7 +17,7 @@ use crate::galaxy::Galaxy;
 use crate::planets::{self, binary_survival, p_type_limit, s_type_limit, Architecture, Belt, Disk};
 use crate::population::{draw as draw_phenotype, Companion, Phenotype};
 use crate::stars::evolve;
-use crate::system::{moon, moon_system, planet_radius_earth, Generated, MoonSpec, ROMAN};
+use crate::system::{big_moon_orbit_km, hill_km, moon, moon_system, planet_radius_earth, Generated, MoonSpec, MOON_HILL_SHARE, ROMAN};
 use geoforge_core::body::{
     BodyClass, BodyContext, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot,
     TectonicRegime, AU_KM, EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
@@ -120,7 +120,7 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     }
     nodes.extend(belts(&mut d, &mut keys, host_key, &sys_name, &arch));
     for (key, nm, ext, a_au) in &planets {
-        let hill_km = a_au * AU_KM * (ext.mass_kg / (3.0 * host_now * SOLAR_MASS_KG)).cbrt();
+        let hill = hill_km(*a_au, ext.mass_kg, host_now);
         let locked = *a_au < tidal_lock_au(host_now, age);
         let moons = match ext.class {
             BodyClass::GasGiant => {
@@ -133,13 +133,17 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
             }
             // A big moon from a giant impact, as Earth's: uncommon.
             BodyClass::Terrestrial if !locked && ext.mass_kg > 0.3 * EARTH_MASS_KG && d.u() < 0.2 => {
-                let spec = MoonSpec { name: format!("{nm} a"), mass_kg: ext.mass_kg * d.range(0.004, 0.02), a_km: d.range(30.0, 80.0) * ext.radius_km, density_g_cc: 3.3 };
-                vec![moon(&mut d, keys.fresh(), *key, ext.mass_kg, spec)]
+                let mass_kg = ext.mass_kg * d.range(0.004, 0.02);
+                let drawn = d.range(30.0, 80.0) * ext.radius_km;
+                big_moon_orbit_km(drawn, ext, hill)
+                    .map(|a_km| moon(&mut d, keys.fresh(), *key, ext.mass_kg, MoonSpec { name: format!("{nm} a"), mass_kg, a_km, density_g_cc: 3.3 }))
+                    .into_iter()
+                    .collect()
             }
             _ => Vec::new(),
         };
         // Moons survive only well inside the planet's Hill sphere.
-        nodes.extend(moons.into_iter().filter(|m| m.elements.is_some_and(|e| e.a_au * AU_KM < 0.4 * hill_km)));
+        nodes.extend(moons.into_iter().filter(|m| m.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
     let root = SystemRoot { key: root_key, seed, name: sys_name.clone(), epoch: Epoch { system_age_gyr: age }, placement: None, site: Some(ph.site.clone()) };

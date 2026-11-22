@@ -171,41 +171,36 @@ Artifexian's numbers (Logs 42–43), as NotebookLM gives them:
 Check: Earth's earthquake catalog (USGS) by region and magnitude, IBTrACS cyclone tracks,
 the Smithsonian volcano list, against the ETOPO-forced Earth run.
 
-## 5. Star system fixes — next
+## 5. Star system fixes — mostly done
 
-Unstable systems: rather than simulate them, model what is left. Pairs closer than ~5
-mutual Hill radii scatter: the lighter planet is thrown out (or into the star), the
-survivor's orbit turns eccentric (e ~ 0.1–0.5), and some survivors end as hot or
-eccentric Jupiters. A **positions** export gives every planet and moon's place at a date
-(Kepler orbits).
+Done (`geoforge_cosmos::dynamics`):
 
+- **Orbit spacing by Hill radii.** Neighbours are kept at least 8 mutual Hill radii apart,
+  ((m₁+m₂)/3M)^(1/3)·(a₁+a₂)/2 (Chambers et al. 1996; Jupiter–Saturn sit at ~8; two
+  planets alone are safe beyond 3.5, Gladman 1993). Too close, the outer planet moves out;
+  in the habitable recipe the focus stays put and its neighbours give way.
+- **Unstable systems** are not simulated; what is left is. Pairs closer than 5 scatter:
+  the lighter planet is thrown out and the survivor turns eccentric (e 0.1–0.5). Orbits
+  widen as a star loses mass but Hill spheres widen more, so white dwarf systems resettle
+  (some scatter, as rock falling onto white dwarfs suggests).
+- **Belts set by resonances**: the asteroid belt between the first giant's 4:1 and 2:1
+  (Jupiter's 2.06–3.28 AU), the Kuiper belt between the outermost giant's 3:2 and 2:1
+  (Neptune's 39.4–47.8 AU); a = a_giant·(P/P_giant)^(2/3).
+- **Moons** sit between the Roche limit and 0.4 of the planet's Hill radius (prograde
+  orbits are stable to ~0.5, Domingos et al. 2006); a big moon drawn beyond is brought in.
+- **`show`** prints breathability (O₂ 0.16–0.5 bar, CO₂ under 0.005 bar, N₂ under 3 bar,
+  gravity) and tides from every moon and the star, in Earth's lunar tides, with spring
+  and neap ranges.
 
-- **Orbit spacing by Hill radii.** A planet's Hill radius r_H = a·(m/3M)^(1/3) is where its
-  gravity beats the star's tide (Earth 0.01 AU, Jupiter 0.36). Neighbours are measured in
-  mutual Hill radii, ((m₁+m₂)/3M)^(1/3)·(a₁+a₂)/2. Two planets are safe beyond 2√3 ≈ 3.5
-  (Gladman 1993); systems of several need ~8–10 to last billions of years (Chambers et
-  al. 1996); Jupiter–Saturn sit at ~8. Small planets can pack tightly (two Earths need
-  only a 1.13 distance ratio for 10), giants cannot (two Jupiters need ~2.05, a period
-  ratio ~2.9, for 8). Our ladder steps distance by 1.45–2.1 whatever the masses: two
-  Jupiters at 1.45 are only 4.3 mutual Hill radii apart. Enforce ≥ 8 for every
-  neighbouring pair (push outward, or drop).
-- **The ladder's spacing.** The comments call 1.45–2.1 "period ratios" but it is the
-  distance ratio (period ratio 1.75–3.0). Kepler's multi-planet systems peak at period
-  ratios ~1.5–2; tighten small planets toward that.
-- **Belts set by resonances.** Where an asteroid's orbital period is a simple fraction of
-  a giant's (half: 2:1), the giant tugs it at the same point every few orbits, the kicks
-  add up, and it is thrown out: Jupiter's 4:1, 3:1 and 2:1 resonances (2.06, 2.50 and
-  3.28 AU) bound and gap our asteroid belt (the Kirkwood gaps). Outside Neptune the 3:2
-  and 2:1 (39.4 and 47.7 AU) hold the Kuiper belt's plutinos and outer edge. Distance from
-  a period ratio: a = a_giant·(P/P_giant)^(2/3). Use these instead of today's fixed
-  fractions (inner belt to 0.72 of the first giant; outer belt 1.3–1.9 of the last planet).
-  Trojans at the giants' L4/L5 points would follow naturally.
-- **Breathability** in `show`: O₂ partial pressure 0.16–0.5 atm, CO₂ under 5000 ppm,
-  N₂ under ~3 atm (narcosis), gravity. Today a 0.7-bar Earth-like world gives 0.15 atm
-  of O₂, and a world at 0.8× Earth's light 7300 ppm of CO₂.
-- **Moons**: Roche-limit check; tidal range from moon and star; obliquity stability (a
-  big moon steadies the tilt; without one, a wider tilt draw — debated: Laskar 1993 vs
-  Lissauer et al. 2012).
+Open:
+
+- The ladder steps distance by 1.45–2.1 (period ratios 1.75–3.0); Kepler's multi-planet
+  systems peak at period ratios ~1.5–2. Tighten small planets toward that.
+- Scattering could also make hot or eccentric Jupiters by high-eccentricity migration.
+- Obliquity stability: a big moon steadies the tilt; without one, a wider tilt draw
+  (debated: Laskar 1993 vs Lissauer et al. 2012).
+- Trojans at the giants' L4/L5 points.
+- A **positions** export: every planet and moon's place at a date (Kepler orbits).
 
 ## 6. Sky, calendar and almanac — next
 

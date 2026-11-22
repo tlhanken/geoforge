@@ -22,6 +22,7 @@
 //! | [`context`] | the handoff for a body, belt members on demand, lookup by name |
 
 mod draw;
+mod dynamics;
 
 pub mod census;
 pub mod context;
@@ -120,6 +121,53 @@ mod tests {
             }
         }
         assert!(found, "some gas giant has moons");
+    }
+
+    /// Planets of one host at least 8 mutual Hill radii apart (eccentric survivors of
+    /// scattering aside), moons between the Roche limit and 0.4 of the Hill radius, and an
+    /// asteroid belt inside its giant's 2:1 resonance, in both recipes.
+    #[test]
+    fn orbits_are_spaced_and_moons_held() {
+        use geoforge_core::body::{EARTH_MASS_KG, SOLAR_MASS_KG};
+        let galaxy = galaxy::Galaxy::milky_way();
+        let systems = (0..30u64).map(|s| generate_system(Seed(s))).chain((0..200u64).filter_map(|s| galactic_system(Seed(s), &galaxy).ok()));
+        let (mut planets_seen, mut moons_seen) = (0, 0);
+        for g in systems {
+            let sys = &g.system;
+            let star_mass = |key| match &sys.node(key).map(|n| &n.node) {
+                Some(NodeKind::Star(s)) => s.mass_solar,
+                _ => sys.children(key).iter().filter_map(|c| if let NodeKind::Star(s) = &c.node { Some(s.mass_solar) } else { None }).sum(),
+            };
+            for host in sys.nodes.iter().filter(|n| !matches!(n.node, NodeKind::Body(_) | NodeKind::Belt(_) | NodeKind::Ring(_))) {
+                let mut kids: Vec<(f64, f64)> = sys
+                    .children(host.key)
+                    .iter()
+                    .filter_map(|c| match (&c.node, c.elements) {
+                        (NodeKind::Body(b), Some(e)) => Some((e.a_au, b.mass_kg / EARTH_MASS_KG)),
+                        _ => None,
+                    })
+                    .collect();
+                kids.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let m = star_mass(host.key);
+                for w in kids.windows(2) {
+                    let h = ((w[0].1 + w[1].1) * EARTH_MASS_KG / (3.0 * m * SOLAR_MASS_KG)).cbrt() * 0.5 * (w[0].0 + w[1].0);
+                    assert!((w[1].0 - w[0].0) / h >= 7.99, "{}: {:?} only {:.1} mutual Hill radii apart", sys.root.name, w, (w[1].0 - w[0].0) / h);
+                    planets_seen += 1;
+                }
+            }
+            for n in &sys.nodes {
+                let (Some(parent), Some(e), NodeKind::Body(moon)) = (n.parent, n.elements, &n.node) else { continue };
+                let Some(NodeKind::Body(planet)) = sys.node(parent).map(|p| &p.node) else { continue };
+                let p_el = sys.node(parent).and_then(|p| p.elements).unwrap();
+                let moon_density = moon.mass_kg / (4.0 / 3.0 * std::f64::consts::PI * (moon.radius_km * 1e5).powi(3)) * 1000.0;
+                let a_km = e.a_au * geoforge_core::body::AU_KM;
+                let hill = system::hill_km(p_el.a_au, planet.mass_kg, star_mass(sys.node(parent).unwrap().parent.unwrap()));
+                assert!(a_km > system::roche_km(planet, moon_density), "{} inside the Roche limit", n.name);
+                assert!(a_km < system::MOON_HILL_SHARE * hill, "{} outside the Hill sphere", n.name);
+                moons_seen += 1;
+            }
+        }
+        assert!(planets_seen > 300 && moons_seen > 100, "{planets_seen} neighbours, {moons_seen} moons");
     }
 
     #[test]

@@ -330,6 +330,8 @@ Galaxy's census (`census` prints the same numbers for any galaxy and range of se
 | Small planets per red dwarf within 200 days | 1.5–3.5 | 2.5 (Dressing & Charbonneau 2015) |
 | Sun-like stars with giant planets; hot Jupiters | 10–18%; 0.3–2% | ~14%; ~1% |
 | Pulsars with planets | 0.5% | under 0.5% (Nițu et al. 2022) |
+| Neighbouring planets, mutual Hill radii | at least 8 | Jupiter–Saturn ~8; long-lived multi-planet systems 8–10 (Chambers et al. 1996) |
+| Asteroid and Kuiper belts | the first giant's 4:1–2:1; the outermost giant's 3:2–2:1 | Jupiter's 2.06–3.28 AU; Neptune's 39.4–47.8 AU |
 
 Their gaps:
 

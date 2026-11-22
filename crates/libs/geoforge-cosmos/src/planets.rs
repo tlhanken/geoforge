@@ -3,8 +3,9 @@
 //!
 //! Planets form on a geometric ladder of orbits from a few days out, each 1.45–2.1 times
 //! farther than the last (period ratios 1.75–3.0; Kepler's multi-planet systems peak at
-//! 1.5–2, and giants are not yet kept 8 mutual Hill radii apart: see `docs/V2_ROADMAP.md`). Rates, by the host's initial mass `M` (M☉) and
-//! metallicity `[Fe/H]`:
+//! 1.5–2), then settle ([`crate::dynamics`]): neighbours at least 8 mutual Hill radii apart,
+//! pairs closer than 5 scattered. Belts sit at the giants' resonances. Rates, by the host's
+//! initial mass `M` (M☉) and metallicity `[Fe/H]`:
 //!
 //! | Planets | Rate | After |
 //! |---|---|---|
@@ -13,7 +14,7 @@
 //! | giant planets | 0.14·M·10^(1.2[Fe/H]) up to 2.5 M☉, falling as M⁻² above | ∝ M and 10^(1.2[Fe/H]) (Johnson et al. 2010); ~14% of Sun-like stars |
 //! | hot Jupiter, given giants | 7% (about 1% of Sun-like stars) | lonely: no inner planets |
 //! | each outer rung without a giant | 20% an ice giant, 15% a dwarf planet | |
-//! | an outer belt, beyond the planets and 10× the frost line | 90% | debris disks are seen around ~20% of Sun-like stars, but a Kuiper belt like ours would not be |
+//! | an outer belt, at the outermost giant's 3:2–2:1 (else beyond the planets and 10× the frost line) | 90% | debris disks are seen around ~20% of Sun-like stars, but a Kuiper belt like ours would not be |
 //!
 //! A close companion stunts planets around one star: under 1 AU none form (they may orbit the
 //! pair instead), at 10 AU a fifth as many, beyond 200 AU no effect (Moe & Kratter 2021);
@@ -26,6 +27,7 @@
 //! al. 2022, like PSR B1257+12's); a black hole has none.
 
 use crate::draw::Draw;
+use crate::dynamics;
 use geoforge_core::body::{BodyClass, Star, StellarStage};
 use geoforge_core::derived::frost_line_au;
 
@@ -142,16 +144,24 @@ pub(crate) fn form(d: &mut Draw, disk: &Disk) -> Architecture {
         }
     }
 
-    // Asteroid belt between the last rocky planet and the first giant, if the gap is wide.
+    dynamics::settle(d, &mut planets, m, None);
+    planets.retain(|p| p.a_au < disk.outer_au);
+
+    // An asteroid belt inside the first giant, between its 4:1 and 2:1 resonances.
     let first_giant = planets.iter().find(|p| p.class == BodyClass::GasGiant && p.a_au > frost * 0.5).map(|p| p.a_au);
     let last_rock = planets.iter().filter(|p| p.class == BodyClass::Terrestrial && first_giant.is_none_or(|g| p.a_au < g)).map(|p| p.a_au).fold(0.0, f64::max);
-    let asteroid_belt = first_giant.and_then(|g| {
-        let inner = (last_rock * 1.35).max(frost * 0.6);
-        (g * 0.72 > inner && g / last_rock.max(1e-9) > 2.2).then_some((inner, g * 0.72))
-    });
-    // A Kuiper belt: beyond the planets and well beyond the frost line (ours: 11–18 times it).
-    let inner_edge = planets.last().map_or(0.0, |p| p.a_au * 1.3).max(10.0 * frost);
-    let outer_belt = (d.u() < 0.9 && inner_edge * 1.5 < disk.outer_au).then_some((inner_edge, inner_edge * 1.5));
+    let asteroid_belt = first_giant.and_then(|g| dynamics::asteroid_belt(g, last_rock));
+    // A Kuiper belt: outside the outermost giant, between its 3:2 and 2:1 resonances; with no
+    // giant, beyond the planets and well beyond the frost line (ours is 11–18 times it).
+    let outermost_giant = planets.iter().rev().find(|p| matches!(p.class, BodyClass::GasGiant | BodyClass::IceGiant) && p.a_au > frost);
+    let belt = outermost_giant.map_or_else(
+        || {
+            let inner = planets.last().map_or(0.0, |p| p.a_au * 1.3).max(10.0 * frost);
+            (inner, inner * 1.5)
+        },
+        |g| dynamics::kuiper_belt(g.a_au),
+    );
+    let outer_belt = (d.u() < 0.9 && belt.1 < disk.outer_au).then_some(belt);
     Architecture { planets, asteroid_belt, outer_belt }
 }
 
@@ -159,9 +169,13 @@ pub(crate) fn form(d: &mut Draw, disk: &Disk) -> Architecture {
 /// birth (a pair's together) setting how far orbits have widened.
 pub(crate) fn fate(d: &mut Draw, arch: Architecture, star: &Star, mass_now: f64, mass_birth: f64) -> Architecture {
     let widen = mass_birth / mass_now.max(1e-9);
-    let keep_beyond = |cut: f64, a: Architecture| -> Architecture {
+    // Orbits widen as the star loses mass, but Hill spheres widen more: neighbours that were
+    // stable may not be, and scatter (as white dwarfs polluted by infalling rock suggest).
+    let mut keep_beyond = |cut: f64, a: Architecture| -> Architecture {
+        let mut planets: Vec<Formed> = a.planets.into_iter().filter(|p| p.a_au > cut).map(|p| Formed { a_au: p.a_au * widen, ..p }).collect();
+        dynamics::settle(d, &mut planets, mass_now, None);
         Architecture {
-            planets: a.planets.into_iter().filter(|p| p.a_au > cut).map(|p| Formed { a_au: p.a_au * widen, ..p }).collect(),
+            planets,
             asteroid_belt: a.asteroid_belt.filter(|b| b.1 > cut).map(|b| (b.0.max(cut) * widen, b.1 * widen)),
             outer_belt: a.outer_belt.filter(|b| b.1 > cut).map(|b| (b.0.max(cut) * widen, b.1 * widen)),
         }

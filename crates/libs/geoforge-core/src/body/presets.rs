@@ -169,7 +169,7 @@ impl Archetype {
                 ext(Terrestrial, 5.972e24, 6371.0, 23.934, 23.44),
                 orbit(1.0, 0.0167, 0.0, 0.0, 102.9),
                 sun(1361.0, 0.0167, 23.44, 365.256),
-                tide("Moon", 7.342e22, 384_400.0),
+                [tide("Moon", 7.342e22, 384_400.0), tide("Sun", 1.989e30, AU_KM)].concat(),
             ),
             Self::Mars => (
                 ext(Terrestrial, 6.417e23, 3389.5, 24.623, 25.19),

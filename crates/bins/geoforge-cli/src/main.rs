@@ -357,6 +357,12 @@ fn show(w: &World) -> R<()> {
         }
     }
     println!("magnetic field: {}", describe_field(&body));
+    if body.interior.has_atmosphere() && body.interior.has_solid_surface() {
+        println!("air: {}", describe_air(&body));
+    }
+    if !body.tides.is_empty() {
+        println!("tides: {}", describe_tides(&body));
+    }
     if let GridSpec::Equirect { width, height } = w.manifest.grid {
         println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
     }
@@ -388,6 +394,54 @@ fn describe_field(body: &BodyContext) -> String {
         Some(lat) => format!("; auroras at {lat:.0}° magnetic latitude"),
         None => format!("; the wind presses the field down to the {onto}: no auroral ovals"),
     };
+    out
+}
+
+/// Whether people could breathe it: O₂ 0.16–0.5 bar (thin enough air starves, more is
+/// toxic over time), CO₂ under 0.005 bar (5000 ppm at sea level), N₂ under 3 bar (narcosis).
+fn describe_air(body: &BodyContext) -> String {
+    use geoforge_core::body::Species;
+    let pp = |s| body.interior.partial_pressure_bar(s);
+    let (o2, co2, n2) = (pp(Species::Oxygen), pp(Species::CarbonDioxide), pp(Species::Nitrogen));
+    let mut problems = Vec::new();
+    if o2 < 0.16 {
+        problems.push(format!("O₂ {o2:.2} bar, under 0.16"));
+    } else if o2 > 0.5 {
+        problems.push(format!("O₂ {o2:.2} bar, over 0.5"));
+    }
+    if co2 > 0.005 {
+        problems.push(format!("CO₂ {co2:.4} bar, over 0.005"));
+    }
+    if n2 > 3.0 {
+        problems.push(format!("N₂ {n2:.1} bar, over 3 (narcosis)"));
+    }
+    let g = body.gravity_m_s2() / 9.81;
+    if problems.is_empty() {
+        format!("breathable (O₂ {o2:.2} bar, CO₂ {co2:.4} bar, N₂ {n2:.2} bar); gravity {g:.2} g")
+    } else {
+        format!("not breathable: {}; gravity {g:.2} g", problems.join(", "))
+    }
+}
+
+/// Equilibrium tide heights (∝ M/d³ · R⁴/M_planet) in units of Earth's lunar tide, and the
+/// spring and neap tides of those that rise and fall (a locked world's star tide stands still).
+fn describe_tides(body: &BodyContext) -> String {
+    let height = |m: f64, d_km: f64| m / d_km.powi(3) * body.exterior.radius_km.powi(4) / body.exterior.mass_kg;
+    let earth_moon = 7.342e22 / 384_400f64.powi(3) * 6371f64.powi(4) / 5.972e24;
+    let mut each: Vec<(&str, f64)> = body.tides.iter().map(|t| (t.name.as_str(), height(t.mass_kg, t.distance_km) / earth_moon)).collect();
+    // The star comes last in the list; a locked world keeps one face to it.
+    let locked = body.is_tidally_locked();
+    let moving: Vec<f64> = each.iter().take(each.len() - usize::from(locked)).map(|t| t.1).collect();
+    each.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let mut out = each.iter().map(|(n, h)| format!("{n} {h:.2}")).collect::<Vec<_>>().join(", ") + " (Earth's Moon = 1)";
+    if moving.len() >= 2 {
+        let spring: f64 = moving.iter().sum();
+        let neap = (2.0 * moving.iter().copied().fold(0.0, f64::max) - spring).abs();
+        out += &format!("; spring {spring:.2}, neap {neap:.2} (Earth 1.46, 0.54)");
+    }
+    if locked {
+        out += "; the star's is a fixed bulge (the world is locked to it)";
+    }
     out
 }
 
