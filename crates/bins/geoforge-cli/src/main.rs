@@ -101,6 +101,26 @@ enum Cmd {
     },
     /// Describe the system and the focus body.
     Show { dir: PathBuf },
+    /// What is at a place: climate, soil, timber, the deposits likely within reach (and how
+    /// many a local map holds), and the chance of each hazard over a stretch of days.
+    Place {
+        dir: PathBuf,
+        #[arg(long, allow_hyphen_values = true)]
+        lat: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        lon: f64,
+        #[arg(long, default_value_t = 100.0)]
+        radius_km: f64,
+        /// The stretch of days: from this day (Earth days from the present), for this many
+        /// (default: one of the world's years).
+        #[arg(long, default_value_t = 0.0)]
+        from_day: f64,
+        #[arg(long)]
+        days: Option<f64>,
+        /// Print JSON instead.
+        #[arg(long)]
+        json: bool,
+    },
     /// Where every star, planet and moon is on a day (Earth days from the present), the
     /// focus's date on its own calendar, and how lit its moons are.
     Positions {
@@ -153,7 +173,7 @@ type R<T> = Result<T, Box<dyn std::error::Error>>;
 /// Products and derived views by name (or a layer's products); everything for "all" or none.
 fn parse_targets(what: &[String]) -> R<(Vec<ProductId>, Vec<View>)> {
     if what.is_empty() || what.iter().any(|w| w == "all") {
-        return Ok((ProductId::ALL.to_vec(), View::ALL.to_vec()));
+        return Ok((ProductId::ALL.to_vec(), View::all()));
     }
     let (mut ps, mut vs) = (Vec::new(), Vec::new());
     for w in what {
@@ -163,9 +183,11 @@ fn parse_targets(what: &[String]) -> R<(Vec<ProductId>, Vec<View>)> {
             ps.extend(l.products());
         } else if let Some(v) = View::from_name(w) {
             vs.push(v);
+        } else if let Some(group) = View::group(w) {
+            vs.extend(group);
         } else {
-            let views = View::ALL.map(View::name).join(", ");
-            return Err(format!("unknown product, layer or view `{w}` (views: {views}; products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
+            let views = View::all().into_iter().map(View::name).collect::<Vec<_>>().join(", ");
+            return Err(format!("unknown product, layer or view `{w}` (views: {views}, or the groups resources and hazards; products: {})", ProductId::ALL.map(ProductId::name).join(", ")).into());
         }
     }
     ps.sort();
@@ -215,7 +237,7 @@ fn run(cli: Cli) -> R<()> {
                 }
             })?;
             if render {
-                let files = pipe::render_all(&w, &products, &w.root.join("renders"), &ProductId::ALL, &View::ALL)?;
+                let files = pipe::render_all(&w, &products, &w.root.join("renders"), &ProductId::ALL, &View::all())?;
                 println!("renders: {} files in {}", files.len(), w.root.join("renders").display());
             }
         }
@@ -303,6 +325,16 @@ fn run(cli: Cli) -> R<()> {
         }
         Cmd::Show { dir } => show(&World::open(&dir)?)?,
         Cmd::Positions { dir, day, to } => positions(&World::open(&dir)?, day, to.as_deref())?,
+        Cmd::Place { dir, lat, lon, radius_km, from_day, days, json } => {
+            let w = World::open(&dir)?;
+            let days = days.unwrap_or_else(|| w.load_body().map_or(365.25, |b| b.irradiance.year_days));
+            let r = pipe::place::report(&w, lat, lon, radius_km, from_day, days)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&r)?);
+            } else {
+                print_place(&r);
+            }
+        }
         Cmd::Seed { dir, product: name, owner } => {
             let w = World::open(&dir)?;
             let p = product(&name)?;
@@ -480,6 +512,26 @@ fn describe_calendar(c: &Calendar) -> String {
         out += &format!("; month ({name}) {m:.1} days, {:.1} a year", c.year_days / m);
     }
     out
+}
+
+fn print_place(r: &pipe::place::PlaceReport) {
+    println!("{:.2}°, {:.2}° within {:.0} km ({:.0} km²): {} {:.0} m", r.lat, r.lon, r.radius_km, r.area_km2, if r.at_sea { "sea," } else { "land," }, r.elevation_m);
+    if let Some(k) = r.koppen {
+        let soil = r.soil.unwrap_or("—");
+        println!("climate {k}; soil {soil} (fertility {:.1}); timber {:.1}", r.fertility.unwrap_or(0.0), r.timber.unwrap_or(0.0));
+    }
+    if !r.deposits.is_empty() {
+        println!("deposits: expected here, chance of any, how many a local map holds; settings at the centre");
+        for d in &r.deposits {
+            let settings = d.settings.iter().map(|(n, l)| format!("{n} {l:.2}")).collect::<Vec<_>>().join(", ");
+            println!("  {:<18} {:>6.2} {:>5.0}% {:>3}  {settings}", d.kind, d.expected, 100.0 * d.chance, d.drawn);
+        }
+    }
+    println!("hazards over {:.0} days from day {:.0}: a year, in the window, chance of any", r.days, r.from_day);
+    for h in &r.hazards {
+        println!("  {:<12} {:>9.3} {:>9.3} {:>5.1}%  ({})", h.hazard, h.per_year, h.expected, 100.0 * h.chance, h.event);
+    }
+    println!("  magnitude 7+: {:.2}%, 8+: {:.3}%; largest likely {:.1}", 100.0 * r.quake_7, 100.0 * r.quake_8, r.largest_quake);
 }
 
 /// Positions on `day`, printed and optionally written as JSON.

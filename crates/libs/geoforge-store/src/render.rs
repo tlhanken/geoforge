@@ -301,6 +301,39 @@ pub fn render_classes(colors: &[Option<[u8; 3]>], grid: &AnyGrid, relief: Option
     })
 }
 
+/// Preview ramp for chance maps: white for 0 through gold and orange to dark red for 1.
+const CHANCE_RAMP: [(f64, [u8; 3]); 5] = [(0.0, [250, 250, 245]), (0.1, [250, 225, 140]), (0.35, [240, 150, 60]), (0.7, [200, 50, 40]), (1.0, [110, 0, 30])];
+
+/// A preview of a chance map (values 0–1; `None` drawn as plain sea), hillshaded with
+/// `relief`; values at sea (cells where `sea` is set) are tinted blue.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn render_chances(values: &[Option<f64>], sea: &[bool], grid: &AnyGrid, relief: Option<(&Products, f64)>) -> Result<RgbImage> {
+    let colors: Vec<Option<[u8; 3]>> = values.iter().map(|v| v.map(|x| ramp(&CHANCE_RAMP, x.clamp(0.0, 1.0)))).collect();
+    let mut img = render_classes(&colors, grid, relief)?;
+    for (i, p) in img.pixels_mut().enumerate() {
+        if sea[i] && values[i].is_some() {
+            *p = Rgb(blend(p.0, [150, 180, 215], 0.45));
+        }
+    }
+    Ok(img)
+}
+
+/// An exact 8-bit grayscale image of a chance map: 0–255 for 0–1, 0 where `None`.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn gray_chances(values: &[Option<f64>], grid: &AnyGrid) -> Result<image::GrayImage> {
+    let GridSpec::Equirect { width, height } = grid.spec() else {
+        return Err(StoreError::Invalid("exports need an equirectangular grid".into()));
+    };
+    Ok(image::GrayImage::from_fn(width, height, |x, y| {
+        let v = values[(y * width + x) as usize].unwrap_or(0.0);
+        image::Luma([(v.clamp(0.0, 1.0) * 255.0).round() as u8])
+    }))
+}
+
 /// Sparse direction arrows over a vector field.
 fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
     let Some(eq) = grid.as_equirect() else { return };

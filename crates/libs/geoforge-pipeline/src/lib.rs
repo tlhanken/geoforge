@@ -12,6 +12,7 @@
 //!   generated, patched, and then fed back so the rest of their layer is consistent with
 //!   the edit. Downstream layers always see the edited version.
 
+pub mod place;
 pub mod registry;
 pub mod stats;
 pub mod views;
@@ -567,18 +568,25 @@ pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[Produ
             out.push(f);
         }
     }
+    let source = views::Source::new(stored, &grid, &body);
+    let sea_cells = source.sea();
     for &v in views {
-        if let Some(c) = views::classes(v, stored, &grid, sea) {
-            let f = to.join(format!("{}.png", v.name()));
-            geoforge_store::render::render_classes(&c.colors(), &grid, Some((stored, radius)))?.save(&f).map_err(geoforge_store::StoreError::from)?;
-            out.push(f);
-        }
+        let relief = Some((stored, radius));
+        let img = match views::compute(v, &source) {
+            Some(views::Map::Classes(c)) => geoforge_store::render::render_classes(&c.colors(), &grid, relief)?,
+            Some(views::Map::Chances(c)) => geoforge_store::render::render_chances(&c.cells, &sea_cells, &grid, relief)?,
+            None => continue,
+        };
+        let f = to.join(format!("{}.png", v.name()));
+        img.save(&f).map_err(geoforge_store::StoreError::from)?;
+        out.push(f);
     }
     Ok(out)
 }
 
-/// Export derived views: an exact-colour PNG, its legend (`<view>.legend.json`: code, name,
-/// colour and share of the land of each class present) and georeference files. Returns the
+/// Export derived views with world files: a class map as an exact-colour PNG and a legend
+/// (`<view>.legend.json`: code, name, colour and land share of each class present); a chance
+/// map as an 8-bit grayscale PNG and a note of what it means (`<view>.json`). Returns the
 /// files written per view; views whose products are missing are skipped.
 ///
 /// # Errors
@@ -589,14 +597,27 @@ pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(Vie
     let grid = world.manifest.grid.build()?;
     let stored = load_all(world)?;
     let bref = BodyRef { name: body.name.clone(), radius_km: body.exterior.radius_km };
+    let source = views::Source::new(&stored, &grid, &body);
     let mut out = Vec::new();
     for &v in views {
-        let Some(c) = views::classes(v, &stored, &grid, body.interior.has_surface_liquid_water()) else { continue };
         let name = v.name();
-        geoforge_store::render::render_classes(&c.colors(), &grid, None)?.save(to.join(format!("{name}.png"))).map_err(geoforge_store::StoreError::from)?;
-        std::fs::write(to.join(format!("{name}.legend.json")), serde_json::to_string_pretty(&c.legend)?)?;
+        let png = to.join(format!("{name}.png"));
+        let sidecar = match views::compute(v, &source) {
+            Some(views::Map::Classes(c)) => {
+                geoforge_store::render::render_classes(&c.colors(), &grid, None)?.save(&png).map_err(geoforge_store::StoreError::from)?;
+                std::fs::write(to.join(format!("{name}.legend.json")), serde_json::to_string_pretty(&c.legend)?)?;
+                "legend.json"
+            }
+            Some(views::Map::Chances(c)) => {
+                geoforge_store::render::gray_chances(&c.cells, &grid)?.save(&png).map_err(geoforge_store::StoreError::from)?;
+                let note = serde_json::json!({ "view": name, "value": "0–255 for 0–1", "one_means": c.meaning });
+                std::fs::write(to.join(format!("{name}.json")), serde_json::to_string_pretty(&note)?)?;
+                "json"
+            }
+            None => continue,
+        };
         edit::write_georef(to, name, world.manifest.grid, &bref)?;
-        out.push((v, ["png", "legend.json", "pgw", "prj"].map(|e| format!("{name}.{e}")).to_vec()));
+        out.push((v, ["png", sidecar, "pgw", "prj"].map(|e| format!("{name}.{e}")).to_vec()));
     }
     Ok(out)
 }

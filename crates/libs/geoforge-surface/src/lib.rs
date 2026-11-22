@@ -9,12 +9,15 @@ pub mod climate;
 pub mod elevation;
 pub mod erosion;
 pub mod geology;
+pub mod ground;
+pub mod hazards;
 pub mod hydrology;
 pub mod koppen;
 pub mod lid;
 pub mod noise;
 pub mod preconditions;
 pub mod relief;
+pub mod resources;
 pub mod tectonics;
 
 pub use bands::GiantBands;

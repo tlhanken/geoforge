@@ -170,8 +170,10 @@ pub fn analyze(grid: &dyn Grid, plates: &Partition<Plate>, radius_km: f64, p: &B
                     .iter()
                     .map(|&c| {
                         let s = cells[&c];
+                        // A boundary along the tangent (−nn, ne) crosses |nn|/ew columns and
+                        // |ne|/ns rows per radian: each cell holds the inverse of that.
                         let (ew, ns) = grid.cell_extent_rad(c);
-                        radius_km / (s.ne.abs() / ew + s.nn.abs() / ns).max(1e-12)
+                        radius_km / (s.nn.abs() / ew + s.ne.abs() / ns).max(1e-12)
                     })
                     .sum::<f64>()
                     / 2.0;

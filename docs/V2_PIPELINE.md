@@ -55,6 +55,7 @@ Other starting points:
 | `reset <dir> <product>` | Drop a product's edits |
 | `render <dir> [products\|layers\|views] [--to DIR]` | Preview PNGs (all by default) |
 | `show <dir>` | The solar system (each body with its regime, air and water) and the focus: circulation, magnetic field, breathability, tides, calendar |
+| `place <dir> --lat L --lon L [--radius-km 100] [--from-day D] [--days N] [--json]` | What is at a place: climate, soil, timber, deposits likely within reach and how many a local map holds, the chance of each hazard over the days (default one local year) |
 | `positions <dir> [--day T] [--to FILE.json]` | Where every star, planet and moon is T Earth days from the present (Kepler orbits), the focus's local date, and how lit its moons are |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
@@ -118,9 +119,18 @@ Derived values (plate boundaries, slope, sea level, flow directions) are recompu
 when rendered or exported, never stored, so they cannot go stale and are not edited (edit
 the products they read instead):
 
-| View | Reads | Export |
+| View | What | Export |
 |---|---|---|
-| `koppen` | `temperature`, `temperature_range`, `precipitation`, `precipitation_warm_share` | `koppen.png` (exact class colours, Beck et al. 2018's palette), `koppen.legend.json` (code, name, colour, share of land), `.pgw`, `.prj` |
+| `koppen` | Köppen–Geiger classes, from the climate | `koppen.png` (Beck et al. 2018's palette), `koppen.legend.json` (code, name, colour, share of land) |
+| `soil` | Soil classes (WRB reference groups) from climate, rock, relief and rivers | class PNG + legend |
+| `fertility`, `timber` | Soil fertility for farming; standing timber below the tree line | grayscale PNG (0–255 for 0–1) + `<view>.json` saying what 1 means |
+| `iron`, `copper`, `tin`, `lead_zinc_silver`, `gold`, `coal`, `salt`, `peat`, `gemstones` | Chance a 10,000 km² region holds at least one deposit, 1 − e^(−λ) | grayscale PNG + note |
+| `earthquakes`, `tsunamis`, `volcanoes`, `cyclones`, `tornadoes`, `floods`, `wildfire`, `landslides` | Chance of one in a 10,000 km² region over a window that suits it (a year for storms, a decade for quakes, floods and fires, a century for tsunamis) | grayscale PNG + note |
+| `blizzards`, `dust_storms`, `fog`, `auroras` | Share of the year's days (nights) with one | grayscale PNG + note |
+| `lightning` | Artifexian's four tiers, under 1 to over 15 flashes per km² a year | class PNG + legend |
+
+Every view has a world file and projection (`.pgw`, `.prj`). The groups `resources` and
+`hazards` name all of theirs at once (`render <dir> hazards`).
 
 The Köppen–Geiger view has 30 classes by Peel et al. (2007)'s rules: arid (B) first, then
 polar, tropical, and temperate or continental at a 0 °C coldest month
@@ -247,6 +257,29 @@ product's randomness. `seed <dir> <product>` prints it.
   else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
   where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
   build up CO₂ and run a few degrees cooler, bright ones draw it down.
+- **Resources** (`geoforge_surface::resources`, derived views): for each deposit kind, λ
+  (expected deposits per 10,000 km²) summed over the settings it forms in: banded iron in
+  2.6–1.8 Ga cratonic rock, skarns where granite meets limestone, laterites on basalt in
+  wet–dry tropics, bog iron in cool wet lowlands; porphyry copper in young arcs (doubled by
+  supergene enrichment where winters stay above 6 °C and a season is dry), massive sulfides
+  in ophiolites and greenstone, native copper in flood basalt; tin in collisional granite;
+  Mississippi Valley lead–zinc in basin carbonates, epithermal silver in young arcs; orogenic
+  gold in greenstone (more under tropical weathering); coal in foreland and intracratonic
+  basins of the last 360 Myr; rock salt, salt flats in closed arid basins, sea salt on dry
+  coasts; peat in cool wet lowlands; diamonds in old cratons. Tin and gold wash into rivers
+  as placers up to 300 km below. Rates are orders of magnitude. Local maps draw each cell's
+  deposits as a seeded Poisson draw (`place` shows the count), so every zoom agrees. Soils:
+  ten WRB groups with a fertility; timber by biome below Artifexian's tree line (4000 m to
+  30°, −130 m/° to 50°, −75 m/° beyond).
+- **Hazards** (`geoforge_surface::hazards`, derived views): earthquakes from each boundary's
+  moment rate (μ·length·depth·slip·coupling) over a truncated Gutenberg–Richter law up to a
+  corner magnitude by class (subduction 9.5, collision 8.5, continental transform 8, rifts
+  7.5, ridges 7), spread over a band beside it; tsunamis on coasts within 600 km of
+  subduction; eruptions at arcs, hotspots' active ends and rifts; tropical cyclones born over
+  sea above 26.5 °C at 5–25° (Earth's rate per area), tracked west, poleward and east until
+  sea under 18 °C or a few hundred km inland; tornadoes on warm flat plains at 25–50° near
+  both high ground and warm sea; lightning tiers; floods, wildfire, landslides, blizzards,
+  dust storms and fog by climate and relief; auroras by magnetic latitude.
 - **Positions and calendar** (`geoforge_core::ephemeris`): each node on a fixed Kepler
   orbit about its parent from its elements (no mutual perturbations); a pair's stars turn
   about their barycentre, opposite each other. Solar day 1/(1/spin − 1/year) (+ for a

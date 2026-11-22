@@ -595,6 +595,31 @@ fn elevation(s: &mut Scorecard, e: &Earth, steps: &[Step]) {
 }
 
 /// With `KNOWN_CASES_DUMP` set, the fields for a look at the map.
+/// Earthquake rates on PB2002's plates against the USGS catalogue: ~140 magnitude 6+ quakes
+/// a year worldwide (1900–2023), dense at subduction zones, rare in stable interiors.
+fn earthquakes(s: &mut Scorecard, e: &Earth) {
+    let (rate, corner) = geoforge_surface::hazards::earthquakes(&e.grid, 6371.0, &e.products);
+    let per_year: f64 = e.grid.cells().map(|c| rate[c as usize] * e.grid.area_sr(c) * 6371f64.powi(2) / 1e4).sum();
+    s.range("hazards", "magnitude 6+ quakes a year, worldwide (USGS ~140)", per_year, 70.0..=300.0, "");
+    let region = |lat: f64, lon: f64| mean(&e.grid, &around(e, lat, lon, 300.0), |c| rate[c as usize]);
+    for (name, lat, lon, want) in [
+        // JMA: ~17 a year over the 2.6×10⁶ km² round Japan; Chile and Sumatra a few a year
+        // along ~4000 km of coast.
+        ("Japan (36°N 140°E)", 36.0, 140.0, 0.03..=1.0),
+        ("central Chile (33°S 72°W)", -33.0, -72.0, 0.01..=1.0),
+        ("Sumatra (2°S 100°E)", -2.0, 100.0, 0.01..=1.0),
+        ("central Australia (25°S 134°E)", -25.0, 134.0, 0.0..=0.002),
+        ("Siberian craton (65°N 100°E)", 65.0, 100.0, 0.0..=0.002),
+        ("Brazilian shield (10°S 50°W)", -10.0, -50.0, 0.0..=0.002),
+    ] {
+        s.range("hazards", format!("magnitude 6+ a year per 10,000 km², {name}"), region(lat, lon), want, "");
+    }
+    let largest = |lat: f64, lon: f64| around(e, lat, lon, 300.0).into_iter().map(|c| corner[c as usize]).fold(0.0, f64::max);
+    s.range("hazards", "largest magnitude, Chile (Valdivia 1960: 9.5)", largest(-38.0, -73.0), 9.0..=9.6, "");
+    s.range("hazards", "largest magnitude, Himalaya (Assam 1950: 8.6)", largest(28.0, 85.0), 8.0..=9.0, "");
+    s.range("hazards", "largest magnitude, San Andreas (Fort Tejon 1857: 7.9)", largest(35.5, -120.5), 7.5..=8.5, "");
+}
+
 fn dump(e: &Earth, kind_at: &BTreeMap<(Cell, String, String), BoundaryKind>) {
     let prov = e.products.provinces().unwrap();
     known::dump(
@@ -642,6 +667,7 @@ fn scorecard() -> &'static Scorecard {
         crust_age(&mut s, e, &steps);
         provinces(&mut s, e, &steps);
         elevation(&mut s, e, &steps);
+        earthquakes(&mut s, e);
         s
     })
 }

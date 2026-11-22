@@ -47,9 +47,24 @@ highs and summer heat lows sit in the interiors, subpolar lows at ~60° in winte
 ITCZ hugs the equator at sea but swings poleward over hot land. Our winds come from the
 cells, so the pressure view is drawn from them, and should land in the same places.
 
-## 3. Resources and soils — next
+## 3. Resources and soils — views done; giant-deposit catalog next
 
-A new layer after biomes. Global maps cannot place individual mines, so the layer stores
+Done as derived views (`geoforge_surface::resources`; see `V2_PIPELINE.md`): prospectivity
+for iron, copper, tin, lead–zinc–silver, gold, coal, salt, peat and gemstones, soils with
+fertility, and timber; `place` reports what is within reach of a point and draws how many
+deposits a local map holds. Next:
+
+- The **giant-deposit catalog**, the one stored and editable part: a few per kind drawn
+  globally (place, grade, size, depth, age), as a resources layer after biomes.
+- An Earth check against USGS deposit data on the ETOPO-forced run (porphyry belts on the
+  Andes, banded iron on the Pilbara, salt in the Permian and Zechstein basins).
+- Loess, mercury, sulfur, obsidian, flint, clay, building stone, aquifers; organic
+  resources (fisheries on upwelling coasts, furs, fibre plants, guano).
+- Peat on ground glaciated in the last ice age (needs an ice-age extent).
+
+The original plan follows.
+
+Global maps cannot place individual mines, so the layer stores
 **prospectivity**. For each deposit kind it keeps an expected count per 10,000 km², λ,
 from the geology, climate and history already stored. Exported, that becomes a grayscale
 map of P = 1 − e^(−λ), the chance a region holds at least one deposit (0–255). When a
@@ -125,7 +140,16 @@ ETOPO-forced Earth run: do porphyry belts sit on the Andes and Rockies, tin on t
 Southeast Asian and Cornish granites, banded iron on the Pilbara and Minas Gerais cratons,
 salt in the Permian and Zechstein basins?
 
-## 4. Hazards — next
+## 4. Hazards — done as views; refinements open
+
+Done as derived views (`geoforge_surface::hazards`): earthquakes (with magnitudes),
+tsunamis, volcanoes, cyclones, tornadoes, floods, wildfire, landslides, blizzards, dust
+storms, fog, auroras and lightning tiers; `place` gives each one's chance over a window,
+its season counted, and the chance of magnitude 7 and 8 quakes. Checked on Earth's plates
+and climate (`V2_REALISM.md`). Open: wind shear for cyclones (the South Atlantic), storm
+intensity, droughts, volcanic explosivity, weather on a given day (item 6).
+
+The original plan follows.
 
 A new layer after hydrology. Rates and seasons per cell (or region), plus a **date and
 region calculator**: the chance of each hazard in a window, P = 1 − e^(−λT).

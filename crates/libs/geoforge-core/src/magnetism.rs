@@ -53,6 +53,8 @@ pub struct MagneticField {
     pub dipolar: bool,
     /// Angle between the magnetic and spin axes, degrees.
     pub tilt_deg: f64,
+    /// Longitude the northern magnetic pole leans toward, degrees.
+    pub pole_lon_deg: f64,
     /// The star's wind ram pressure at the body, nPa.
     pub wind_npa: f64,
     /// Magnetopause distance on the star's side, planet radii; `None` without a field.
@@ -70,7 +72,9 @@ impl MagneticField {
         let mass = ext.mass_kg / EARTH_MASS_KG;
         let slow = ext.rotation_h.abs() > MULTIPOLAR_DAY_H;
         // Keys repeat between systems; the mass tells bodies apart.
-        let tilt = |most: f64| most * unit(Seed(body.key.0 ^ ext.mass_kg.to_bits()).child(b"magnetic-tilt"));
+        let seed = Seed(body.key.0 ^ ext.mass_kg.to_bits());
+        let tilt = |most: f64| most * unit(seed.child(b"magnetic-tilt"));
+        let pole_lon_deg = -180.0 + 360.0 * unit(seed.child(b"magnetic-pole-longitude"));
         // A slow spinner's field is multipolar, weaker at the surface.
         let spin = if slow { 0.3 } else { 1.0 };
         let (lifetime_gyr, dynamo, surface_ut, dipolar, tilt_deg) = match ext.class {
@@ -92,7 +96,13 @@ impl MagneticField {
         let wind_npa = wind_pressure_npa(body.irradiance.flux_w_m2, body.irradiance.star_temperature_k, age);
         let magnetopause_radii = dynamo.then(|| magnetopause_radii(surface_ut, wind_npa));
         let aurora_lat_deg = magnetopause_radii.filter(|&r| r > 1.0).map(|r| 90.0 - (1.0 / r).sqrt().asin().to_degrees());
-        Self { dynamo, lifetime_gyr, surface_ut, dipolar, tilt_deg, wind_npa, magnetopause_radii, aurora_lat_deg }
+        Self { dynamo, lifetime_gyr, surface_ut, dipolar, tilt_deg, pole_lon_deg, wind_npa, magnetopause_radii, aurora_lat_deg }
+    }
+
+    /// The northern magnetic pole.
+    #[must_use]
+    pub fn pole(&self) -> crate::geom::UnitVec3 {
+        crate::geom::UnitVec3::from_lat_lon(90.0 - self.tilt_deg, self.pole_lon_deg)
     }
 }
 

@@ -689,6 +689,30 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
     }
 }
 
+const CYCLONE_GAPS: &[(&str, &str)] = &[(
+    "South Atlantic (20°S 25°W)",
+    "the modelled tropical South Atlantic summer is warm and wet (28 °C, 1400 mm at 15°S; observed ~26 °C and dry), and the wind shear that stops real storms there is not modelled",
+)];
+
+/// Tropical cyclone tracks from the modelled sea temperatures, against IBTrACS: the western
+/// Pacific busiest, the Gulf and Caribbean busy, none in the South Atlantic or off Peru.
+fn cyclones(s: &mut Scorecard, e: &Earth) {
+    let sea: Vec<bool> = e.elev.iter().map(|&v| v < 0.0).collect();
+    let (t, r) = (&e.p.temperature().unwrap().values, &e.p.temperature_range().unwrap().values);
+    let passes = geoforge_surface::hazards::cyclones(&e.grid, 6371.0, &sea, t, r);
+    for (name, lat, lon, want) in [
+        ("Philippine Sea (15°N 130°E)", 15.0, 130.0, 0.3..=5.0),
+        ("Gulf of Mexico (25°N 90°W)", 25.0, -90.0, 0.05..=3.0),
+        ("Bay of Bengal (15°N 88°E)", 15.0, 88.0, 0.02..=3.0),
+        ("South Atlantic (20°S 25°W)", -20.0, -25.0, 0.0..=0.02),
+        ("off Peru (15°S 95°W)", -15.0, -95.0, 0.0..=0.02),
+        ("equator, mid-Pacific (0° 160°W)", 0.0, -160.0, 0.0..=0.05),
+    ] {
+        let v = mean(&e.grid, &cells_in(&e.grid, (lat - 2.0)..=(lat + 2.0), lon - 2.0, lon + 2.0), |c| passes[c as usize]);
+        s.range("hazards", format!("cyclones a year per 10,000 km², {name}"), v, want, "").gap_if_listed(name, CYCLONE_GAPS);
+    }
+}
+
 /// The classifier alone, fed station normals: its own errors, apart from the climate's.
 fn classifier(s: &mut Scorecard) {
     let p = BiomesParams::default();
@@ -739,6 +763,7 @@ fn scorecard() -> &'static Scorecard {
         precipitation(&mut s, e);
         hydrology(&mut s, e);
         biomes(&mut s, e);
+        cyclones(&mut s, e);
         classifier(&mut s);
         s
     })

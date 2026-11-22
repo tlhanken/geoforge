@@ -201,8 +201,8 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
-| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights | 48 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly | 205 | 48 |
+| `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights; earthquake rates and corner magnitudes | 58 | 7 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks | 211 | 49 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -305,6 +305,18 @@ dry season against Am's 12 mm). The other 4 show what the rebuilt months cannot 
 climate stores means, ranges and half-year rain shares, so months are sinusoids in phase.
 That cannot show two rainy seasons (Nairobi), a short tropical dry season (Kinshasa), or a
 January colder than the mean less half the range (Beijing).
+
+### Hazards
+
+On Earth's real plates (`known_earth_tectonics`): 106 magnitude 6+ quakes a year worldwide
+(USGS ~140); 0.03 a year per 10,000 km² round Japan (JMA's ~17 a year over 2.6×10⁶ km² is
+0.065), 0.02 in central Chile, under 0.002 in central Australia, the Siberian craton and the
+Brazilian shield; corner magnitudes 9.5 in Chile, 8.5 in the Himalaya and on the San Andreas
+(Fort Tejon 1857: 7.9). On Earth's modelled climate (`known_earth_climate`): cyclones pass
+0.7 a year per 10,000 km² in the Philippine Sea, 0.6 in the Gulf of Mexico, 0.5 in the Bay
+of Bengal, none off Peru or on the equator. Gap: 0.25 in the South Atlantic, where the
+modelled summer sea is too warm and wet and wind shear (which stops real storms there) is
+not modelled. Resource rates have no Earth check yet (see the roadmap).
 
 ### Magnetic fields
 
