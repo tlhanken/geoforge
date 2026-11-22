@@ -480,8 +480,16 @@ Findings since (November 2026):
   now that the NE Atlantic is warm.
 - *Siberian winters*: the missing winter cold (Yakutsk −24 °C in the coldest month vs −38,
   Astana −7 vs −15, Winnipeg −7 vs −16) does not follow continentality: Moscow is more
-  continental than Astana in the model and already too cold. It wants surface inversions
-  under clear, calm winter highs, with Europe's maritime reach fixed alongside.
+  continental than Astana in the model and already too cold. Nor does it follow the
+  season's sinking air: the model's winter mid-latitudes converge everywhere (1.5–2.2 at
+  every station), so it cannot tell a winter high from a storm track. It wants a winter
+  pressure field (the Siberian and Canadian highs) to key inversions on, with Europe's
+  maritime reach fixed alongside.
+- *Frozen seas, retried after the Atlantic fix*: counted for the whole year they still cost
+  Reykjavik's rain; counted for winter alone they chill every Arctic coast 5–9 °C too far
+  (Utqiagvik −16 °C, Summit −37). The climate's symmetric seasons (one continentality for
+  both halves of the year) are the limit: a seasonal energy balance with sea ice is the
+  real fix.
 
 The first guesses, before the A/B:
 
