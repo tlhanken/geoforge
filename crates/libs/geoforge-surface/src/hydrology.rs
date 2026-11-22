@@ -28,6 +28,9 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
+/// Share of the river threshold a cell must receive from upstream to carry a river.
+const RIVER_INFLOW_SHARE: f64 = 0.5;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HydrologyParams {
@@ -180,7 +183,7 @@ struct Basin {
 impl Generator for Hydrology {
     type Params = HydrologyParams;
     const NAME: &'static str = "hydrology";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Hydrology;
 
     fn needs() -> &'static [ProductId] {
@@ -365,8 +368,11 @@ impl Generator for Hydrology {
             lake_table.insert(Key(u64::from(key)), Lake { surface_elevation_m: *lvl, endorheic: *endo });
         }
 
-        // Rivers: land cells (not lake) above the threshold, plus their mouths.
-        let is_river = |c: usize| land(c) && lake_owner[c] == 0 && q(c) >= p.min_river_m3_s;
+        // Rivers: land cells (not lake) above the threshold, plus their mouths. A cell's own
+        // runoff runs off in many small streams, so a river also needs water from upstream:
+        // in a very wet land every cell would otherwise count as one.
+        let own = |c: usize| runoff[c].max(0.0) * area_km2[c] * 1000.0 / 3.155_76e7;
+        let is_river = |c: usize| land(c) && lake_owner[c] == 0 && q(c) >= p.min_river_m3_s && q(c) - own(c) >= RIVER_INFLOW_SHARE * p.min_river_m3_s;
         let mut strahler = vec![0u8; n];
         let mut best = vec![(0u8, 0u8); n]; // (max upstream order, how many have it)
         for &c in d.order.iter().rev() {
