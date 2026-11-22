@@ -459,6 +459,26 @@ fed the climate real winds and sea temperatures, which splits the misses:
 - The Köppen classifier on the real climate agrees with the Köppen–Geiger map on 87% of
   land (the model climate 58–60%), so it is not the classifier.
 
+Findings since (November 2026):
+- *Thumi's weak seasons are physics, not a bug*: its 168-day year and heavy air column
+  (1.49 bar at 0.8 g, 1.8× Earth's air mass per m²) give the column 4× Earth's thermal
+  inertia against the seasons; with an 18.9° obliquity its swing is ~0.27× Earth's. Its
+  summers stay too cool for boreal forest, and its ice matches its land poleward of 60°
+  (21% of land).
+- *The Congo is a resolution artifact*: on 10′ ETOPO at a third of a degree, the gorge
+  through the Crystal Mountains (a few km wide) averages to a 430–470 m barrier, so the
+  basin spills over the lower divide into Gabon. Breaching sinks by least cost might help,
+  but a gorge this narrow is below the data's resolution.
+- *Frozen seas* (tried, not kept): letting a sea frozen in winter send continental air
+  over land fixed Utqiagvik (mean −10.0 °C, range 26; observed −11.0, 31). But it chilled
+  Iceland further through the model's too-cold East Greenland water, halving Reykjavik's
+  rain, and the colder Arctic coast rains more (336 mm vs 140). It wants the NE Atlantic
+  warmed first.
+- *Siberian winters*: the missing winter cold (Yakutsk −24 °C in the coldest month vs −38,
+  Astana −7 vs −15, Winnipeg −7 vs −16) does not follow continentality: Moscow is more
+  continental than Astana in the model and already too cold. It wants surface inversions
+  under clear, calm winter highs, with Europe's maritime reach fixed alongside.
+
 The first guesses, before the A/B:
 
 | Miss | Likely cause | Fix to try |
