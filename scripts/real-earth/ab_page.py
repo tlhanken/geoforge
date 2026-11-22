@@ -133,7 +133,7 @@ def mountains():
     body += f"""<div class="cols"><div class="card"><h3>Hypsometry</h3><table><thead><tr><th></th><th>Real</th><th>Model</th></tr></thead><tbody>{rows}</tbody></table>
 <p class="note">Height correlation where both are land: {corr:.2f}.</p></div>
 <div class="card"><h3>Ranges: mean / 95th percentile of land, m</h3><table><thead><tr><th>Range</th><th>Real</th><th>Model</th></tr></thead><tbody>{ranges}</tbody></table>
-<p class="note">Green: the model's mean within 0.6–1.6 of the real one. Ranges far from plate edges (Rockies, Appalachians, Ethiopia, Brazil) have nothing to build them yet: roadmap 8e.</p></div></div>"""
+<p class="note">Green: the model's mean within 0.6–1.6 of the real one. Ranges far from plate edges need a history the plate map does not give: generated worlds get paleo-orogens round their cratons, plume domes and flat-slab block ranges, but Earth's map does not say where the Laramide flat slab or the Afar plume were (roadmap 8e).</p></div></div>"""
     return body, corr, r, m
 
 
@@ -147,9 +147,11 @@ def air():
         note = f"Direction agrees over {100 * x['direction_agreement_ocean']:.0f}% of the ocean; northern Indian Ocean (u, v) {x['north_indian_ocean_uv_model']} m/s against {x['north_indian_ocean_uv_era850']}."
         body += f"<h3>Surface winds, {month}</h3>" + pair(prod, ("real", "Real: ERA-Interim, 850 hPa", "Above the friction layer, so stronger and less turned than surface winds."), ("chain", "Model: on real topography", note))
     s = c["sst"]
-    rows = "".join(f'<tr><td>{e(k)}</td><td class="n">{v["observed_departure"]:+.1f}</td><td class="n {"ok" if np.sign(v["model_anomaly_product"]) == np.sign(v["observed_departure"]) and abs(v["model_anomaly_product"]) >= 0.5 * abs(v["observed_departure"]) else "miss"}">{v["model_anomaly_product"]:+.1f}</td></tr>' for k, v in s["regions"].items())
+    good = lambda v: np.sign(v["model_anomaly_product"]) == np.sign(v["observed_departure"]) and abs(v["model_anomaly_product"]) >= 0.5 * abs(v["observed_departure"])
+    rows = "".join(f'<tr><td>{e(k)}</td><td class="n">{v["observed_departure"]:+.1f}</td><td class="n {"ok" if good(v) else "miss"}">{v["model_anomaly_product"]:+.1f}</td></tr>' for k, v in s["regions"].items())
+    s["regions_good"] = sum(1 for v in s["regions"].values() if good(v))
     body += "<h3>Sea-surface temperature, departure from each latitude's mean</h3>" + pair("sst_anomaly", ("real", "Real: ERSST v5, 1971–2000", ""), ("chain", "Model: currents on real topography", f"Pattern correlation {s['departure_corr_sst_anomaly']:.2f}."))
-    body += f'<div class="card"><h3>Boundary currents, K from the latitude\'s mean</h3><table><thead><tr><th>Region</th><th>Real</th><th>Model</th></tr></thead><tbody>{rows}</tbody></table><p class="note">Green: right sign and at least half the size. The cold eastern currents run at about half their real strength, as the gyre question suspected.</p></div>'
+    body += f'<div class="card"><h3>Boundary currents, K from the latitude\'s mean</h3><table><thead><tr><th>Region</th><th>Real</th><th>Model</th></tr></thead><tbody>{rows}</tbody></table><p class="note">Green: right sign and at least half the size; {s["regions_good"]} of {len(s["regions"])} regions.</p></div>'
     return body, w, s
 
 
@@ -268,7 +270,7 @@ def main():
     rivers_chain = sum(1 for r in cc.values() if ok(r["q"][0], r["q"][1]))
     summary = f"""<tr><td>Elevation from plates</td><td>PB2002 plates</td><td>ETOPO1</td><td>Height correlation {corr:.2f}; land above 1 km {100 * mh['above1']:.0f}% vs {100 * rh['above1']:.0f}%</td></tr>
 <tr><td>Winds</td><td>ETOPO1</td><td>ERA-Interim 850 hPa</td><td>Direction right over {100 * winds['wind_jan']['direction_agreement_ocean']:.0f}% / {100 * winds['wind_jul']['direction_agreement_ocean']:.0f}% of the ocean (Jan / Jul)</td></tr>
-<tr><td>Currents → SST</td><td>ETOPO1</td><td>ERSST v5</td><td>Departure pattern correlation {sst['departure_corr_sst_anomaly']:.2f}; cold currents half strength</td></tr>
+<tr><td>Currents → SST</td><td>ETOPO1</td><td>ERSST v5</td><td>Departure pattern correlation {sst['departure_corr_sst_anomaly']:.2f}; {sst['regions_good']} of {len(sst['regions'])} boundary-current regions right in sign and at least half the size</td></tr>
 <tr><td>Climate</td><td>ETOPO1 + real winds and SST</td><td>ERA-Interim 2 m, GPCP</td><td>Temperature RMSE {ai['temperature'][1]:.1f} °C (on model air {ch['temperature'][1]:.1f}); rain correlation {ai['precip_corr']:.2f} ({ch['precip_corr']:.2f})</td></tr>
 <tr><td>Köppen classifier</td><td>Real temperature and rain</td><td>Köppen–Geiger map</td><td>{100 * kc['real']['agreement']:.0f}% of land agrees (model climate on real air {100 * kc['air']['agreement']:.0f}%, on model air {100 * kc['chain']['agreement']:.0f}%)</td></tr>
 <tr><td>Rivers</td><td>ETOPO1 + GPCP rain</td><td>Discharge of 18 rivers</td><td>{rivers_real} of 18 within a factor of two (on model rain {rivers_chain})</td></tr>"""
