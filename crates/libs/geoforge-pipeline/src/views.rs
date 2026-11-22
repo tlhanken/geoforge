@@ -2,9 +2,11 @@
 //! worked out when rendered or exported and never stored, so they cannot go stale and cost
 //! nothing to keep.
 //!
-//! Two kinds: **class maps** (Köppen, soils, lightning tiers), exported as exact-colour PNGs
-//! with a legend; and **chance maps** (each deposit kind, each hazard, fertility, timber),
-//! exported as 8-bit grayscale PNGs, 0–255 for 0–1, with a note of what 1 means.
+//! Three kinds: **class maps** (Köppen, soils, lightning tiers), exported as exact-colour PNGs
+//! with a legend; **chance maps** (each deposit kind, each hazard, fertility, timber),
+//! exported as 8-bit grayscale PNGs, 0–255 for 0–1, with a note of what 1 means; and
+//! **quantity maps** (sea-level pressure), exported as 16-bit grayscale PNGs with the range
+//! and units.
 
 use geoforge_core::grid::{AnyGrid, Cell, Grid};
 use geoforge_core::magnetism::MagneticField;
@@ -32,6 +34,8 @@ pub enum View {
     Hazard(Hazard),
     /// Lightning tiers.
     Lightning,
+    /// Sea-level pressure in January (`false`) or July (`true`).
+    Pressure { july: bool },
 }
 
 impl View {
@@ -42,13 +46,16 @@ impl View {
         v.extend(Deposit::ALL.map(Self::Deposit));
         v.extend(Hazard::ALL.map(Self::Hazard));
         v.push(Self::Lightning);
+        v.extend([Self::Pressure { july: false }, Self::Pressure { july: true }]);
         v
     }
 
-    /// Views by group name: `resources` (deposits, soils, fertility, timber) or `hazards`.
+    /// Views by group name: `climate_maps` (Köppen, pressure), `resources` (deposits, soils,
+    /// fertility, timber) or `hazards`.
     #[must_use]
     pub fn group(name: &str) -> Option<Vec<Self>> {
         match name {
+            "climate_maps" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Koppen | Self::Pressure { .. })).collect()),
             "resources" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Soil | Self::Fertility | Self::Timber | Self::Deposit(_))).collect()),
             "hazards" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Hazard(_) | Self::Lightning)).collect()),
             _ => None,
@@ -65,6 +72,8 @@ impl View {
             Self::Deposit(d) => d.slug(),
             Self::Hazard(h) => h.slug(),
             Self::Lightning => "lightning",
+            Self::Pressure { july: false } => "pressure_jan",
+            Self::Pressure { july: true } => "pressure_jul",
         }
     }
 
@@ -78,6 +87,8 @@ impl View {
     pub fn reads(self) -> &'static [ProductId] {
         match self {
             Self::Koppen => &[ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation, ProductId::PrecipitationWarmShare],
+            Self::Pressure { july: false } => &[ProductId::WindJan, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
+            Self::Pressure { july: true } => &[ProductId::WindJul, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
             _ => &ground::READS,
         }
     }
@@ -115,10 +126,20 @@ pub struct Chances {
     pub meaning: String,
 }
 
+/// A quantity map: each cell's value in `units`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Quantity {
+    pub cells: Vec<f64>,
+    pub units: &'static str,
+    /// Contour spacing for previews, in `units`.
+    pub contour: f64,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Map {
     Classes(Classes),
     Chances(Chances),
+    Quantity(Quantity),
 }
 
 /// What views are worked out from; the per-cell ground is read once, on first need.
@@ -189,6 +210,24 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             };
             chances((0..g.len()).map(|c| (h.at_sea() || !g.sea[c]).then(|| m.value(lambda[c]))).collect(), meaning)
         }
+        View::Pressure { july } => {
+            let wind = if july { s.products.wind_jul() } else { s.products.wind_jan() }?;
+            let (t, range) = (&s.products.temperature()?.values, &s.products.temperature_range()?.values);
+            // July: the north at its warmest month, the south at its coldest.
+            let season_t: Vec<f64> = (0..s.grid.len())
+                .map(|c| {
+                    let north = s.grid.center(c as Cell).to_lat_lon().lat_deg >= 0.0;
+                    f64::from(t[c]) + 0.5 * f64::from(range[c]) * if north == july { 1.0 } else { -1.0 }
+                })
+                .collect();
+            use geoforge_surface::pressure::{sea_level_pressure, Air, Planet};
+            let land: Vec<bool> = s.sea().iter().map(|&wet| !wet).collect();
+            let elevation = &s.products.elevation().or(s.products.rough_elevation())?.values;
+            let b = s.body;
+            let planet = Planet { radius_km: b.exterior.radius_km, rotation_h: b.exterior.rotation_h, mean_hpa: b.interior.surface_pressure_bar() * 1000.0, gravity_m_s2: b.gravity_m_s2() };
+            let cells = sea_level_pressure(s.grid, &planet, &Air { wind: &wind.values, temperature: &season_t, elevation, land: &land });
+            Map::Quantity(Quantity { cells, units: "hPa", contour: 4.0 })
+        }
     })
 }
 
@@ -234,7 +273,8 @@ mod tests {
         }
         let names: std::collections::BTreeSet<&str> = all.iter().map(|v| v.name()).collect();
         assert_eq!(names.len(), all.len(), "names are unique");
-        assert_eq!(View::group("resources").unwrap().len() + View::group("hazards").unwrap().len() + 1, all.len());
+        let grouped: usize = ["climate_maps", "resources", "hazards"].iter().map(|g| View::group(g).unwrap().len()).sum();
+        assert_eq!(grouped, all.len(), "every view is in one group");
     }
 
     #[test]

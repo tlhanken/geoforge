@@ -130,9 +130,11 @@ the products they read instead):
 | `earthquakes`, `tsunamis`, `volcanoes`, `cyclones`, `tornadoes`, `floods`, `wildfire`, `landslides` | Chance of one in a 10,000 km² region over a window that suits it (a year for storms, a decade for quakes, floods and fires, a century for tsunamis) | grayscale PNG + note |
 | `blizzards`, `dust_storms`, `fog`, `auroras` | Share of the year's days (nights) with one | grayscale PNG + note |
 | `lightning` | Artifexian's four tiers, under 1 to over 15 flashes per km² a year | class PNG + legend |
+| `pressure_jan`, `pressure_jul` | Sea-level pressure, hPa; previews blue below the mean to red above, isobars every 4 hPa | 16-bit grayscale PNG + `<view>.json` with the units and range |
 
-Every view has a world file and projection (`.pgw`, `.prj`). The groups `resources` and
-`hazards` name all of theirs at once (`render <dir> hazards`).
+Every view has a world file and projection (`.pgw`, `.prj`). The groups `climate_maps`
+(Köppen, pressure), `resources` and `hazards` name all of theirs at once
+(`render <dir> hazards`).
 
 The Köppen–Geiger view has 30 classes by Peel et al. (2007)'s rules: arid (B) first, then
 polar, tropical, and temperate or continental at a 0 °C coldest month
@@ -259,6 +261,13 @@ product's randomness. `seed <dir> <product>` prints it.
   else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
   where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
   build up CO₂ and run a few degrees cooler, bright ones draw it down.
+- **Sea-level pressure** (`geoforge_surface::pressure`, derived views): recovered from the
+  stored surface winds by the surface layer's balance, −∇p/ρ = f k̂×v + r·v (friction 2.5×10⁻⁵
+  s⁻¹ over sea, 7×10⁻⁵ over land, so winds cross isobars toward low pressure), fitted by
+  least squares on a 2° grid. Over land, a season's departure from its latitude's mean
+  temperature (brought to sea level along the lapse rate) adds a dome: 1.5 hPa per kelvin
+  colder, 0.6 per kelvin warmer, plus the sea-level reduction's p·g·z/(R·T²) per kelvin on
+  ground up to 2 km. The mean is the world's surface pressure.
 - **Resources** (`geoforge_surface::resources`, derived views): for each deposit kind, λ
   (expected deposits per 10,000 km²) summed over the settings it forms in: banded iron in
   2.6–1.8 Ga cratonic rock, skarns where granite meets limestone, laterites on basalt in

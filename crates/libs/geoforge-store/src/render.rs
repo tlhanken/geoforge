@@ -379,6 +379,49 @@ fn deposit_color(kind: &str) -> [u8; 3] {
     }
 }
 
+/// A preview of a quantity map: blue below its mean through white to red above it (±`span`),
+/// with contours every `contour` units, hillshaded with `relief` and coasts drawn.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn render_quantity(values: &[f64], sea: &[bool], contour: f64, span: f64, grid: &AnyGrid, relief: Option<(&Products, f64)>) -> Result<RgbImage> {
+    let mean = values.iter().sum::<f64>() / values.len().max(1) as f64;
+    let diverging = [(0.0, [40, 70, 160]), (0.5, [245, 245, 245]), (1.0, [170, 30, 30])];
+    let colors: Vec<Option<[u8; 3]>> = values.iter().map(|v| Some(ramp(&diverging, (0.5 + (v - mean) / (2.0 * span)).clamp(0.0, 1.0)))).collect();
+    let mut img = render_classes(&colors, grid, relief)?;
+    let GridSpec::Equirect { width, height } = grid.spec() else { return Ok(img) };
+    let band = |i: usize| (values[i] / contour).floor();
+    for y in 0..height as usize {
+        for x in 0..width as usize {
+            let i = y * width as usize + x;
+            let right = y * width as usize + (x + 1) % width as usize;
+            let below = (y + 1).min(height as usize - 1) * width as usize + x;
+            let coast = sea[i] != sea[right] || sea[i] != sea[below];
+            if band(i) != band(right) || band(i) != band(below) {
+                img.put_pixel(x as u32, y as u32, Rgb([60, 60, 60]));
+            } else if coast {
+                img.put_pixel(x as u32, y as u32, Rgb([110, 110, 110]));
+            }
+        }
+    }
+    Ok(img)
+}
+
+/// An exact 16-bit grayscale image of a quantity map and the range it spans: 0 is `min`,
+/// 65535 is `max`.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn gray_quantity(values: &[f64], grid: &AnyGrid) -> Result<(image::ImageBuffer<image::Luma<u16>, Vec<u16>>, f64, f64)> {
+    let GridSpec::Equirect { width, height } = grid.spec() else {
+        return Err(StoreError::Invalid("exports need an equirectangular grid".into()));
+    };
+    let (min, max) = values.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+    let span = (max - min).max(1e-9);
+    let img = image::ImageBuffer::from_fn(width, height, |x, y| image::Luma([((values[(y * width + x) as usize] - min) / span * 65535.0).round() as u16]));
+    Ok((img, min, max))
+}
+
 /// Sparse direction arrows over a vector field.
 fn arrows(img: &mut RgbImage, grid: &AnyGrid, v: &[[f32; 2]], top: f64) {
     let Some(eq) = grid.as_equirect() else { return };

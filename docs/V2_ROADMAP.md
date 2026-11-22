@@ -29,7 +29,11 @@ classes, and the classifier fed station normals (`V2_REALISM.md`, Köppen view).
 Artifexian (Log 40) decides B against D from a lookup table, because his rain is
 qualitative. We have rain in mm, so Köppen's own threshold applies directly.
 
-## 2. Derived views — mechanism done; pressure next
+## 2. Derived views — done
+
+Done: the mechanism and the January and July sea-level pressure views (`pressure_jan`,
+`pressure_jul`), recovered from the winds plus land domes; 10 of 12 ERA5 centres within
+8 hPa (`V2_REALISM.md`, Pressure). The plan follows.
 
 `views::View` names the products a view reads; `render` and `export` take view names
 beside products (`render <dir> koppen`). Categorical views export an exact-colour PNG, a

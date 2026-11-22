@@ -575,6 +575,7 @@ pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[Produ
         let img = match views::compute(v, &source) {
             Some(views::Map::Classes(c)) => geoforge_store::render::render_classes(&c.colors(), &grid, relief)?,
             Some(views::Map::Chances(c)) => geoforge_store::render::render_chances(&c.cells, &sea_cells, &grid, relief)?,
+            Some(views::Map::Quantity(q)) => geoforge_store::render::render_quantity(&q.cells, &sea_cells, q.contour, 6.0 * q.contour, &grid, relief)?,
             None => continue,
         };
         let f = to.join(format!("{}.png", v.name()));
@@ -611,6 +612,13 @@ pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(Vie
             Some(views::Map::Chances(c)) => {
                 geoforge_store::render::gray_chances(&c.cells, &grid)?.save(&png).map_err(geoforge_store::StoreError::from)?;
                 let note = serde_json::json!({ "view": name, "value": "0–255 for 0–1", "one_means": c.meaning });
+                std::fs::write(to.join(format!("{name}.json")), serde_json::to_string_pretty(&note)?)?;
+                "json"
+            }
+            Some(views::Map::Quantity(q)) => {
+                let (img, min, max) = geoforge_store::render::gray_quantity(&q.cells, &grid)?;
+                img.save(&png).map_err(geoforge_store::StoreError::from)?;
+                let note = serde_json::json!({ "view": name, "units": q.units, "min": min, "max": max, "value": "min + v/65535 × (max − min)" });
                 std::fs::write(to.join(format!("{name}.json")), serde_json::to_string_pretty(&note)?)?;
                 "json"
             }

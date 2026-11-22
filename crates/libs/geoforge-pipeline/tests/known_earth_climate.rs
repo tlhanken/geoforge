@@ -689,6 +689,56 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
     }
 }
 
+/// Sea-level pressure recovered from the modelled winds, against ERA5's 1991–2020 seasonal
+/// means: the great highs and lows, within 8 hPa.
+fn pressure(s: &mut Scorecard, e: &Earth) {
+    let land: Vec<bool> = e.elev.iter().map(|&v| v >= 0.0).collect();
+    // Northern winter in January: the north at its coldest month, the south at its warmest.
+    let season_t = |north_cold: bool| -> Vec<f64> {
+        (0..e.t.len()).map(|c| e.t[c] + 0.5 * e.t_range[c] * if (e.grid.center(c as u32).to_lat_lon().lat_deg >= 0.0) == north_cold { -1.0 } else { 1.0 }).collect()
+    };
+    for (month, wind, places) in [
+        (
+            "January",
+            &e.p.wind_jan().unwrap().values,
+            [
+                ("Siberian high (48°N 100°E)", 48.0, 100.0, 1036.0),
+                ("Aleutian low (52°N 175°W)", 52.0, -175.0, 1000.0),
+                ("Icelandic low (62°N 30°W)", 62.0, -30.0, 998.0),
+                ("Azores high (30°N 25°W)", 30.0, -25.0, 1020.0),
+                ("Australian heat low (20°S 130°E)", -20.0, 130.0, 1004.0),
+                ("South Pacific high (30°S 100°W)", -30.0, -100.0, 1020.0),
+            ],
+        ),
+        (
+            "July",
+            &e.p.wind_jul().unwrap().values,
+            [
+                ("Azores–Bermuda high (35°N 40°W)", 35.0, -40.0, 1025.0),
+                ("North Pacific high (37°N 150°W)", 37.0, -150.0, 1025.0),
+                ("Asian heat low (30°N 65°E)", 30.0, 65.0, 999.0),
+                ("South Atlantic high (28°S 10°W)", -28.0, -10.0, 1022.0),
+                ("Australian high (30°S 130°E)", -30.0, 130.0, 1022.0),
+                ("Antarctic trough (65°S 90°E)", -65.0, 90.0, 987.0),
+            ],
+        ),
+    ] {
+        use geoforge_surface::pressure::{sea_level_pressure, Air, Planet};
+        let planet = Planet { radius_km: 6371.0, rotation_h: 23.934, mean_hpa: 1013.25, gravity_m_s2: 9.81 };
+        let elevation: Vec<f32> = e.elev.iter().map(|&v| v as f32).collect();
+        let p = sea_level_pressure(&e.grid, &planet, &Air { wind, temperature: &season_t(month == "January"), elevation: &elevation, land: &land });
+        for (name, lat, lon, want) in places {
+            let v = mean(&e.grid, &cells_in(&e.grid, (lat - 3.0)..=(lat + 3.0), lon - 3.0, lon + 3.0), |c| p[c as usize]);
+            s.range("pressure", format!("{month} {name}, hPa"), v, (want - 8.0)..=(want + 8.0), "").gap_if_listed(name, PRESSURE_GAPS);
+        }
+    }
+}
+
+const PRESSURE_GAPS: &[(&str, &str)] = &[
+    ("Siberian high (48°N 100°E)", "the modelled Siberian winter is 5–15 K too warm (Ulaanbaatar −16 °C in January, observed −20; Yakutsk −24, observed −39), so its cold dome is weaker"),
+    ("Antarctic trough (65°S 90°E)", "the modelled westerlies peak at 40–45°S (observed 50–55°S), so the trough is shallower"),
+];
+
 const CYCLONE_GAPS: &[(&str, &str)] = &[(
     "South Atlantic (20°S 25°W)",
     "the modelled tropical South Atlantic summer is warm and wet (28 °C, 1400 mm at 15°S; observed ~26 °C and dry), and the wind shear that stops real storms there is not modelled",
@@ -764,6 +814,7 @@ fn scorecard() -> &'static Scorecard {
         hydrology(&mut s, e);
         biomes(&mut s, e);
         cyclones(&mut s, e);
+        pressure(&mut s, e);
         classifier(&mut s);
         s
     })

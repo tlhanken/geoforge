@@ -202,7 +202,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights; earthquake rates and corner magnitudes | 58 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks | 211 | 49 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure | 223 | 51 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -305,6 +305,17 @@ dry season against Am's 12 mm). The other 4 show what the rebuilt months cannot 
 climate stores means, ranges and half-year rain shares, so months are sinusoids in phase.
 That cannot show two rainy seasons (Nairobi), a short tropical dry season (Kinshasa), or a
 January colder than the mean less half the range (Beijing).
+
+### Pressure
+
+Sea-level pressure recovered from the modelled winds on the ETOPO-forced Earth run
+(`known_earth_climate`), against ERA5's 1991–2020 seasonal means: within 8 hPa at 10 of 12
+centres: in January the Aleutian (997 hPa) and Icelandic (994) lows, the Azores (1018) and
+South Pacific (1022) highs and the Australian heat low (997); in July the Azores–Bermuda
+(1029) and North Pacific (1028) highs, the Asian heat low (1005), and the South Atlantic and
+Australian highs. Gaps: the Siberian high comes out 1020 hPa (observed ~1036), because the
+modelled Siberian winter is 5–15 K too warm; the Antarctic trough is 1000 hPa (observed
+~987), because the modelled westerlies peak at 40–45°S, not 50–55°S.
 
 ### Hazards
 
