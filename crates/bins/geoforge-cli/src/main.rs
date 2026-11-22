@@ -78,6 +78,13 @@ enum Cmd {
         what: Vec<String>,
         #[arg(long)]
         to: Option<PathBuf>,
+        /// Write rasters this many times the grid's size (each cell repeated), for detail.
+        #[arg(long, default_value_t = 1)]
+        scale: u32,
+        /// Also write polar cap views (<product>.north.png, .south.png) for painting the
+        /// poles without the map's stretching.
+        #[arg(long)]
+        caps: bool,
     },
     /// Bring an edited view back: as a patch on the generated product (default) or as authored data.
     Import {
@@ -313,12 +320,12 @@ fn run(cli: Cli) -> R<()> {
                 }
             }
         }
-        Cmd::Export { dir, what, to } => {
+        Cmd::Export { dir, what, to, scale, caps } => {
             let w = World::open(&dir)?;
             let to = to.unwrap_or_else(|| pipe::edit_folder(&w));
             let (ps, vs) = parse_targets(&what)?;
             let ps: Vec<ProductId> = ps.into_iter().filter(|p| w.has_product(*p)).collect();
-            for (p, files) in pipe::export(&w, &ps, &to)? {
+            for (p, files) in pipe::export(&w, &ps, &to, &geoforge_store::edit::ViewOptions { scale, caps })? {
                 println!("{:<18} {}", p.name(), files.join(" "));
             }
             for (v, files) in pipe::export_views(&w, &vs, &to)? {
@@ -333,6 +340,12 @@ fn run(cli: Cli) -> R<()> {
             let from = from.unwrap_or_else(|| pipe::edit_folder(&w));
             let r = pipe::import(&mut w, product(&name)?, &from, authored)?;
             println!("{}: imported as {} ({} cells changed, {} rows changed)", r.product.name(), r.mode, r.changed_cells, r.rows_changed);
+            if let Some((iw, ih)) = r.resampled_from {
+                println!("  the image was {iw}x{ih}; resampled to the grid");
+            }
+            if r.cap_cells > 0 {
+                println!("  {} cells came from the polar cap views", r.cap_cells);
+            }
             if r.snapped > 0 {
                 println!("  {} pixels were not exact palette colours and were snapped to the nearest one", r.snapped);
             }

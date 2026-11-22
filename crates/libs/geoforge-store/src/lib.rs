@@ -14,6 +14,8 @@
 
 pub mod codec;
 pub mod edit;
+pub mod polar;
+pub mod raster;
 pub mod render;
 
 use geoforge_core::body::{BodyContext, SolarSystem};

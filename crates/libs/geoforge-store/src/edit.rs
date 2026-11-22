@@ -9,7 +9,9 @@
 //! | timeline, network     | `<p>.json` (the document itself)                             |
 //!
 //! Every raster comes with `<p>.edit.json` (how pixels map to values), a `.pgw` world file
-//! and a `.prj` sphere definition, so QGIS and similar tools place it on the globe.
+//! and a `.prj` sphere definition, so QGIS and similar tools place it on the globe. Rasters
+//! can be exported larger than the grid (`scale`) and with polar cap views (`<p>.north.png`,
+//! `<p>.south.png`, see [`crate::polar`]); edited rasters come back at any 2:1 size.
 //!
 //! Import turns an edited view back into a product. Against the baseline saved at export
 //! time it becomes a **patch** (only the cells you changed: deltas for continuous fields,
@@ -17,13 +19,14 @@
 //! or, with `authored`, it replaces the product outright.
 
 use crate::codec::{self, decode_cat};
+use crate::polar::Cap;
+use crate::raster::{Depth, Pixels};
 use crate::{hash_parts, Result, StoreError};
 use geoforge_core::grid::{Cell, GridSpec};
 use geoforge_core::key::Key;
 use geoforge_core::product::{Hash, ProductData, ProductId, Shape};
 use geoforge_core::shapes::Field;
 use geoforge_core::surface::{hex_color, Category, CrustType};
-use image::{ImageBuffer, Luma, Rgb};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -159,6 +162,11 @@ fn equirect(grid: GridSpec) -> Result<(u32, u32)> {
 /// On IO errors, or for grids without a raster form.
 pub fn write_georef(dir: &Path, stem: &str, grid: GridSpec, body: &BodyRef) -> Result<()> {
     let (w, h) = equirect(grid)?;
+    georef_sized(dir, stem, w, h, body)
+}
+
+/// [`write_georef`] for an image `w` × `h` covering the globe.
+fn georef_sized(dir: &Path, stem: &str, w: u32, h: u32, body: &BodyRef) -> Result<()> {
     let (dx, dy) = (360.0 / f64::from(w), 180.0 / f64::from(h));
     let pgw = format!("{dx:.12}\n0.0\n0.0\n{:.12}\n{:.12}\n{:.12}\n", -dy, -180.0 + dx / 2.0, 90.0 - dy / 2.0);
     std::fs::write(dir.join(format!("{stem}.pgw")), pgw)?;
@@ -178,63 +186,106 @@ pub struct BodyRef {
     pub radius_km: f64,
 }
 
+/// How rasters are exported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ViewOptions {
+    /// Pixels per cell along each axis (each cell repeated, so unpainted areas come back
+    /// exactly).
+    pub scale: u32,
+    /// Also write polar cap views.
+    pub caps: bool,
+}
+
+impl Default for ViewOptions {
+    fn default() -> Self {
+        Self { scale: 1, caps: false }
+    }
+}
+
+/// A product as a raster view at grid size: its pixels, how they encode values, a note for
+/// the sidecar, and (for partitions) the table file's rows.
+#[derive(Debug, Clone)]
+pub struct Raster {
+    pub pixels: Pixels,
+    pub encoding: Encoding,
+    pub grid: GridSpec,
+    pub note: String,
+    pub table: Option<Vec<TableRow>>,
+}
+
+/// The raster view of `data`, or `None` for products kept as JSON documents.
+///
+/// # Errors
+/// For grids without a raster form.
+pub fn raster(data: &ProductData) -> Result<Option<Raster>> {
+    let p = data.id();
+    let plain = |pixels, encoding, grid, note: String| Ok(Some(Raster { pixels, encoding, grid, note, table: None }));
+    match data {
+        _ if data.vector().is_some() => {
+            let f = data.vector().expect("vector");
+            equirect(f.grid)?;
+            let (lo, hi) = gray_range(p).expect("vector field");
+            let scale = (hi - lo) / 65535.0;
+            let px = Pixels::Rgb16(f.values.iter().map(|v| [to_u16(f64::from(v[0]), lo, scale), to_u16(f64::from(v[1]), lo, scale), 0]).collect());
+            let note = format!("16-bit RGB: red = eastward, green = northward [{}], each offset + scale * channel; blue unused.", p.unit());
+            plain(px, Encoding::Vector16 { offset: lo, scale, unit: p.unit().into() }, f.grid, note)
+        }
+        _ if data.scalar().is_some() => {
+            let f = data.scalar().expect("scalar");
+            equirect(f.grid)?;
+            let (lo, hi) = gray_range(p).expect("continuous field");
+            let scale = (hi - lo) / 65535.0;
+            let px = Pixels::Gray16(f.values.iter().map(|&v| to_u16(f64::from(v), lo, scale)).collect());
+            let note = format!("16-bit greyscale: value [{}] = offset + scale * pixel. Values outside [{lo}, {hi}] are clipped.", p.unit());
+            plain(px, Encoding::Gray16 { offset: lo, scale, unit: p.unit().into() }, f.grid, note)
+        }
+        ProductData::CrustType(f) => {
+            equirect(f.grid)?;
+            let px = Pixels::Rgb8(f.values.iter().map(|c| c.color()).collect());
+            plain(px, Encoding::Palette { entries: category_palette::<CrustType>() }, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into())
+        }
+        ProductData::Lithology(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |r| Some(r.color)).map(Some),
+        ProductData::Biome(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |r| Some(r.color)).map(Some),
+        ProductData::Plates(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |_| None).map(Some),
+        ProductData::Provinces(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |_| None).map(Some),
+        ProductData::Lakes(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |_| None).map(Some),
+        ProductData::Watersheds(pt) => partition_raster(p, &pt.owner, &pt.table.rows, |_| None).map(Some),
+        _ => Ok(None),
+    }
+}
+
 /// Write the edit view of a product into `dir`; returns the files written.
 ///
 /// # Errors
 /// On IO or encoding errors, or for grids without a raster view.
-pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef) -> Result<Vec<String>> {
+pub fn export_view(dir: &Path, data: &ProductData, body: &BodyRef, opts: &ViewOptions) -> Result<Vec<String>> {
     std::fs::create_dir_all(dir)?;
     let p = data.id();
-    let mut files = Vec::new();
     let name = p.name();
-    let png = dir.join(format!("{name}.png"));
-    let (encoding, grid, note) = match data {
-        _ if data.vector().is_some() => {
-            let f = data.vector().expect("vector");
-            let (w, h) = equirect(f.grid)?;
-            let (lo, hi) = gray_range(p).expect("vector field");
-            let scale = (hi - lo) / 65535.0;
-            let img: ImageBuffer<Rgb<u16>, Vec<u16>> =
-                ImageBuffer::from_raw(w, h, f.values.iter().flat_map(|v| [to_u16(f64::from(v[0]), lo, scale), to_u16(f64::from(v[1]), lo, scale), 0]).collect()).expect("size");
-            img.save(&png)?;
-            (
-                Encoding::Vector16 { offset: lo, scale, unit: p.unit().into() },
-                f.grid,
-                format!("16-bit RGB: red = eastward, green = northward [{}], each offset + scale * channel; blue unused.", p.unit()),
-            )
-        }
-        _ if data.scalar().is_some() => {
-            let f = data.scalar().expect("scalar");
-            let (w, h) = equirect(f.grid)?;
-            let (lo, hi) = gray_range(p).expect("continuous field");
-            let scale = (hi - lo) / 65535.0;
-            let img: ImageBuffer<Luma<u16>, Vec<u16>> =
-                ImageBuffer::from_raw(w, h, f.values.iter().map(|&v| to_u16(f64::from(v), lo, scale)).collect()).expect("size");
-            img.save(&png)?;
-            (Encoding::Gray16 { offset: lo, scale, unit: p.unit().into() }, f.grid, format!("16-bit greyscale: value [{}] = offset + scale * pixel. Values outside [{lo}, {hi}] are clipped.", p.unit()))
-        }
-        ProductData::CrustType(f) => (write_category(&png, f)?, f.grid, "Paint only with the palette colours; other colours snap to the nearest one.".into()),
-        ProductData::Lithology(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |r| Some(r.color))?,
-        ProductData::Biome(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |r| Some(r.color))?,
-        ProductData::Plates(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
-        ProductData::Provinces(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
-        ProductData::Lakes(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
-        ProductData::Watersheds(pt) => write_partition(dir, p, &pt.owner, &pt.table.rows, |_| None)?,
-        _ => {
-            let (_, doc) = codec::encode(data)?;
-            std::fs::write(dir.join(format!("{name}.json")), serde_json::to_string_pretty(&doc)?)?;
-            files.push(format!("{name}.json"));
-            return Ok(files);
-        }
+    let Some(r) = raster(data)? else {
+        let (_, doc) = codec::encode(data)?;
+        std::fs::write(dir.join(format!("{name}.json")), serde_json::to_string_pretty(&doc)?)?;
+        return Ok(vec![format!("{name}.json")]);
     };
-    files.push(format!("{name}.png"));
-    if p.shape() == Shape::Partition {
+    let (w, h) = equirect(r.grid)?;
+    let k = opts.scale.max(1);
+    let mut files = vec![format!("{name}.png")];
+    r.pixels.enlarge(w, h, k).save(w * k, h * k, &dir.join(format!("{name}.png")))?;
+    if let Some(table) = &r.table {
+        std::fs::write(dir.join(format!("{name}.table.json")), serde_json::to_string_pretty(table)?)?;
         files.push(format!("{name}.table.json"));
     }
-    write_georef(dir, p.name(), grid, body)?;
-    files.push(format!("{name}.pgw"));
-    files.push(format!("{name}.prj"));
-    let side = Sidecar { product: p, grid, encoding, note };
+    georef_sized(dir, name, w * k, h * k, body)?;
+    files.extend([format!("{name}.pgw"), format!("{name}.prj")]);
+    if opts.caps {
+        for north in [true, false] {
+            let cap = Cap::for_grid(north, h, k);
+            cap.render(&r.pixels, w, h).save(cap.side, cap.side, &dir.join(format!("{name}.{}.png", cap.name())))?;
+            cap.write_georef(dir, name, body)?;
+            files.extend(["png", "pgw", "prj"].map(|e| format!("{name}.{}.{e}", cap.name())));
+        }
+    }
+    let side = Sidecar { product: p, grid: r.grid, encoding: r.encoding, note: r.note };
     std::fs::write(dir.join(format!("{name}.edit.json")), serde_json::to_string_pretty(&side)?)?;
     files.push(format!("{name}.edit.json"));
     Ok(files)
@@ -244,35 +295,12 @@ fn to_u16(v: f64, lo: f64, scale: f64) -> u16 {
     ((v - lo) / scale).round().clamp(0.0, 65535.0) as u16
 }
 
-fn write_category<C: Category>(png: &Path, f: &Field<C>) -> Result<Encoding> {
-    let (w, h) = equirect(f.grid)?;
-    let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(w, h, f.values.iter().flat_map(|c| c.color()).collect()).expect("size");
-    img.save(png)?;
-    Ok(Encoding::Palette { entries: category_palette::<C>() })
-}
-
-fn write_partition<E: Serialize>(
-    dir: &Path,
-    p: ProductId,
-    owner: &Field<u32>,
-    rows: &BTreeMap<Key, E>,
-    own_color: impl Fn(&E) -> Option<[u8; 3]>,
-) -> Result<(Encoding, GridSpec, String)> {
-    let (w, h) = equirect(owner.grid)?;
+fn partition_raster<E: Serialize>(p: ProductId, owner: &Field<u32>, rows: &BTreeMap<Key, E>, own_color: impl Fn(&E) -> Option<[u8; 3]>) -> Result<Raster> {
+    equirect(owner.grid)?;
     let keys: BTreeMap<u32, Option<[u8; 3]>> = rows.iter().map(|(k, r)| (k.0 as u32, own_color(r))).collect();
     let pal = partition_palette(&keys);
-    let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_raw(
-        w,
-        h,
-        owner.values.iter().flat_map(|o| if *o == 0 { [0, 0, 0] } else { pal.get(o).copied().unwrap_or([0, 0, 0]) }).collect(),
-    )
-    .expect("size");
-    img.save(dir.join(format!("{}.png", p.name())))?;
-    let table: Vec<TableRow> = rows
-        .iter()
-        .map(|(k, r)| Ok(TableRow { key: *k, color: hex(pal[&(k.0 as u32)]), row: Some(serde_json::to_value(r)?) }))
-        .collect::<Result<_>>()?;
-    std::fs::write(dir.join(format!("{}.table.json", p.name())), serde_json::to_string_pretty(&table)?)?;
+    let pixels = Pixels::Rgb8(owner.values.iter().map(|o| if *o == 0 { [0, 0, 0] } else { pal.get(o).copied().unwrap_or([0, 0, 0]) }).collect());
+    let table: Vec<TableRow> = rows.iter().map(|(k, r)| Ok(TableRow { key: *k, color: hex(pal[&(k.0 as u32)]), row: Some(serde_json::to_value(r)?) })).collect::<Result<_>>()?;
     let name = |t: &TableRow| t.row.as_ref().and_then(|r| r.get("name")).and_then(|n| n.as_str()).map_or_else(|| format!("key {}", t.key), str::to_string);
     let entries = table.iter().map(|t| PaletteEntry { value: t.key.0 as u32, color: t.color.clone(), name: name(t) }).collect();
     let note = if p.is_catalog() {
@@ -280,7 +308,7 @@ fn write_partition<E: Serialize>(
     } else {
         "One colour per key; black = no owner. To add a region, add a row with a new key and colour to the table file and paint with that colour."
     };
-    Ok((Encoding::Palette { entries }, owner.grid, note.into()))
+    Ok(Raster { pixels, encoding: Encoding::Palette { entries }, grid: owner.grid, note: note.into(), table: Some(table) })
 }
 
 /// The raw content of an edited view, before it becomes a product.
@@ -301,6 +329,10 @@ pub struct View {
     pub table: BTreeMap<Key, Option<serde_json::Value>>,
     /// Pixels whose colour was not an exact palette colour.
     pub snapped: usize,
+    /// The image's size, when it was not the grid's and was resampled.
+    pub resampled_from: Option<(u32, u32)>,
+    /// Cells taken from edited polar cap views.
+    pub cap_cells: usize,
 }
 
 /// The encoding a view of `p` uses when no sidecar is present (a map drawn from scratch).
@@ -323,15 +355,19 @@ pub fn default_encoding(p: ProductId) -> Result<Encoding> {
     }
 }
 
-/// Read an edited view from `dir`.
+/// Read an edited view from `dir`. An image of another 2:1 size is resampled to the grid;
+/// edited polar caps beside it (which need the export's `baseline`) override it near the
+/// poles.
 ///
 /// # Errors
-/// If files are missing, the image size does not match the grid, or colours are unknown.
-pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
+/// If files are missing, the image does not cover the globe, colours are unknown, or caps
+/// are present without a baseline.
+pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec, baseline: Option<&ProductData>) -> Result<View> {
     let name = p.name();
+    let blank = |values| View { product: p, values, table: BTreeMap::new(), snapped: 0, resampled_from: None, cap_cells: 0 };
     if matches!(p.shape(), Shape::Timeline | Shape::Network | Shape::Table) {
         let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{name}.json")))?)?;
-        return Ok(View { product: p, values: ViewValues::Doc(doc), table: BTreeMap::new(), snapped: 0 });
+        return Ok(blank(ViewValues::Doc(doc)));
     }
     let (w, h) = equirect(grid)?;
     let side_path = dir.join(format!("{name}.edit.json"));
@@ -344,25 +380,39 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
     } else {
         default_encoding(p)?
     };
-    let img = image::open(dir.join(format!("{name}.png")))?;
-    if img.width() != w || img.height() != h {
-        return Err(StoreError::Invalid(format!(
-            "{name}.png is {}x{} but the world grid is {w}x{h} (resize it in your editor, keeping the full-globe extent)",
-            img.width(),
-            img.height()
-        )));
+    let depth = match encoding {
+        Encoding::Gray16 { .. } => Depth::Gray16,
+        Encoding::Vector16 { .. } => Depth::Rgb16,
+        Encoding::Palette { .. } => Depth::Rgb8,
+        Encoding::Json => return Err(StoreError::Invalid(format!("{name}: a raster product cannot use a JSON encoding"))),
+    };
+    let (mut pixels, iw, ih) = Pixels::load(&dir.join(format!("{name}.png")), depth)?;
+    let mut view = blank(ViewValues::U8(Vec::new()));
+    if (iw, ih) != (w, h) {
+        if iw.abs_diff(2 * ih) > 1 {
+            return Err(StoreError::Invalid(format!("{name}.png is {iw}x{ih}: a view must cover the globe, twice as wide as tall (the grid is {w}x{h})")));
+        }
+        pixels = pixels.resample((iw, ih), (w, h));
+        view.resampled_from = Some((iw, ih));
     }
-    let mut table = BTreeMap::new();
-    let (values, snapped) = match encoding {
-        Encoding::Gray16 { offset, scale, .. } => {
-            let g = img.into_luma16();
-            (ViewValues::F32(g.into_raw().into_iter().map(|v| (offset + scale * f64::from(v)) as f32).collect()), 0)
+    for north in [true, false] {
+        let path = dir.join(format!("{name}.{}.png", if north { "north" } else { "south" }));
+        if !path.exists() {
+            continue;
         }
-        Encoding::Vector16 { offset, scale, .. } => {
-            let g = img.into_rgb16();
-            (ViewValues::V2(g.pixels().map(|px| [(offset + scale * f64::from(px.0[0])) as f32, (offset + scale * f64::from(px.0[1])) as f32]).collect()), 0)
+        let base = baseline.ok_or_else(|| StoreError::Invalid(format!("{} needs the export's baseline: import it as a patch, or delete it", path.display())))?;
+        let exported = raster(base)?.ok_or_else(|| StoreError::Invalid(format!("{name} has no raster view")))?.pixels;
+        let (edited, cw, ch) = Pixels::load(&path, depth)?;
+        if cw != ch {
+            return Err(StoreError::Invalid(format!("{} is {cw}x{ch}; a cap view is square", path.display())));
         }
-        Encoding::Palette { mut entries } => {
+        let cap = Cap { north, side: cw };
+        view.cap_cells += cap.merge(&edited, &cap.render(&exported, w, h), &mut pixels, w, h)?;
+    }
+    let (values, snapped) = match (encoding, pixels) {
+        (Encoding::Gray16 { offset, scale, .. }, Pixels::Gray16(g)) => (ViewValues::F32(g.into_iter().map(|v| (offset + scale * f64::from(v)) as f32).collect()), 0),
+        (Encoding::Vector16 { offset, scale, .. }, Pixels::Rgb16(g)) => (ViewValues::V2(g.into_iter().map(|px| [(offset + scale * f64::from(px[0])) as f32, (offset + scale * f64::from(px[1])) as f32]).collect()), 0),
+        (Encoding::Palette { mut entries }, Pixels::Rgb8(rgb)) => {
             if p.shape() == Shape::Partition {
                 let rows: Vec<TableRow> = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{name}.table.json")))?)?;
                 // A catalog row's own colour is its palette colour.
@@ -375,10 +425,9 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
                     if r.key.0 == 0 || r.key.0 > u64::from(u32::MAX) {
                         return Err(StoreError::Invalid(format!("{name}: key {} is out of range (1..=4294967295)", r.key)));
                     }
-                    table.insert(r.key, r.row);
+                    view.table.insert(r.key, r.row);
                 }
             }
-            let rgb = img.into_rgb8();
             let mut pal: Vec<([u8; 3], u32)> = entries.iter().map(|e| Ok((parse_hex(&e.color)?, e.value))).collect::<Result<_>>()?;
             if p.shape() == Shape::Partition {
                 pal.push(([0, 0, 0], 0));
@@ -387,9 +436,8 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
             let mut snapped = 0;
             let mut cache: BTreeMap<[u8; 3], u32> = BTreeMap::new();
             let vals: Vec<u32> = rgb
-                .pixels()
-                .map(|px| {
-                    let c = px.0;
+                .into_iter()
+                .map(|c| {
                     if let Some(&v) = exact.get(&c) {
                         return v;
                     }
@@ -407,9 +455,11 @@ pub fn read_view(dir: &Path, p: ProductId, grid: GridSpec) -> Result<View> {
                 (ViewValues::U8(vals.into_iter().map(|v| v as u8).collect()), snapped)
             }
         }
-        Encoding::Json => return Err(StoreError::Invalid(format!("{name}: a raster product cannot use a JSON encoding"))),
+        _ => unreachable!("pixels are loaded at the encoding's depth"),
     };
-    Ok(View { product: p, values, table, snapped })
+    view.values = values;
+    view.snapped = snapped;
+    Ok(view)
 }
 
 /// Attributes for a partition key an edit introduced without a table row: `(product, key,

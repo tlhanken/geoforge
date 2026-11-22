@@ -50,8 +50,8 @@ Other starting points:
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
 | `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |
-| `export <dir> [products\|layers\|views\|all] [--to DIR]` | Write edit views (default `<dir>/edit`); derived views as PNG + legend + world file |
-| `import <dir> <product> [--from DIR] [--authored]` | Bring an edit back as a patch, or as authored data |
+| `export <dir> [products\|layers\|views\|all] [--to DIR] [--scale N] [--caps]` | Write edit views (default `<dir>/edit`), N times the grid's size, with polar cap views; derived views as PNG + legend + world file |
+| `import <dir> <product> [--from DIR] [--authored]` | Bring an edit back as a patch, or as authored data (any 2:1 size; edited caps override the poles) |
 | `reset <dir> <product>` | Drop a product's edits |
 | `render <dir> [products\|layers\|views] [--to DIR]` | Preview PNGs (all by default) |
 | `show <dir>` | The solar system (each body with its regime, air and water) and the focus: circulation, magnetic field, breathability, tides, calendar |
@@ -178,6 +178,33 @@ Edit views:
 Every raster has a `.pgw` world file and a `.prj` sphere definition (the body's radius), so GIS
 tools place it on the globe. The grid is equirectangular with pixel centres at
 `lon = −180 + (x + ½)·360/W`, `lat = 90 − (y + ½)·180/H`.
+
+**Sizes and the poles.** `export --scale N` writes rasters N times the grid's size, each
+cell repeated, for painting detail; an edited view comes back at any 2:1 size (shrinking
+averages continuous values and takes the commonest colour of palette views, enlarging takes
+the nearest pixel), and unpainted areas of a scaled export come back exactly. The
+equirectangular view stretches the poles into the top and bottom rows; `export --caps` also
+writes `<p>.north.png` and `<p>.south.png`, the regions poleward of 60° in an azimuthal
+equidistant projection (pole at the centre, 60° on the inscribed circle; the north cap has
+0° longitude straight down and east anticlockwise, the south cap 0° up and east clockwise),
+with world files and projection definitions so QGIS overlays them. On import every cell
+whose nearest cap pixel was painted takes it, over the main view; delete a cap you did not
+use, or leave it as exported. Caps import as patches (they need the export's baseline).
+
+**Painting on the globe in Blender.** The edit views map onto a UV sphere as they are:
+
+1. Add a UV sphere (Add › Mesh › UV Sphere; 128 segments and 64 rings or more) and shade it
+   smooth. Its UVs are a latitude–longitude grid, the layout of the edit views.
+2. In the Texture Paint workspace give it a material with an Image Texture node, open the
+   exported PNG (`elevation.png`, `biome.png`, …) and connect it to Base Color. For
+   greyscale and vector views set the image's colour space to Non-Color, so values are not
+   gamma-shifted.
+3. Paint. For palette views (crust type, biomes, rocks, partitions) take colours from
+   `<p>.edit.json` or `<p>.table.json` and use a hard brush (constant falloff); blended edge
+   pixels snap to the nearest palette colour on import. The sphere's polar rows pinch; for
+   the poles, paint the cap views in a flat editor instead.
+4. Image › Save As, PNG: greyscale views as BW at 16 bits, vector views as RGB at 16 bits,
+   palette views as RGB at 8 bits. Keep the file name, then `geoforge-v2 import`.
 
 **Patch or authored.** By default an import is diffed against the view as it was exported and
 stored as a patch: deltas for continuous fields, new values for categories and owners. If the

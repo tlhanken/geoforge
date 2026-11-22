@@ -280,16 +280,14 @@ follows.
 - **Upwelling and productivity** as a map (fisheries, guano, fog deserts).
 - Check: NSIDC sea-ice extent, Allen Coral Atlas, against the ETOPO-forced Earth run.
 
-## 8. Editing near the poles — next
+## 8. Editing near the poles — done
 
 Edit views are equirectangular PNGs with world files, which QGIS reads and Blender maps
 onto a UV sphere as is (Artifexian's workflow: paint on the sphere, save the
-equirectangular image, import it back). To finish that:
-
-- accept an edited image at any 2:1 size (resample on import);
-- optional polar cap views (azimuthal, poleward of ~60°) for painting in flat apps,
-  merged back on import where they were changed;
-- a short guide to the Blender round trip.
+equirectangular image, import it back). Done: rasters export at N times the grid's size and
+import at any 2:1 size; optional polar cap views (azimuthal equidistant, poleward of 60°,
+georeferenced) merge back where painted; a Blender round-trip guide (`V2_PIPELINE.md`,
+Editing a layer). Open: caps for derived views; a cap edge other than 60°.
 
 ## 9. Deep-time tectonics — later
 

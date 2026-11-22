@@ -460,17 +460,18 @@ pub fn edit_folder(world: &World) -> PathBuf {
     world.root.join("edit")
 }
 
-/// Export edit views of stored products. Returns the files written per product.
+/// Export edit views of stored products (rasters at `opts.scale`, with polar caps if asked).
+/// Returns the files written per product.
 ///
 /// # Errors
 /// If a product is missing (run `generate` first) or on IO errors.
-pub fn export(world: &World, ps: &[ProductId], to: &Path) -> Result<Vec<(ProductId, Vec<String>)>> {
+pub fn export(world: &World, ps: &[ProductId], to: &Path, opts: &edit::ViewOptions) -> Result<Vec<(ProductId, Vec<String>)>> {
     let body = world.load_body()?;
     let bref = BodyRef { name: body.name.clone(), radius_km: body.exterior.radius_km };
     let mut out = Vec::new();
     for &p in ps {
         let d = world.load_product(p)?.ok_or_else(|| PipelineError::Invalid(format!("{p} is not generated yet; run generate first")))?;
-        let files = edit::export_view(to, &d, &bref)?;
+        let files = edit::export_view(to, &d, &bref, opts)?;
         codec::write_canonical(&world.baseline_dir(), &d, Hash([0; 32]))?;
         out.push((p, files));
     }
@@ -484,6 +485,10 @@ pub struct ImportReport {
     pub changed_cells: usize,
     pub snapped: usize,
     pub rows_changed: usize,
+    /// The edited image's size, when it was resampled to the grid.
+    pub resampled_from: Option<(u32, u32)>,
+    /// Cells taken from edited polar caps.
+    pub cap_cells: usize,
 }
 
 /// Import an edited view as a patch (default) or as authored data.
@@ -492,7 +497,9 @@ pub struct ImportReport {
 /// If the view is invalid, or a patch is requested without a baseline.
 pub fn import(world: &mut World, p: ProductId, from: &Path, authored: bool) -> Result<ImportReport> {
     let grid = world.manifest.grid;
-    let view = edit::read_view(from, p, grid)?;
+    let baseline = codec::read_canonical(&world.baseline_dir(), p, grid).ok();
+    let view = edit::read_view(from, p, grid, baseline.as_ref())?;
+    let report = |mode, changed_cells, rows_changed| ImportReport { product: p, mode, changed_cells, snapped: view.snapped, rows_changed, resampled_from: view.resampled_from, cap_cells: view.cap_cells };
     let body = world.load_body()?;
     let g = grid.build()?;
     let ctx = load_all(world)?;
@@ -508,10 +515,9 @@ pub fn import(world: &mut World, p: ProductId, from: &Path, authored: bool) -> R
         world.manifest.sources.insert(p.name().into(), Source::Authored { file: format!("edits/{}.json", p.name()) });
         world.save_manifest()?;
         let _ = h;
-        return Ok(ImportReport { product: p, mode: "authored", changed_cells: grid.cell_count(), snapped: view.snapped, rows_changed: view.table.len() });
+        return Ok(report("authored", grid.cell_count(), view.table.len()));
     }
-    let baseline = codec::read_canonical(&world.baseline_dir(), p, grid)
-        .map_err(|_| PipelineError::Invalid(format!("no export baseline for {p}; run `export {p}` before editing, or import with --authored")))?;
+    let baseline = baseline.ok_or_else(|| PipelineError::Invalid(format!("no export baseline for {p}; run `export {p}` before editing, or import with --authored")))?;
     let fresh = edit::diff(&baseline, &view)?;
     let (patch, params) = match world.manifest.source(p) {
         Source::Patched { patch: rel, params, .. } => (edit::merge(&load_patch(world, &rel)?, &fresh)?, params),
@@ -521,13 +527,13 @@ pub fn import(world: &mut World, p: ProductId, from: &Path, authored: bool) -> R
             let mut d = codec::read_canonical(&edits, p, grid)?;
             edit::apply(&mut d, &fresh, &fill)?;
             codec::write_canonical(&edits, &d, Hash([0; 32]))?;
-            return Ok(ImportReport { product: p, mode: "authored (updated)", changed_cells: fresh.cell_count(), snapped: view.snapped, rows_changed: fresh.rows.len() });
+            return Ok(report("authored (updated)", fresh.cell_count(), fresh.rows.len()));
         }
     };
     std::fs::write(&patch_file, serde_json::to_string(&patch)?)?;
     world.manifest.sources.insert(p.name().into(), Source::Patched { params, base: patch.base, patch: format!("edits/{}.patch.json", p.name()) });
     world.save_manifest()?;
-    Ok(ImportReport { product: p, mode: "patch", changed_cells: fresh.cell_count(), snapped: view.snapped, rows_changed: fresh.rows.len() })
+    Ok(report("patch", fresh.cell_count(), fresh.rows.len()))
 }
 
 /// Drop a product's edits; it goes back to being generated.

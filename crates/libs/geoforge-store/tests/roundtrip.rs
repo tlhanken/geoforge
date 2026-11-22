@@ -57,8 +57,8 @@ fn untouched_export_imports_as_empty_patch() {
     let d = tmp("noop");
     let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
     for data in [elevation(), lakes(), biomes()] {
-        edit::export_view(&d, &data, &body).unwrap();
-        let v = edit::read_view(&d, data.id(), G).unwrap();
+        edit::export_view(&d, &data, &body, &Default::default()).unwrap();
+        let v = edit::read_view(&d, data.id(), G, None).unwrap();
         let p = edit::diff(&data, &v).unwrap();
         assert_eq!(p.cell_count(), 0, "{}", data.id());
         assert!(p.rows.is_empty());
@@ -71,7 +71,7 @@ fn painted_edits_become_a_patch_that_rebases() {
     let d = tmp("paint");
     let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
     let base = elevation();
-    edit::export_view(&d, &base, &body).unwrap();
+    edit::export_view(&d, &base, &body, &Default::default()).unwrap();
     // "Paint" a 4x4 block 1000 m higher.
     let mut img = image::open(d.join("elevation.png")).unwrap().into_luma16();
     let step = 24000.0 / 65535.0;
@@ -82,7 +82,7 @@ fn painted_edits_become_a_patch_that_rebases() {
         }
     }
     img.save(d.join("elevation.png")).unwrap();
-    let v = edit::read_view(&d, ProductId::Elevation, G).unwrap();
+    let v = edit::read_view(&d, ProductId::Elevation, G, None).unwrap();
     let patch = edit::diff(&base, &v).unwrap();
     assert_eq!(patch.cell_count(), 16);
     assert_eq!(patch.runs.len(), 4);
@@ -111,7 +111,7 @@ fn partition_paint_with_new_key() {
     let d = tmp("part");
     let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
     let base = lakes();
-    edit::export_view(&d, &base, &body).unwrap();
+    edit::export_view(&d, &base, &body, &Default::default()).unwrap();
     // Add a lake: new table row with a new colour, painted over a block.
     let mut rows: Vec<edit::TableRow> = serde_json::from_str(&std::fs::read_to_string(d.join("lakes.table.json")).unwrap()).unwrap();
     rows.push(edit::TableRow { key: Key(9), color: "#ff00ff".into(), row: Some(serde_json::json!({"surface_elevation_m": 300.0, "endorheic": false})) });
@@ -125,7 +125,7 @@ fn partition_paint_with_new_key() {
     // An anti-aliased edge pixel snaps to the nearest palette colour.
     img.put_pixel(5, 3, image::Rgb([250, 4, 250]));
     img.save(d.join("lakes.png")).unwrap();
-    let v = edit::read_view(&d, ProductId::Lakes, G).unwrap();
+    let v = edit::read_view(&d, ProductId::Lakes, G, None).unwrap();
     assert_eq!(v.snapped, 1);
     let patch = edit::diff(&base, &v).unwrap();
     assert_eq!(patch.rows.len(), 1);
@@ -151,8 +151,8 @@ fn vector_field_views_round_trip() {
     let h = codec::write_canonical(&d, &data, Hash([1; 32])).unwrap();
     assert_eq!(codec::read_canonical(&d, ProductId::WindJul, G).unwrap(), data);
     assert_eq!(codec::content_hash(&data).unwrap(), h);
-    edit::export_view(&d, &data, &body).unwrap();
-    let view = edit::read_view(&d, ProductId::WindJul, G).unwrap();
+    edit::export_view(&d, &data, &body, &Default::default()).unwrap();
+    let view = edit::read_view(&d, ProductId::WindJul, G, None).unwrap();
     let patch = edit::diff(&data, &view).unwrap();
     assert_eq!(patch.cell_count(), 0);
     // Turn the wind around in one cell: a two-component delta.
@@ -160,7 +160,7 @@ fn vector_field_views_round_trip() {
     let px = img.get_pixel_mut(5, 5);
     px.0[0] = 65535 - px.0[0];
     img.save(d.join("wind_jul.png")).unwrap();
-    let view = edit::read_view(&d, ProductId::WindJul, G).unwrap();
+    let view = edit::read_view(&d, ProductId::WindJul, G, None).unwrap();
     let patch = edit::diff(&data, &view).unwrap();
     assert_eq!(patch.cell_count(), 1);
     let mut out = data.clone();
@@ -178,7 +178,7 @@ fn catalog_views_keep_and_add_kinds() {
     let d = tmp("catalog");
     let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
     let base = biomes();
-    edit::export_view(&d, &base, &body).unwrap();
+    edit::export_view(&d, &base, &body, &Default::default()).unwrap();
     let side: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(d.join("biome.edit.json")).unwrap()).unwrap();
     let entries = side["encoding"]["entries"].as_array().unwrap();
     assert!(entries.iter().any(|e| e["color"] == "#5a3a8a" && e["name"] == "glowcap"), "row colour is the palette colour");
@@ -195,7 +195,7 @@ fn catalog_views_keep_and_add_kinds() {
     }
     img.save(&png).unwrap();
 
-    let v = edit::read_view(&d, ProductId::Biome, G).unwrap();
+    let v = edit::read_view(&d, ProductId::Biome, G, None).unwrap();
     let edited = edit::view_to_product(&v, G, &edit::no_fill()).unwrap();
     let ProductData::Biome(pt) = &edited else { panic!() };
     assert_eq!(pt.table.rows.len(), 4, "unused glowcap kept, ashlands added");
@@ -209,4 +209,69 @@ fn catalog_views_keep_and_add_kinds() {
     edit::apply(&mut again, &patch, &edit::no_fill()).unwrap();
     let ProductData::Biome(pt) = &again else { panic!() };
     assert!(pt.table.rows.contains_key(&Key(3)) && pt.table.rows.contains_key(&Key(101)));
+}
+
+/// Views exported larger than the grid and with polar caps come back unchanged when left
+/// alone; a view resized to any 2:1 size still imports; other shapes are refused.
+#[test]
+fn scaled_views_and_caps_round_trip() {
+    let d = tmp("scaled");
+    let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
+    let opts = edit::ViewOptions { scale: 3, caps: true };
+    for data in [elevation(), lakes(), biomes()] {
+        let files = edit::export_view(&d, &data, &body, &opts).unwrap();
+        let name = data.id().name();
+        assert!(files.contains(&format!("{name}.north.png")) && d.join(format!("{name}.south.prj")).exists());
+        let v = edit::read_view(&d, data.id(), G, Some(&data)).unwrap();
+        assert_eq!(v.resampled_from, Some((192, 96)));
+        assert_eq!((v.cap_cells, edit::diff(&data, &v).unwrap().cell_count()), (0, 0), "{name}");
+    }
+    // Caps need the export's baseline.
+    assert!(edit::read_view(&d, ProductId::Elevation, G, None).is_err());
+    std::fs::remove_file(d.join("elevation.north.png")).unwrap();
+    std::fs::remove_file(d.join("elevation.south.png")).unwrap();
+    let img = image::open(d.join("elevation.png")).unwrap();
+    img.resize_exact(256, 128, image::imageops::FilterType::Nearest).save(d.join("elevation.png")).unwrap();
+    let base = elevation();
+    let v = edit::read_view(&d, ProductId::Elevation, G, None).unwrap();
+    assert_eq!(edit::diff(&base, &v).unwrap().cell_count(), 0);
+    img.resize_exact(200, 128, image::imageops::FilterType::Nearest).save(d.join("elevation.png")).unwrap();
+    assert!(edit::read_view(&d, ProductId::Elevation, G, None).is_err());
+}
+
+/// Painting a new kind around the north pole in its cap view patches only the cells there.
+#[test]
+fn painting_the_pole_in_a_cap() {
+    let d = tmp("cap");
+    let body = BodyRef { name: "Test".into(), radius_km: 6371.0 };
+    let base = biomes();
+    edit::export_view(&d, &base, &body, &edit::ViewOptions { scale: 1, caps: true }).unwrap();
+    let path = d.join("biome.north.png");
+    let mut img = image::open(&path).unwrap().into_rgb8();
+    let n = img.width();
+    let r = f64::from(n) / 2.0;
+    for y in 0..n {
+        for x in 0..n {
+            // Within 10° of the pole: a third of the cap's radius.
+            if (f64::from(x) + 0.5 - r).hypot(f64::from(y) + 0.5 - r) < r / 3.0 {
+                img.put_pixel(x, y, image::Rgb([90, 58, 138]));
+            }
+        }
+    }
+    img.save(&path).unwrap();
+    let v = edit::read_view(&d, ProductId::Biome, G, Some(&base)).unwrap();
+    assert!(v.cap_cells >= 64, "{}", v.cap_cells); // at least the top row
+    let mut out = base.clone();
+    edit::apply(&mut out, &edit::diff(&base, &v).unwrap(), &edit::no_fill()).unwrap();
+    let (ProductData::Biome(a), ProductData::Biome(b)) = (&base, &out) else { unreachable!() };
+    for (c, (x, y)) in a.owner.values.iter().zip(&b.owner.values).enumerate() {
+        let lat = 90.0 - ((c / 64) as f64 + 0.5) * 180.0 / 32.0;
+        // Cells well inside the disc take the paint; cells well outside keep their kind (the
+        // cap's pixels are coarse at this grid size, so the rim may go either way).
+        if lat > 83.0 {
+            assert_eq!(*y, 3, "cell {c} at {lat}°");
+        } else if lat < 78.0 {
+            assert_eq!(x, y, "cell {c} at {lat}° changed");
+        }
+    }
 }

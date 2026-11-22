@@ -35,7 +35,7 @@ fn generate_edit_regenerate() {
 
     // Export the rough heightmap, raise a block by ~2 km, import as a patch.
     let edit = pipe::edit_folder(&w);
-    pipe::export(&w, &[ProductId::RoughElevation], &edit).unwrap();
+    pipe::export(&w, &[ProductId::RoughElevation], &edit, &Default::default()).unwrap();
     let png = edit.join("rough_elevation.png");
     let mut img = image::open(&png).unwrap().into_luma16();
     let step = 24000.0 / 65535.0;
@@ -74,7 +74,7 @@ fn generate_edit_regenerate() {
     assert!(e4.values[c] > e1.values[c] + 1500.0);
 
     // Author the crust type outright (all continental): tectonics keeps it, the rest follows.
-    pipe::export(&w, &[ProductId::CrustType], &edit).unwrap();
+    pipe::export(&w, &[ProductId::CrustType], &edit, &Default::default()).unwrap();
     let cpng = edit.join("crust_type.png");
     let mut ci = image::open(&cpng).unwrap().into_rgb8();
     for px in ci.pixels_mut() {
