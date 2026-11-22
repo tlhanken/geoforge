@@ -1,4 +1,4 @@
-//! Deterministic draws and names from a seed.
+//! Deterministic draws from a seed.
 
 use geoforge_core::seed::{range, unit, Seed};
 
@@ -25,20 +25,4 @@ impl Draw {
         let u2 = self.u();
         mean + sd * (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
     }
-}
-
-/// A pronounceable name from a seed.
-#[must_use]
-pub fn name(seed: Seed) -> String {
-    const ON: [&str; 16] = ["k", "t", "v", "s", "r", "m", "n", "l", "d", "th", "z", "b", "h", "sh", "g", "p"];
-    const NU: [&str; 8] = ["a", "e", "i", "o", "u", "ae", "ai", "or"];
-    let mut d = Draw::new(seed.child(b"name"));
-    let syll = 2 + (d.u() * 2.0) as usize;
-    let mut s = String::new();
-    for _ in 0..syll {
-        s.push_str(ON[(d.u() * ON.len() as f64) as usize % ON.len()]);
-        s.push_str(NU[(d.u() * NU.len() as f64) as usize % NU.len()]);
-    }
-    let mut c = s.chars();
-    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
 }

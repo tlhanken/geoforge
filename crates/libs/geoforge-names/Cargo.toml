@@ -1,0 +1,9 @@
+[package]
+name = "geoforge-names"
+description = "Deterministic pronounceable names from a 64-bit seed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]

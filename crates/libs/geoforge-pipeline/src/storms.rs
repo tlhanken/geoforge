@@ -345,7 +345,7 @@ impl Atmosphere {
             }
         }
         for (k, s) in out.iter_mut().enumerate() {
-            s.name = geoforge_cosmos::name(seed.child_u64(b"name", k as u64));
+            s.name = geoforge_names::name(seed.child_u64(b"name", k as u64).0);
         }
         out
     }

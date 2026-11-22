@@ -459,8 +459,13 @@ name = "geoforge-cosmos"
 version = "0.2.0"
 dependencies = [
  "geoforge-core",
+ "geoforge-names",
  "serde",
 ]
+
+[[package]]
+name = "geoforge-names"
+version = "0.2.0"
 
 [[package]]
 name = "geoforge-pipeline"
@@ -468,6 +473,7 @@ version = "0.2.0"
 dependencies = [
  "geoforge-core",
  "geoforge-cosmos",
+ "geoforge-names",
  "geoforge-store",
  "geoforge-surface",
  "image",

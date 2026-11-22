@@ -1,7 +1,7 @@
 //! The orbital tree: a star, its planets on a geometric ladder through the habitable zone,
 //! belts in the gaps, and moons.
 
-use crate::draw::{name, Draw};
+use crate::draw::Draw;
 use crate::dynamics::{self, HasOrbit};
 use crate::planets::Formed;
 use crate::stars::spectral_class;
@@ -35,7 +35,7 @@ pub fn generate_system(seed: Seed) -> Generated {
     let mut d = Draw::new(seed.child(b"system"));
     let mut keys = KeyAllocator::starting_at(0);
     let root_key = keys.fresh();
-    let sys_name = name(seed);
+    let sys_name = geoforge_names::name(seed.0);
 
     // Star: F8–K5 main sequence, so the habitable zone holds a stable, long-lived world.
     let m = d.range(0.70, 1.25);

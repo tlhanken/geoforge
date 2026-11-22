@@ -301,13 +301,22 @@ weather from the hazard rates, concentrated where storms make them: warm sectors
 fronts over warm plains, tropical cyclones' outer bands. Lows should merge or repel rather
 than pile up.
 
-## 8c. Names as their own crate — next
+## 8c. Names — crate done; languages later
 
-`geoforge_cosmos::name` makes every name from one fixed syllable set (16 onsets, 8
-nuclei, 2–3 syllables). Move naming into a standalone crate (`geoforge-names`, no other
-geoforge dependency) with phonologies — consonant and vowel inventories, syllable shapes,
-stress, spelling rules, as in Artifexian's conlang videos — seeded per world, culture or
-region, so stars, planets, storms and places each get a consistent language.
+Naming lives in `geoforge-names`, a crate with no other dependency: `name(seed)` gives the
+same names as before (one sound set: 16 onsets, 8 nuclei, 2–3 syllables). Later:
+phonologies — consonant and vowel inventories, syllable shapes, stress, spelling rules, as
+in Artifexian's conlang videos — seeded per world, culture or region, so stars, planets,
+storms and places each get a consistent language.
+
+## 8d. An almanac for a place — todo
+
+A calendar for a whole year at a place, worked out day by day on its own calendar: the
+date (local day, month by its moons), sunrise and sunset and day length, the moons'
+phases, the day's weather (high, low, rain or snow, sun or cloud, wind, the storm
+passing), and the natural phenomena of that day: eclipses, auroras, thunderstorms and
+tornadoes, cyclones, earthquakes and eruptions drawn from their rates, meteor showers.
+Output as a table (JSON/CSV) and a printable calendar page per month.
 
 ## 8b. A system's local environment — next
 

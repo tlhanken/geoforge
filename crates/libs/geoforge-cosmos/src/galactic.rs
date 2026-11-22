@@ -12,7 +12,7 @@
 //! settles into Mercury's 3:2 resonance instead.
 
 use crate::context::{belt_member, body_context};
-use crate::draw::{name, Draw};
+use crate::draw::Draw;
 use crate::galaxy::Galaxy;
 use crate::planets::{self, binary_survival, p_type_limit, s_type_limit, Architecture, Belt, Disk};
 use crate::population::{draw as draw_phenotype, Companion, Phenotype};
@@ -62,7 +62,7 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     let mut d = Draw::new(seed.child(b"galactic-system"));
     let mut keys = KeyAllocator::starting_at(0);
     let root_key = keys.fresh();
-    let sys_name = name(seed);
+    let sys_name = geoforge_names::name(seed.0);
     let (age, feh) = (ph.age_gyr, ph.metallicity_dex);
     let primary = evolve(ph.primary_mass, age, feh);
     let companion = ph.companions.first().map(|c| (evolve(c.initial_mass, age, feh), *c));

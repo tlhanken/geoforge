@@ -13,6 +13,7 @@ incremental = true
 members = [
     "crates/bins/geoforge",
     "crates/libs/geoforge-core",
+    "crates/libs/geoforge-names",
     "crates/libs/geoforge-surface",
     "crates/libs/geoforge-cosmos",
     "crates/libs/geoforge-store",

@@ -39,7 +39,6 @@ pub mod worlds;
 pub use context::{any_body, belt_member, body_context, find_body};
 pub use galactic::{galactic_system, Barren};
 pub use galaxy::{Galaxy, GalaxyPreset};
-pub use draw::name;
 pub use system::{generate_system, Generated};
 pub use worlds::{describe, interior_for, regulate_co2, Setting};
 

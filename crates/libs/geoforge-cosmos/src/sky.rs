@@ -22,7 +22,7 @@
 //! The galaxy's diffuse glow is the starlight of its disk along each line of sight, dimmed
 //! by dust in a thinner layer (scale height 100 pc) that also thickens toward the centre.
 
-use crate::draw::{name, Draw};
+use crate::draw::Draw;
 use crate::galaxy::Galaxy;
 use crate::population::multiple_fraction;
 use crate::stars::{end_of_life_gyr, evolve};
@@ -125,7 +125,7 @@ pub fn neighbourhood(galaxy: &Galaxy, radius_kpc: f64, seed: Seed) -> Neighbourh
         .collect();
     stars.sort_by(|a, b| a.v.total_cmp(&b.v));
     for (i, s) in stars.iter_mut().take(NAMED).enumerate() {
-        s.name = Some(name(seed.child_u64(b"star name", i as u64)));
+        s.name = Some(geoforge_names::name(seed.child_u64(b"star name", i as u64).0));
     }
     Neighbourhood { stars, to_system, radius_kpc, galaxy: galaxy.clone() }
 }
