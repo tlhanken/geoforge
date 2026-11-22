@@ -125,6 +125,16 @@ pub const RIDGE_HALF_WIDTH_ULTRASLOW_KM: f64 = 150.0;
 pub const FRACTURE_ZONE_HALF_WIDTH_KM: f64 = 100.0;
 
 pub const SHIELD_AREA_FRACTION: f64 = 0.25;
+/// A continent this large is welded from two cratons, or three past the second size, along
+/// its long axis (Eurasia's East European and Siberian cratons; Africa's West African, Congo
+/// and Kalahari).
+pub const TWO_CRATON_MIN_AREA_KM2: f64 = 20_000_000.0;
+pub const THREE_CRATON_MIN_AREA_KM2: f64 = 40_000_000.0;
+/// The old belt where two cratons were welded (the Urals, the Trans-Hudson): its width, how
+/// far it wanders off the line midway between them, and its age.
+pub const SUTURE_WIDTH_KM: (f64, f64) = (150.0, 300.0);
+pub const SUTURE_WANDER_KM: f64 = 250.0;
+pub const SUTURE_AGE_MA: (f64, f64) = (300.0, 1900.0);
 pub const INTRACRATONIC_BASIN_MIN_AREA_KM2: f64 = 3_000_000.0;
 pub const INTRACRATONIC_BASIN_PROBABILITY: f64 = 0.15;
 /// v1 used 8 px (~180 km at 1800 px); Earth's intracratonic basins (Michigan, Williston,

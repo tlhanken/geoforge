@@ -162,8 +162,10 @@ struct B<'a> {
     rng: StdRng,
     /// Smooth noise for varying belt widths along their length.
     width_noise: crate::noise::TerrainNoise,
-    /// Each plate's craton: its centre and cells.
+    /// Each plate's cratons: their middle and cells.
     cratons: BTreeMap<u32, (UnitVec3, Vec<Cell>)>,
+    /// Each plate's craton centres, in order along the continent's long axis.
+    craton_centres: BTreeMap<u32, Vec<UnitVec3>>,
 }
 
 impl B<'_> {
@@ -283,28 +285,49 @@ impl B<'_> {
                 (i.cont.clone(), i.cont_area_km2)
             };
             self.push(cont.clone(), pc::platform(cont_area), None, 500.0);
-            // Shield: a noisy spherical cap around the continental centroid.
+            // Shields: noisy spherical caps around the continental centroid, or, on a large
+            // continent, around points spread along its long axis, each keeping to its own side.
             let Some(centroid) = UnitVec3::centroid(cont.iter().map(|&c| self.grid.center(c))) else { continue };
-            let center = *cont.iter().min_by(|&&a, &&b| centroid.angle_to(self.grid.center(a)).total_cmp(&centroid.angle_to(self.grid.center(b)))).unwrap_or(&cont[0]);
-            let pc0 = self.grid.center(center);
-            let target = cont_area * pc::SHIELD_AREA_FRACTION;
+            let nearest = |p: UnitVec3| self.grid.center(*cont.iter().min_by(|&&a, &&b| p.angle_to(self.grid.center(a)).total_cmp(&p.angle_to(self.grid.center(b)))).unwrap_or(&cont[0]));
+            let n = if cont_area >= pc::THREE_CRATON_MIN_AREA_KM2 {
+                3
+            } else if cont_area >= pc::TWO_CRATON_MIN_AREA_KM2 {
+                2
+            } else {
+                1
+            };
+            let centres: Vec<UnitVec3> = if n == 1 {
+                vec![nearest(centroid)]
+            } else {
+                let far = |p: UnitVec3| cont.iter().map(|&c| self.grid.center(c)).max_by(|a, b| p.angle_to(*a).total_cmp(&p.angle_to(*b))).unwrap_or(p);
+                let (a, b) = (far(centroid), far(far(centroid)));
+                let span = a.angle_to(b);
+                (0..n).map(|j| nearest(a.travel(a.bearing_to(b), span * (0.2 + 0.6 * j as f64 / (n - 1) as f64)))).collect()
+            };
+            let target = cont_area * pc::SHIELD_AREA_FRACTION / n as f64;
             let theta = (1.0 - target / (2.0 * std::f64::consts::PI * self.r * self.r)).clamp(-1.0, 1.0).acos();
-            let shield: Vec<Cell> = cont
-                .iter()
-                .copied()
-                .filter(|&c| {
-                    let q = self.grid.center(c);
-                    let b = pc0.bearing_to(q).to_radians();
-                    let noise = (b * 3.0).sin() * 0.2 + (b * 7.0).cos() * 0.1;
-                    pc0.angle_to(q) < theta * (1.0 + noise)
-                })
-                .collect();
             let max_age = self.age.map_or(2500.0, |a| cont.iter().map(|&c| f64::from(a[c as usize])).fold(0.0, f64::max));
-            let sa = self.area(&shield);
-            let mut prov = pc::craton(sa);
-            prov.anchor = Some(pc0);
-            self.cratons.insert(k, (pc0, shield.clone()));
-            self.push(shield, prov, None, max_age);
+            let mut all = Vec::new();
+            for (j, &pc0) in centres.iter().enumerate() {
+                let shield: Vec<Cell> = cont
+                    .iter()
+                    .copied()
+                    .filter(|&c| {
+                        let q = self.grid.center(c);
+                        let b = pc0.bearing_to(q).to_radians();
+                        let noise = (b * 3.0).sin() * 0.2 + (b * 7.0).cos() * 0.1;
+                        let own = centres.iter().enumerate().all(|(o, other)| o == j || pc0.angle_to(q) <= other.angle_to(q));
+                        own && pc0.angle_to(q) < theta * (1.0 + noise)
+                    })
+                    .collect();
+                let mut prov = pc::craton(self.area(&shield));
+                prov.anchor = Some(pc0);
+                all.extend_from_slice(&shield);
+                self.push(shield, prov, None, max_age);
+            }
+            let middle = UnitVec3::centroid(centres.iter().copied()).unwrap_or(centres[0]);
+            self.cratons.insert(k, (middle, all));
+            self.craton_centres.insert(k, centres);
             // Intracratonic basin.
             if cont_area > pc::INTRACRATONIC_BASIN_MIN_AREA_KM2 && self.rng.r#gen::<f64>() < pc::INTRACRATONIC_BASIN_PROBABILITY {
                 let c0 = cont[self.rng.gen_range(0..cont.len())];
@@ -355,6 +378,7 @@ impl B<'_> {
         const BINS: usize = 72;
         let plates: Vec<(u32, f64)> = self.info.iter().filter(|(_, i)| i.cont_area_km2 >= pc::PALEO_OROGEN_MIN_AREA_KM2).map(|(&k, i)| (k, i.area_km2)).collect();
         let mut taken: std::collections::HashSet<Cell> = std::collections::HashSet::new();
+        self.sutures(&mut taken);
         for (k, area) in plates {
             let Some((centre, craton)) = self.cratons.get(&k).cloned() else { continue };
             let in_craton: std::collections::HashSet<Cell> = craton.iter().copied().collect();
@@ -430,6 +454,52 @@ impl B<'_> {
                 });
                 self.push(cells, pc::paleo_orogen(width), None, age);
             }
+        }
+    }
+
+    /// Where a continent's cratons were welded together, an old belt runs across it between
+    /// each neighbouring pair, along the line midway between them (the Urals between the East
+    /// European and Siberian cratons, the Trans-Hudson between the Superior and the Slave).
+    fn sutures(&mut self, taken: &mut std::collections::HashSet<Cell>) {
+        let pairs: Vec<(u32, UnitVec3, UnitVec3)> = self.craton_centres.iter().flat_map(|(&k, cs)| cs.windows(2).map(move |w| (k, w[0], w[1]))).collect();
+        for (k, a, b) in pairs {
+            let (owner, crust, grid) = (self.owner, self.crust, self.grid);
+            let in_craton: std::collections::HashSet<Cell> = self.cratons.get(&k).map(|(_, cs)| cs.iter().copied().collect()).unwrap_or_default();
+            let (w0, w1) = pc::SUTURE_WIDTH_KM;
+            let width = w0 + (w1 - w0) * self.rng.r#gen::<f64>();
+            let (a0, a1) = pc::SUTURE_AGE_MA;
+            let age = a0 + (a1 - a0) * self.rng.r#gen::<f64>();
+            let wander = crate::noise::TerrainNoise::new(self.rng.r#gen());
+            let swell = crate::noise::TerrainNoise::new(self.rng.r#gen());
+            let r = self.r;
+            let mut cells: Vec<Cell> = self.info[&k]
+                .cont
+                .iter()
+                .copied()
+                .filter(|&c| owner[c as usize] == k && crust[c as usize] == CrustType::Continental && !in_craton.contains(&c) && !taken.contains(&c))
+                .filter(|&c| {
+                    let q = grid.center(c);
+                    // Signed distance from the midline, and the belt's own course and width.
+                    let off = (q.angle_to(a) - q.angle_to(b)) * r / 2.0 + pc::SUTURE_WANDER_KM * wander.fbm(q, 4.0, 2);
+                    let w = width * (1.0 + 0.8 * swell.fbm(q, 6.0, 2)).clamp(0.5, 1.5);
+                    off.abs() <= w / 2.0
+                })
+                .collect();
+            cells.sort_unstable();
+            if self.area(&cells) < 50_000.0 {
+                continue;
+            }
+            taken.extend(cells.iter().copied());
+            let mid = UnitVec3::centroid(cells.iter().map(|&c| self.grid.center(c))).unwrap_or(UnitVec3::NORTH);
+            self.events.push(Event {
+                t_ma: age.round(),
+                kind: EventKind::PaleoOrogeny,
+                at: Place::Point { at: mid },
+                magnitude: width,
+                causes: vec![],
+                note: "two cratons welded together; the belt is worn down".into(),
+            });
+            self.push(cells, pc::paleo_orogen(width), None, age);
         }
     }
 
@@ -873,6 +943,7 @@ pub fn build(
         rng: StdRng::seed_from_u64(seed),
         width_noise: crate::noise::TerrainNoise::new(seed ^ 0x0B1D_7A11),
         cratons: BTreeMap::new(),
+        craton_centres: BTreeMap::new(),
     };
 
     if p.oceanic {

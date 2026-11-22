@@ -383,8 +383,12 @@ reproduce on the ETOPO-forced run or a generated Earth-like world.
   the most room toward a passive coast (an active margin's ground is its foreland); a
   large continent's second on another side, older and closer in. They wander, swell and
   pinch, vary in height along their length, thin out at their ends, and never cross a
-  craton or each other (the X across Australia is gone). Open: one craton per continent,
-  so no sutures *between* cratons (the Urals, the Trans-Hudson).
+  craton or each other (the X across Australia is gone).
+- **Sutures between cratons** — done: a continent over 20 million km² is welded from two
+  cratons along its long axis, over 40 million from three, and an old belt 150–300 km wide
+  runs across it midway between each neighbouring pair, wandering ±250 km, 300–1,900 Ma
+  old (the Urals, the Trans-Hudson). Open: a suture is always a belt; some are sag basins
+  instead (the Amazon between the Guiana and Brazilian shields).
 - **Arcs vary along strike** — partly done: cordilleras ±20% and island arcs more in
   ~900 km stretches, with volcano-free gaps and larger islands on the strongest stretches
   (peaks to 2.4 km). Open: tie the variation to slab age and dip rather than noise.
