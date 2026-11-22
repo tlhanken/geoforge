@@ -242,6 +242,14 @@ product's randomness. `seed <dir> <product>` prints it.
   else frozen and cratered. On Earth-like worlds the carbonate–silicate cycle sets CO₂
   where the world weathers as fast as Earth (Walker, Hays & Kasting 1981): dim worlds
   build up CO₂ and run a few degrees cooler, bright ones draw it down.
+- **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's
+  dynamo lasts 10 Gyr·√M with plates, 1.5 Gyr·√M under a stagnant lid, 1 Gyr·√M under an
+  episodic one (Mars's stopped ~4.1 Gyr ago); giants always have one. Surface field 30
+  µT·M^(1/3) (Jupiter 420 µT by mass, ice giants ~20 µT multipolar and tilted 40–60°); a day
+  over 200 h makes it multipolar and weaker. The star's wind (2 nPa at Earth, ∝ 1/d², stronger
+  around young stars) sets the magnetopause by pressure balance (Earth 9.5 radii) and the
+  auroral ovals (Earth 71° magnetic latitude). Derived, not stored; the hazards layer will
+  read it.
 - **Tectonics**: v1's electrostatic plate seeding (power-law charges), now with each cell
   assigned by distance ÷ charge^0.22 so a seed's charge sets its plate's size
   (`size_weighting = 0` gives v1's plates exactly); domain warp and island removal;

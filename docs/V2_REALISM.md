@@ -306,6 +306,15 @@ climate stores means, ranges and half-year rain shares, so months are sinusoids 
 That cannot show two rainy seasons (Nairobi), a short tropical dry season (Kinshasa), or a
 January colder than the mean less half the range (Beijing).
 
+### Magnetic fields
+
+`geoforge_core::magnetism`'s tests: Earth 30 µT, magnetopause 9.5 radii (observed ~10),
+auroral oval 71° (observed 65–75°); Mars's dynamo stopped ~4.1 Gyr ago, Venus, the Moon and
+Mercury have none; Jupiter 420 µT with a 40-radius magnetopause (a pure dipole; Io's plasma
+inflates the real one to 50–100); ice giants multipolar and steeply tilted. Missed: Mercury's
+weak field, Ganymede's dynamo, Saturn's weakness for its mass, and moons inside a giant's
+magnetosphere.
+
 ### Star systems
 
 `geoforge-cosmos`'s unit tests check systems drawn from the Milky Way model against the

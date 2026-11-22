@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{LayerId, ProductId};
 use geoforge_core::body::{NodeKind, Star, StellarStage};
+use geoforge_core::magnetism::MagneticField;
 use geoforge_core::{BodyContext, Seed};
 use geoforge_cosmos::{GalaxyPreset, Recipe};
 use geoforge_pipeline::{self as pipe, GenerateOptions, LayerAction, NewWorld, State, View};
@@ -355,10 +356,39 @@ fn show(w: &World) -> R<()> {
             println!("bands: jets per hemisphere: {}; equatorial wind {:+.0} m/s", p.jets, p.wind(0.0));
         }
     }
+    println!("magnetic field: {}", describe_field(&body));
     if let GridSpec::Equirect { width, height } = w.manifest.grid {
         println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
     }
     Ok(())
+}
+
+/// "30 µT dipole tilted 7°; magnetopause 9.5 radii against a 2.0 nPa wind; auroras at 71°
+/// magnetic latitude", or why there is none.
+fn describe_field(body: &BodyContext) -> String {
+    let f = MagneticField::of(body);
+    let npa = |p: f64| if p < 0.1 { format!("{p:.1e} nPa") } else { format!("{p:.1} nPa") };
+    let onto = if body.interior.has_atmosphere() { "air" } else { "surface" };
+    if !f.dynamo {
+        return match f.lifetime_gyr {
+            Some(life) => format!(
+                "none: the core dynamo ran {life:.1} Gyr and stopped {:.1} Gyr ago; the star's wind ({}) reaches the {onto}",
+                body.epoch.system_age_gyr - life,
+                npa(f.wind_npa)
+            ),
+            None => format!("none (no convecting core); the star's wind ({}) reaches the {onto}", npa(f.wind_npa)),
+        };
+    }
+    let shape = if f.dipolar { "dipole" } else { "multipolar" };
+    let mut out = format!("{:.0} µT {shape} tilted {:.0}°", f.surface_ut, f.tilt_deg);
+    if let Some(r) = f.magnetopause_radii {
+        out += &format!("; magnetopause {r:.1} radii against a {} wind", npa(f.wind_npa));
+    }
+    out += &match f.aurora_lat_deg {
+        Some(lat) => format!("; auroras at {lat:.0}° magnetic latitude"),
+        None => format!("; the wind presses the field down to the {onto}: no auroral ovals"),
+    };
+    out
 }
 
 /// "white dwarf DA8, 0.59 M☉, 6300 K, 2.1e-4 L☉, [Fe/H] −0.12 (born 1.80 M☉)".

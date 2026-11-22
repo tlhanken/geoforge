@@ -145,8 +145,9 @@ region calculator**: the chance of each hazard in a window, P = 1 − e^(−λT)
 - **Others**: river floods (monsoon, snowmelt), droughts (rain variability), wildfire
   (Mediterranean and savanna), landslides (steep, wet, seismic), blizzards, dust storms,
   fog coasts (cold upwelling), lightning (convective rain).
-- **Auroras**: ovals at 65–75° magnetic latitude; needs a magnetic field model (dynamo
-  from core size, rotation and age) — which would also matter for air loss.
+- **Auroras**: from the magnetic field model (done: `geoforge_core::magnetism`): ovals
+  where field lines reach the magnetopause (Earth 71°), around a pole tilted from the spin
+  axis; none where the dynamo has died (Mars, Venus).
 
 Artifexian's numbers (Logs 42–43), as NotebookLM gives them:
 

@@ -7,6 +7,7 @@ pub mod energy_balance;
 pub mod geom;
 pub mod grid;
 pub mod key;
+pub mod magnetism;
 pub mod product;
 pub mod radiation;
 pub mod seed;
