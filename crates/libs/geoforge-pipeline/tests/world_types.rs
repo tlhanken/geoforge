@@ -1,7 +1,7 @@
 //! Every kind of body runs end to end: each layer is filled by the implementation its regime
 //! calls for, or skipped with a reason, and the same seed gives the same world.
 
-use geoforge_core::grid::GridSpec;
+use geoforge_core::grid::{Grid, GridSpec};
 use geoforge_core::product::{LayerId, ProductId};
 use geoforge_core::{Archetype, Key, Seed};
 use geoforge_pipeline::{self as pipe, GenerateOptions, Implementation as I, NewWorld};
@@ -111,4 +111,43 @@ fn giant_deposits_follow_the_ground() {
         assert!(geoforge_analysis::resources::prospectivity(&g, kind)[c] > 0.0, "{} ({}) where none forms", d.kind, d.setting);
         assert!(d.ore_mt > 0.0 && d.depth_m >= 0.0);
     }
+}
+
+/// Flat slabs lift block ranges of continental basement far inland of a convergent margin,
+/// never at the coast or on ocean floor, and some Earth-like seeds have them.
+#[test]
+fn flat_slabs_lift_block_ranges_inland() {
+    use geoforge_core::surface::{BoundaryKind, CrustType, GeologicProvince};
+    let mut found = 0;
+    for seed in 1..=6 {
+        let dir = std::env::temp_dir().join(format!("geoforge-flat-slab-{seed}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let earth = Archetype::Earth.context(Key(seed), "Earth");
+        let mut w = pipe::create_world(
+            &dir,
+            &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(seed), grid: GridSpec::Equirect { width: 256, height: 128 }, body: Some(earth), system: None, focus: None },
+        )
+        .unwrap();
+        let (p, _) = pipe::generate(&mut w, &GenerateOptions { until: Some(LayerId::Geology), ..GenerateOptions::default() }, |_| {}).unwrap();
+        let grid = w.manifest.grid.build().unwrap();
+        let segments = geoforge_surface::tectonics::boundaries::analyze(&grid, p.plates().unwrap(), 6371.0, &geoforge_surface::tectonics::TectonicsParams::default().boundaries);
+        let (provinces, crust) = (p.provinces().unwrap(), p.crust_type().unwrap());
+        for (key, cells) in provinces.cells_by_owner() {
+            let prov = provinces.table.get(key).unwrap();
+            if prov.kind != GeologicProvince::BasementUplift {
+                continue;
+            }
+            found += 1;
+            let seg = &segments[prov.boundary.expect("built from a margin")];
+            assert_eq!(seg.kind, BoundaryKind::Convergent);
+            let margin: Vec<_> = seg.cells.iter().map(|&c| grid.center(c)).collect();
+            for c in cells {
+                assert_eq!(*crust.get(c), CrustType::Continental, "seed {seed}");
+                let km = margin.iter().map(|m| m.angle_to(grid.center(c)) * 6371.0).fold(f64::INFINITY, f64::min);
+                assert!(km > 300.0, "seed {seed}: an uplift {km:.0} km from its margin");
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    assert!(found > 0, "no flat-slab uplifts on six Earth-like seeds");
 }

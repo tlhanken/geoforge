@@ -201,6 +201,9 @@ pub enum EventKind {
     LargeIgneousProvince,
     HotspotTrack,
     TransformInitiation,
+    /// A buoyant ridge or plateau flattens the slab under a continent, lifting block ranges
+    /// far inland.
+    FlatSlab,
     /// A hemispheric split of the crust into highlands and lowlands.
     CrustalDichotomy,
     /// The planet's surface renewed at once (Venus).

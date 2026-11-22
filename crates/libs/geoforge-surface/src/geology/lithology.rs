@@ -159,6 +159,8 @@ impl Earth {
             (Some(G::OrogenicPlateau), true) => &[(L::ClasticSedimentary, 0.30), (L::Metamorphic, 0.24), (L::Granitoid, 0.20), (L::Carbonate, 0.14), (L::ArcVolcanic, 0.12)],
             (Some(G::ForelandBasin), true) => &[(L::ClasticSedimentary, 0.78), (L::Carbonate, 0.12), (L::Evaporite, 0.10)],
             (Some(G::PaleoOrogen), true) => &[(L::Metamorphic, 0.42), (L::Granitoid, 0.25), (L::ClasticSedimentary, 0.27), (L::Ophiolite, 0.06)],
+            // Old basement thrust up through its sedimentary cover, which fills the basins between.
+            (Some(G::BasementUplift), true) => &[(L::CratonicBasement, 0.30), (L::Granitoid, 0.20), (L::Metamorphic, 0.15), (L::ClasticSedimentary, 0.30), (L::Carbonate, 0.05)],
             (Some(G::VolcanicArc), true) => &[(L::ArcVolcanic, 0.58), (L::Granitoid, 0.30), (L::ClasticSedimentary, 0.12)],
             (Some(G::VolcanicArc), false) => &[(L::ArcVolcanic, 0.85), (L::Granitoid, 0.10), (L::PelagicSediment, 0.05)],
             (Some(G::AccretionaryWedge), _) => &[(L::AccretionaryMelange, 0.70), (L::Ophiolite, 0.15), (L::ClasticSedimentary, 0.15)],

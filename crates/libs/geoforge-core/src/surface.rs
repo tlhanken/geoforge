@@ -123,6 +123,7 @@ category!(GeologicProvince {
     // Continental collisions (numbered after the rigid-lid kinds, which keep theirs).
     OrogenicPlateau = 28, "Orogenic Plateau", [205, 133, 63],
     ForelandBasin = 29, "Foreland Basin", [189, 183, 107],
+    BasementUplift = 30, "Basement Uplift", [160, 82, 45],
 });
 
 /// A geologic province: one painted region of the provinces partition.

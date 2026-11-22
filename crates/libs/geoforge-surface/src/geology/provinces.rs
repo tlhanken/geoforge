@@ -277,9 +277,32 @@ pub fn continental_hotspot_track(length_km: f64) -> Province {
     p(G::ContinentalHotspotTrack, 0.4, 0.8, length_km, 0.8, 0.0)
 }
 #[must_use]
+pub fn basement_uplift(rate: f64, width_km: f64) -> Province {
+    p(G::BasementUplift, 0.7, 0.8, width_km, norm(rate), rate)
+}
+
 pub fn paleo_orogen(width_km: f64) -> Province {
     p(G::PaleoOrogen, 0.6, 0.6, width_km, 0.3, 0.0)
 }
+
+// Flat slabs: a buoyant ridge or plateau entering a trench under a continent lifts the slab
+// flat beneath it, and the basement breaks into block ranges far inland (the Sierras
+// Pampeanas today, the Laramide Rockies 80–50 Ma).
+/// How far out from the trench a ridge or plateau on the down-going plate counts as arriving, km.
+pub const FLAT_SLAB_ARRIVAL_KM: f64 = 400.0;
+/// Half the along-trench length of a flat slab, km (the Pampean flat slab is ~600 km long).
+pub const FLAT_SLAB_HALF_LENGTH_KM: f64 = 350.0;
+/// Inland band of block uplifts over a flat slab, km from the trench.
+pub const FLAT_SLAB_NEAR_KM: f64 = 450.0;
+pub const FLAT_SLAB_FAR_KM: f64 = 1000.0;
+/// A long continental margin with no ridge arriving now may carry a past flat slab's
+/// uplifts, farther inland (the Rockies stand 1000–1600 km from the old trench).
+pub const FOSSIL_FLAT_SLAB_MIN_MARGIN_KM: f64 = 2500.0;
+pub const FOSSIL_FLAT_SLAB_PROBABILITY: f64 = 0.5;
+pub const FOSSIL_FLAT_SLAB_HALF_LENGTH_KM: (f64, f64) = (400.0, 800.0);
+pub const FOSSIL_FLAT_SLAB_NEAR_KM: f64 = 700.0;
+pub const FOSSIL_FLAT_SLAB_FAR_KM: f64 = 1500.0;
+pub const FOSSIL_FLAT_SLAB_AGE_MA: (f64, f64) = (50.0, 80.0);
 
 #[cfg(test)]
 mod tests {

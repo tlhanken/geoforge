@@ -33,6 +33,12 @@ use std::collections::{BTreeMap, HashMap};
 
 /// Island arcs: the submarine ridge, the tallest volcanoes on it (m), and their spacing (km).
 const ARC_RIDGE_M: f64 = -1800.0;
+/// Block uplifts over a flat slab: the regional rise, the ranges' height above it, the
+/// ranges' spacing and the taper at the province's edge.
+const BASEMENT_RISE_M: f64 = 1200.0;
+const BASEMENT_RANGE_M: f64 = 2200.0;
+const BASEMENT_BLOCK_KM: f64 = 180.0;
+const BASEMENT_EDGE_KM: f64 = 120.0;
 /// Peaks of an island arc's strongest stretches: the Aleutians' reach 2.9 km, the Lesser
 /// Antilles' 1.5 km, the Marianas' 1 km.
 const ARC_PEAK_M: f64 = 2400.0;
@@ -109,7 +115,7 @@ pub struct Elevation;
 impl Generator for Elevation {
     type Params = ElevationParams;
     const NAME: &'static str = "elevation";
-    const VERSION: u32 = 8;
+    const VERSION: u32 = 9;
     const LAYER: LayerId = LayerId::Elevation;
 
     fn needs() -> &'static [ProductId] {
@@ -204,7 +210,7 @@ impl Generator for Elevation {
         let mut interior_km: HashMap<Cell, f64> = HashMap::new();
         for (key, cells) in &by_owner {
             let Some(prov) = provinces.table.get(*key) else { continue };
-            if prov.kind != G::PaleoOrogen {
+            if !matches!(prov.kind, G::PaleoOrogen | G::BasementUplift) {
                 continue;
             }
             let set: std::collections::HashSet<Cell> = cells.iter().copied().collect();
@@ -353,6 +359,14 @@ impl Generator for Elevation {
                         // the Smokies and 600 m in Pennsylvania's ridges).
                         let along = (0.6 + 1.6 * plateau_noise.fbm(grid.center(c), 9.0, 2)).clamp(0.25, 1.4);
                         z = base_cont + (250.0 + 1400.0 * (-prov.age_ma / 450.0).exp()) * s * along;
+                    }
+                    G::BasementUplift => {
+                        // Block ranges of old basement ~100–200 km long between broad basins
+                        // (the Wind River and Bighorn ranges), on a gentle regional rise.
+                        let inside = interior_km.get(&c).copied().unwrap_or(0.0);
+                        let s = smoothstep(0.0, BASEMENT_EDGE_KM.max(spacing_km), inside);
+                        let blocks = smoothstep(0.45, 0.8, plateau_noise.ridged(grid.center(c), r / BASEMENT_BLOCK_KM, 2));
+                        z = base_cont + relief * (BASEMENT_RISE_M + BASEMENT_RANGE_M * blocks) * s;
                     }
                     G::AbyssalPlain | G::OceanicFractureZone | G::HotspotTrack => {}
                     // Rigid-lid kinds: drawn by `lid::LidElevation`.

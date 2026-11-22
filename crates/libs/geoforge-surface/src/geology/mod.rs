@@ -66,7 +66,7 @@ pub struct Geology;
 impl Generator for Geology {
     type Params = GeologyParams;
     const NAME: &'static str = "geology";
-    const VERSION: u32 = 6;
+    const VERSION: u32 = 7;
     const LAYER: LayerId = LayerId::Geology;
 
     fn needs() -> &'static [ProductId] {
@@ -602,6 +602,62 @@ impl B<'_> {
         self.push(arc, pc::volcanic_arc(rate, s.length_km), Some(i), age);
     }
 
+    /// Block uplifts far inland of an Andean margin where the slab runs flat. Today's flat
+    /// slabs lie where a ridge or plateau on the down-going plate reaches the trench (the
+    /// Juan Fernández Ridge under the Sierras Pampeanas); a long margin with none arriving now
+    /// may carry an older one's uplifts farther inland, standing for a history the model
+    /// does not run (the Laramide Rockies).
+    fn flat_slabs(&mut self, segments: &[BoundarySegment]) {
+        let buoyant: Vec<Cell> =
+            self.regions.iter().filter(|(_, p)| matches!(p.kind, GeologicProvince::OceanicHotspotTrack | GeologicProvince::OceanicPlateau)).flat_map(|(cells, _)| cells.iter().copied()).collect();
+        for (i, s) in segments.iter().enumerate() {
+            if s.kind != BoundaryKind::Convergent {
+                continue;
+            }
+            let Some((sub, over)) = self.subduction(s) else { continue };
+            if !over.continental {
+                continue;
+            }
+            let (owner, crust) = (self.owner, self.crust);
+            let trench: Vec<Cell> = s.cells.iter().copied().filter(|&c| owner[c as usize] == sub.plate).collect();
+            let front: Vec<Cell> = s.cells.iter().copied().filter(|&c| owner[c as usize] == over.plate).collect();
+            if trench.is_empty() || front.is_empty() {
+                continue;
+            }
+            let arriving = self.reach(&buoyant.iter().copied().filter(|&c| owner[c as usize] == sub.plate).collect::<Vec<_>>(), pc::FLAT_SLAB_ARRIVAL_KM, |c| owner[c as usize] == sub.plate);
+            let centres: Vec<Cell> = trench.iter().copied().filter(|c| arriving.contains_key(c)).collect();
+            let (centres, half_length, near, far, age) = if !centres.is_empty() {
+                (centres, pc::FLAT_SLAB_HALF_LENGTH_KM, pc::FLAT_SLAB_NEAR_KM, pc::FLAT_SLAB_FAR_KM, 0.0)
+            } else if s.length_km >= pc::FOSSIL_FLAT_SLAB_MIN_MARGIN_KM && self.rng.r#gen::<f64>() < pc::FOSSIL_FLAT_SLAB_PROBABILITY {
+                let centre = trench[self.rng.gen_range(0..trench.len())];
+                let (h0, h1) = pc::FOSSIL_FLAT_SLAB_HALF_LENGTH_KM;
+                let (a0, a1) = pc::FOSSIL_FLAT_SLAB_AGE_MA;
+                (vec![centre], h0 + (h1 - h0) * self.rng.r#gen::<f64>(), pc::FOSSIL_FLAT_SLAB_NEAR_KM, pc::FOSSIL_FLAT_SLAB_FAR_KM, a0 + (a1 - a0) * self.rng.r#gen::<f64>())
+            } else {
+                continue;
+            };
+            let near_trench = self.nearest(&front, far, |c| owner[c as usize] == over.plate);
+            let cells: Vec<Cell> = near_trench
+                .iter()
+                .filter(|&(&c, &(d, src))| crust[c as usize] == CrustType::Continental && d > near && centres.iter().any(|&k| self.km(src, k) <= half_length))
+                .map(|(&c, _)| c)
+                .collect();
+            if cells.is_empty() {
+                continue;
+            }
+            let at = self.grid.center(centres[centres.len() / 2]);
+            self.events.push(Event {
+                t_ma: age,
+                kind: EventKind::FlatSlab,
+                at: Place::Point { at },
+                magnitude: s.rate_cm_yr,
+                causes: vec![],
+                note: if age > 0.0 { "a past flat slab lifted these block ranges".into() } else { "a ridge or plateau arriving at the trench flattens the slab".into() },
+            });
+            self.push(cells, pc::basement_uplift(s.rate_cm_yr, far - near), Some(i), age);
+        }
+    }
+
     fn oceanic_overlays(&mut self, segments: &[BoundarySegment]) {
         for (i, s) in segments.iter().enumerate() {
             let (a, b) = self.sides(s);
@@ -844,6 +900,9 @@ pub fn build(
     b.large_igneous_provinces(p.lip_probability);
     if p.oceanic {
         b.hotspot_tracks();
+    }
+    if p.arc_systems {
+        b.flat_slabs(segments);
     }
 
     // Paint in order: later regions overwrite earlier ones.

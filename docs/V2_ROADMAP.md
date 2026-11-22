@@ -393,9 +393,14 @@ reproduce on the ETOPO-forced run or a generated Earth-like world.
   (the Amazon) or on fast plates (Australia, India) stay low. On Earth's real plates land
   height now correlates 0.57 with ETOPO1 (0.27 before) and 39% of land is above 500 m
   (ETOPO1 39%, before 13%).
-- **Flat slabs lift land far inland.** A flat-slab stretch of an Andean margin gets a broad
-  basement uplift 500–1,500 km behind the trench, with no volcanoes. [The Rockies' Laramide
-  uplift; the Sierras Pampeanas today.]
+- **Flat slabs lift land far inland** — done. Where an oceanic hotspot track or plateau
+  reaches an ocean–continent trench, block ranges of old basement rise 450–1,000 km
+  inland along ~700 km of the margin (the Sierras Pampeanas over the Juan Fernández
+  Ridge). A margin over 2,500 km long with no ridge arriving has an even chance of a past
+  flat slab's ranges 700–1,500 km inland, 50–80 Ma old: the mock history for the Rockies.
+  The ranges are ~180 km blocks up to ~3.4 km on a 1.2 km rise; their rocks are basement
+  cores with sedimentary basins between, and they count as orogens for ore. Open: no
+  volcanic gap over the flat stretch of the arc.
 - **Plume domes** — done for generated worlds: every continental hotspot and flood basalt
   under 45 Ma sits on a 1.5 km dome ~650 km across; continental tracks run to 800 km.
   Earth's real plumes (Afar, Kenya) are not inputs to the real-plates run.

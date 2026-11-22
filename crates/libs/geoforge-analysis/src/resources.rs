@@ -110,7 +110,7 @@ fn land(g: &Ground, c: usize) -> bool {
     !g.sea[c]
 }
 
-const OROGENS: &[P] = &[P::CollisionOrogen, P::PaleoOrogen, P::OrogenicPlateau];
+const OROGENS: &[P] = &[P::CollisionOrogen, P::PaleoOrogen, P::OrogenicPlateau, P::BasementUplift];
 const BASINS: &[P] = &[P::Platform, P::IntracratonicBasin, P::ForelandBasin];
 
 /// Supergene enrichment: weathering concentrates copper where water percolates seasonally and
