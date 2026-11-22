@@ -292,6 +292,23 @@ import at any 2:1 size; optional polar cap views (azimuthal equidistant, polewar
 georeferenced) merge back where painted; a Blender round-trip guide (`V2_PIPELINE.md`,
 Editing a layer). Open: caps for derived views; a cap edge other than 60°.
 
+## 8a. Weather and hazards as one — next
+
+The daily weather and the hazard rates are separate models. Make the storm field the
+source of `place`'s tropical cyclone rates (counted from tracks rather than the hazard
+layer's own genesis) and draw thunderstorms, lightning, hail and tornadoes in the daily
+weather from the hazard rates, concentrated where storms make them: warm sectors and cold
+fronts over warm plains, tropical cyclones' outer bands. Lows should merge or repel rather
+than pile up.
+
+## 8c. Names as their own crate — next
+
+`geoforge_cosmos::name` makes every name from one fixed syllable set (16 onsets, 8
+nuclei, 2–3 syllables). Move naming into a standalone crate (`geoforge-names`, no other
+geoforge dependency) with phonologies — consonant and vowel inventories, syllable shapes,
+stress, spelling rules, as in Artifexian's conlang videos — seeded per world, culture or
+region, so stars, planets, storms and places each get a consistent language.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often

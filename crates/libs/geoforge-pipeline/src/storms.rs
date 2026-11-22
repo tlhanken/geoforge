@@ -18,6 +18,10 @@
 //! - **Tropical cyclones** form over sea above 26.5 °C at 5–25° (Earth's rate per area of
 //!   such sea: ~85 a year), drift west and poleward with the trades, recurve into the
 //!   westerlies, deepen to 15–70 hPa over ~250 km, and weaken fast over land or cool sea.
+//! - **Mountains** steer storms: a low heading for high ground turns along it, choosing the
+//!   way round that costs least (a 90° turn weighs as much as 800 m of rock ahead), and fills
+//!   while over ground above 1500 m; lows form more readily in the lee of ranges, as the
+//!   Colorado and Genoa lows do (genesis up to doubled 400 km downwind of 2 km of relief).
 //! - **Winds** are gradient winds about each low (Coriolis, pressure gradient and
 //!   curvature), cut by 30% for surface friction and turned 20° inward.
 //!
@@ -127,6 +131,8 @@ pub struct Atmosphere {
     mean_c: Vec<f64>,
     range_c: Vec<f64>,
     land: Vec<bool>,
+    /// Highest ground in each coarse cell, m (0 at sea).
+    height_m: Vec<f64>,
     wind_jan: Vec<[f64; 2]>,
     wind_jul: Vec<[f64; 2]>,
     pub radius_km: f64,
@@ -137,9 +143,19 @@ pub struct Atmosphere {
     seed: Seed,
 }
 
-/// A place's climate as storms see it: annual mean and range (°C), land or sea, and the
-/// January and July winds (east, north; m/s).
-pub type Local = (f64, f64, bool, [f64; 2], [f64; 2]);
+/// A place's climate as storms see it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Local {
+    /// Annual mean and warmest-to-coldest range, °C.
+    pub mean_c: f64,
+    pub range_c: f64,
+    pub land: bool,
+    /// The highest ground around, m (0 at sea).
+    pub height_m: f64,
+    /// January and July winds (east, north), m/s.
+    pub wind_jan: [f64; 2],
+    pub wind_jul: [f64; 2],
+}
 
 impl Atmosphere {
     /// From a climate given as a function of (lat, lon); `season(t)` is the northern season
@@ -152,6 +168,7 @@ impl Atmosphere {
             mean_c: Vec::with_capacity(rows * cols),
             range_c: Vec::with_capacity(rows * cols),
             land: Vec::with_capacity(rows * cols),
+            height_m: Vec::with_capacity(rows * cols),
             wind_jan: Vec::with_capacity(rows * cols),
             wind_jul: Vec::with_capacity(rows * cols),
             radius_km,
@@ -162,12 +179,13 @@ impl Atmosphere {
         };
         for i in 0..rows * cols {
             let (lat, lon) = a.centre(i);
-            let (t, r, land, jan, jul) = climate(lat, lon);
-            a.mean_c.push(t);
-            a.range_c.push(r);
-            a.land.push(land);
-            a.wind_jan.push(jan);
-            a.wind_jul.push(jul);
+            let l = climate(lat, lon);
+            a.mean_c.push(l.mean_c);
+            a.range_c.push(l.range_c);
+            a.land.push(l.land);
+            a.height_m.push(l.height_m.max(0.0));
+            a.wind_jan.push(l.wind_jan);
+            a.wind_jul.push(l.wind_jul);
         }
         a
     }
@@ -180,8 +198,19 @@ impl Atmosphere {
         let sea_world = body.interior.has_surface_liquid_water();
         let wind = |w: Option<&Vec<[f32; 2]>>, c: usize| w.map_or([0.0; 2], |v| v[c].map(f64::from));
         Some(Self::from_fn(body.exterior.radius_km, body.exterior.rotation_h, year, season, seed, |lat, lon| {
-            let c = grid.locate(UnitVec3::from_lat_lon(lat, lon)) as usize;
-            (f64::from(t[c]), f64::from(r[c]), !sea_world || e[c] >= 0.0, wind(jan, c), wind(jul, c))
+            let at = |la: f64, lo: f64| grid.locate(UnitVec3::from_lat_lon(la, lo)) as usize;
+            let c = at(lat, lon);
+            // The barrier a storm meets: the highest of a 4×4 sampling of the cell.
+            let offsets = [-0.375, -0.125, 0.125, 0.375].map(|f| f * COARSE_DEG);
+            let height_m = offsets.iter().flat_map(|&a| offsets.iter().map(move |&b| (a, b))).map(|(a, b)| f64::from(e[at((lat + a).clamp(-90.0, 90.0), lon + b)])).fold(0.0, f64::max);
+            Local {
+                mean_c: f64::from(t[c]),
+                range_c: f64::from(r[c]),
+                land: !sea_world || e[c] >= 0.0,
+                height_m: if sea_world { height_m } else { 0.0 },
+                wind_jan: wind(jan, c),
+                wind_jul: wind(jul, c),
+            }
         }))
     }
 
@@ -211,6 +240,43 @@ impl Atmosphere {
         let i = self.cell(lat, lon);
         let mix = 0.5 * (1.0 + s);
         [0, 1].map(|k| self.wind_jan[i][k] * (1.0 - mix) + self.wind_jul[i][k] * mix)
+    }
+
+    /// How much more readily lows form at cell `i` for the mountains upwind: up to double,
+    /// 400 km downwind of 2 km of relief.
+    fn lee(&self, i: usize, season: f64) -> f64 {
+        let (lat, lon) = self.centre(i);
+        let w = self.wind(lat, lon, season);
+        let speed = w[0].hypot(w[1]);
+        if speed < 0.5 {
+            return 1.0;
+        }
+        let (up_lat, up_lon) = destination(lat, lon, (-w[0]).atan2(-w[1]).to_degrees(), 400.0, self.radius_km);
+        let relief = (self.height(up_lat, up_lon) - self.height(lat, lon)).max(0.0);
+        1.0 + (relief / 2000.0).min(1.0)
+    }
+
+    fn height(&self, lat: f64, lon: f64) -> f64 {
+        self.height_m[self.cell(lat, lon)]
+    }
+
+    /// Turn a velocity away from high ground ahead: among headings up to 90° either side,
+    /// the one with the least rock on the next 600 km, a 90° turn costing as much as 800 m.
+    fn steer(&self, lat: f64, lon: f64, v: [f64; 2]) -> [f64; 2] {
+        let speed = v[0].hypot(v[1]);
+        if speed < 0.1 {
+            return v;
+        }
+        let heading = v[0].atan2(v[1]).to_degrees();
+        let barrier = |dev: f64| {
+            let h = heading + dev;
+            let (a, b) = (destination(lat, lon, h, 300.0, self.radius_km), destination(lat, lon, h, 600.0, self.radius_km));
+            self.height(a.0, a.1).max(self.height(b.0, b.1)) / 1000.0 + dev.abs() / 90.0 * 0.8
+        };
+        let dev = [0.0, -30.0, 30.0, -60.0, 60.0, -90.0, 90.0].into_iter().min_by(|a, b| barrier(*a).total_cmp(&barrier(*b))).unwrap_or(0.0);
+        let (s, c) = (heading + dev).to_radians().sin_cos();
+        let slow = 1.0 - 0.3 * dev.abs() / 90.0;
+        [speed * slow * s, speed * slow * c]
     }
 
     /// Storms alive at any time from `from_day` to `to_day`.
@@ -247,7 +313,7 @@ impl Atmosphere {
                 let lat = self.centre(i).0;
                 (lat > 0.0) == north && (25.0..=70.0).contains(&lat.abs())
             };
-            let weights: Vec<f64> = (0..n_cells).map(|i| if in_band(i) { (gradient(i) - 2.0).max(0.0) * if self.land[i] { 1.0 } else { 1.5 } * area(i) } else { 0.0 }).collect();
+            let weights: Vec<f64> = (0..n_cells).map(|i| if in_band(i) { (gradient(i) - 2.0).max(0.0) * if self.land[i] { 1.0 } else { 1.5 } * self.lee(i, season) * area(i) } else { 0.0 }).collect();
             let band: f64 = (0..n_cells).filter(|&i| in_band(i)).map(area).sum();
             let mean_gradient = (0..n_cells).filter(|&i| in_band(i)).map(|i| gradient(i) * area(i)).sum::<f64>() / band.max(1.0);
             let rate = 2.5 * size * rotation * (mean_gradient / 5.0).clamp(0.0, 3.0);
@@ -310,6 +376,7 @@ impl Atmosphere {
                 StormKind::TropicalCyclone if lat.abs() > 28.0 => [1.2 * w[0] + 4.0, 1.2 * w[1] + 2.5 * pole],
                 StormKind::TropicalCyclone => [0.8 * w[0], 0.8 * w[1] + 2.0 * pole],
             };
+            let v = self.steer(lat, lon, v);
             let step_km = STEP_DAYS * 86.4;
             lat = (lat + (v[1] * step_km / self.radius_km).to_degrees()).clamp(-85.0, 85.0);
             lon = wrap(lon + (v[0] * step_km / (self.radius_km * lat.to_radians().cos().max(0.1))).to_degrees());
@@ -318,7 +385,7 @@ impl Atmosphere {
             let c = self.cell(lat, lon);
             let starving = match kind {
                 StormKind::TropicalCyclone => self.land[c] || self.temperature(c, season) < 25.0,
-                StormKind::Low => lat.abs() < 25.0,
+                StormKind::Low => lat.abs() < 25.0 || self.height_m[c] > 1500.0,
             };
             if starving {
                 weakening *= 0.5f64.powf(STEP_DAYS / 0.75);
@@ -424,6 +491,14 @@ fn segment_distance(x: f64, y: f64, bearing: f64, len: f64) -> f64 {
     (x - along * s).hypot(y - along * c)
 }
 
+/// The point `dist` km from (lat, lon) along `bearing` (degrees clockwise from north).
+fn destination(lat: f64, lon: f64, bearing: f64, dist: f64, radius_km: f64) -> (f64, f64) {
+    let (p1, l1, d, b) = (lat.to_radians(), lon.to_radians(), dist / radius_km, bearing.to_radians());
+    let p2 = (p1.sin() * d.cos() + p1.cos() * d.sin() * b.cos()).clamp(-1.0, 1.0).asin();
+    let l2 = l1 + (b.sin() * d.sin() * p1.cos()).atan2(d.cos() - p1.sin() * p2.sin());
+    (p2.to_degrees(), wrap(l2.to_degrees()))
+}
+
 fn great_circle_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64, radius_km: f64) -> f64 {
     UnitVec3::from_lat_lon(lat1, lon1).angle_to(UnitVec3::from_lat_lon(lat2, lon2)) * radius_km
 }
@@ -476,8 +551,33 @@ pub(crate) mod tests {
             } else {
                 [-3.0, 0.0]
             };
-            (30.0 - 0.0055 * a * a, 2.0 + a * 0.4, (0.0..40.0).contains(&lon) && a < 60.0, wind, wind)
+            Local { mean_c: 30.0 - 0.0055 * a * a, range_c: 2.0 + a * 0.4, land: (0.0..40.0).contains(&lon) && a < 60.0, height_m: 0.0, wind_jan: wind, wind_jul: wind }
         })
+    }
+
+    /// The same with a 3000 m north–south range at 0–6°E from 35° to 65°N.
+    fn with_range(seed: u64) -> Atmosphere {
+        let base = earthlike(seed);
+        let season = Box::new(|t: f64| (std::f64::consts::TAU * t / 365.25).sin());
+        Atmosphere::from_fn(6371.0, 24.0, 365.25, season, Seed(seed), |lat, lon| {
+            let i = base.cell(lat, lon);
+            let high = (0.0..6.0).contains(&lon) && (35.0..65.0).contains(&lat);
+            Local { mean_c: base.mean_c[i], range_c: base.range_c[i], land: base.land[i] || high, height_m: if high { 3000.0 } else { 0.0 }, wind_jan: base.wind_jan[i], wind_jul: base.wind_jul[i] }
+        })
+    }
+
+    /// A range turns lows aside: far fewer cross it still deep, and more form in its lee.
+    #[test]
+    fn mountains_steer_storms() {
+        let crossing = |atm: &Atmosphere| {
+            let storms = atm.storms(0.0, 365.0);
+            let crossed = storms.iter().filter(|s| s.kind == StormKind::Low && s.track.iter().any(|f| (1.0..5.0).contains(&f.lon) && (38.0..62.0).contains(&f.lat) && f.depth_hpa > 8.0)).count();
+            let lee = storms.iter().filter(|s| s.kind == StormKind::Low && (6.0..12.0).contains(&s.track[0].lon) && (35.0..65.0).contains(&s.track[0].lat)).count();
+            (crossed, lee)
+        };
+        let (flat, ridge) = (crossing(&earthlike(3)), crossing(&with_range(3)));
+        assert!(ridge.0 * 3 < flat.0, "crossing deep: {} flat, {} with the range", flat.0, ridge.0);
+        assert!(ridge.1 > flat.1, "born in the lee: {} flat, {} with the range", flat.1, ridge.1);
     }
 
     /// About 5 lows a day across both hemispheres and tens of tropical cyclones a year;

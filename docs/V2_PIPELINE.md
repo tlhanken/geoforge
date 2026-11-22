@@ -364,7 +364,9 @@ product's randomness. `seed <dir> <product>` prints it.
   10–35 hPa over 1000–1500 km and are steered east by the season's winds; each has a warm
   front, a trailing cold front and a warm sector. Tropical cyclones form over sea above
   26.5 °C at 5–25° (~85 a year per Earth's area of such sea), drift west, recurve and die
-  over land or cool sea. Gradient winds about each low, with friction and inflow. Tracks
+  over land or cool sea. Mountains steer lows along them (the cheapest way round within
+  90°), fill them above 1500 m and favour new lows in their lee. Gradient winds about each
+  low, with friction and inflow. Tracks
   are seeded by birth day, so a date's storms never depend on how they are asked for.
 - **Weather** (`geoforge_pipeline::weather`, derived): the season from the star's
   declination, lagging a month (1.5 at sea); the day's normal from the climate's rebuilt

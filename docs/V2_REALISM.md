@@ -379,11 +379,14 @@ Storms (`storms` and `weather` tests, on an Earth-like zonal climate): about 2.5
 per hemisphere drifting ~70° east over their lives (10–15 m/s), tropical cyclones starting
 westward; storm rain at places 100 km apart correlates above 0.7 and 70° of longitude
 apart below 0.3; wet days at the near pair go together while the far pair's do not; ten
-years with storms still give the climate's rain within 15% and its mean within 0.8 K.
+years with storms still give the climate's rain within 15% and its mean within 0.8 K. A
+3000 m range across the westerlies stops deep lows crossing it (67 a year cross that
+stretch without it, none with it) and adds lows in its lee (13 against 10).
 
 Gaps: storms are drawn, not simulated: no blocking highs, no lows deepening on each other
-or merging, fronts are fixed shapes (no occlusion), and highs are the season's mean
-pressure only; mountains do not steer or stop storms (only land kills tropical ones); the
+or merging (lows steered into the same gap can pile up), fronts are fixed shapes (no
+occlusion), and highs are the season's mean pressure only; real lows cross big ranges
+weakened and re-form beyond, ours turn aside or fill; the
 local part of the weather is still drawn per place; no droughts or wet years beyond the
 storms; the anomaly's spread does not change with the season.
 
