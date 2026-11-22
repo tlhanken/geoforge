@@ -43,3 +43,22 @@ reference values. They are good to about ±1 °C and ±15%.
   stay water.
 - Tectonics and provinces are still generated, so they do not match Earth. Only
   hydrology's rift lakes read them.
+
+## Layer by layer: `ab.sh`
+
+`ab.sh OUT_DIR [DATA_DIR] [OBS_DIR] [WIDTH]` runs each layer on Earth's real inputs and
+sets it beside Earth's real result, so a miss belongs to that layer alone:
+
+| World | Real inputs | Model layers compared |
+|---|---|---|
+| `plates` | PB2002 plates and Euler poles (the `known_earth_tectonics` run, 720 × 360) | geology and elevation, against ETOPO1 |
+| `chain` | ETOPO1 (`run.sh`) | winds and currents, against ERA-Interim and ERSST |
+| `air` | ETOPO1, ERA-Interim 850 hPa winds, ERSST departures (`inject_obs.py air`) | climate, against ERA-Interim 2 m temperature and GPCP |
+| `real` | all of the above plus real temperature and rain (`inject_obs.py climate`) | the Köppen classifier, rivers, biomes |
+
+It writes a `geoforge report` of each world and the A/B page, `OUT_DIR/page`
+(`ab_page.py`), whose maps are geoforge's renders of both the real and the model field. The
+extra observations come from NCAR GeoCAT's data files (raw.githubusercontent.com/NCAR/
+geocat-datafiles/main/netcdf_files/): `V22_GPCP.1979-2010.nc` and
+`T2M_ERAINT_rectilinear_grid_2D.nc`, in OBS_DIR.
+

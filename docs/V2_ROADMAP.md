@@ -407,7 +407,27 @@ close. Western boundary currents show as small patches and the cold eastern legs
 show. Strengthen and widen the eastern boundary currents and their upwelling, and add the
 equatorial SST tilt the trades set up (warm pool west, cold tongue east).
 
-**Weak climates** (causes are hypotheses until the layer-by-layer Earth A/B isolates them):
+**Weak climates**: the layer-by-layer Earth A/B (`scripts/real-earth/ab.sh`, November 2026)
+fed the climate real winds and sea temperatures, which splits the misses:
+
+- *Circulation's*: Phoenix 806 → 237 mm (real 200) and Tehran 406 → 224 mm (230) on real
+  winds, so the dry Southwest US and Iran fail upstream (winter storms reach too far
+  south). Mumbai 1,003 → 1,707 mm (2,200): the weak monsoon is mostly the winds too. The
+  cold eastern currents run at half strength (California −1.8 K vs −4.2, Benguela −2.4 vs
+  −4.4).
+- *Climate's own*: Lima stays wet on real winds and sea (1,025 → 766 mm, real 15); Yakutsk's
+  winter stays mild (range 45 vs 58 K) and its rain near 0 (240); Antarctic seasonal ranges
+  are about double; typical land rain is half of GPCP's while some coasts (London 1,949 mm
+  vs 620) are far too wet.
+- *Routing*: on GPCP rain 11 of 18 rivers land within a factor of two (7 on model rain);
+  the Congo stays blocked at its rapids (1,025 m³/s vs 41,000).
+- *Mountains from real plates*: land above 1 km 7% vs 25%; the Andes and Tibet come out,
+  the Alps do not (52 m mean vs 972), Iran too high (2,229 vs 1,351); intraplate ranges
+  absent as expected.
+- The Köppen classifier on the real climate agrees with the Köppen–Geiger map on 87% of
+  land (the model climate 58–60%), so it is not the classifier.
+
+The first guesses, before the A/B:
 
 | Miss | Likely cause | Fix to try |
 |---|---|---|
