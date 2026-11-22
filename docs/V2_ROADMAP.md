@@ -248,6 +248,9 @@ phases (`positions`), and for any date (`sky`, `weather`):
 - **weather on that day** at a place: seeded, adding back up to the climate's means,
   rain and seasons.
 
+Also done: a global storm field (lows with fronts, tropical cyclones) that the daily
+weather follows, and a weather map for any date (`weather-map`).
+
 Open: constellations (named asterisms from the brightest stars); sunrise, sunset and day
 length by place; tides by date; the Moon's nodal precession (eclipse seasons drift);
 seasonal phenomena on a date (cyclone season, monsoon onset, meteor showers); a check
@@ -288,6 +291,17 @@ equirectangular image, import it back). Done: rasters export at N times the grid
 import at any 2:1 size; optional polar cap views (azimuthal equidistant, poleward of 60°,
 georeferenced) merge back where painted; a Blender round-trip guide (`V2_PIPELINE.md`,
 Editing a layer). Open: caps for derived views; a cap edge other than 60°.
+
+## 8b. A system's local environment — next
+
+A system's site is only its distance from the galactic centre. Young systems should often
+sit in or near where they were born: an open cluster, an OB association, the nebula that
+made them, or a superbubble like the Sun's Local Bubble and Gould Belt. Draw a local
+environment from the system's age and the galaxy's star formation (cluster membership
+falling with age; nearby OB associations by the local young-star density); put its
+clusters, nebulae (emission, reflection, dark clouds) and supernova remnants into the sky
+chart and catalogue; let it raise the sky's young-star count (the Gould Belt gap) and the
+supernova risk.
 
 ## 9. Deep-time tectonics — later
 

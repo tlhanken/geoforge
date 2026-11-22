@@ -1,5 +1,6 @@
-//! Weather day by day at a place: drawn, seeded, from its climate and the season of the
-//! date, so that over the years it adds up to the climate the layers hold.
+//! Weather day by day at a place: drawn, seeded, from its climate, the season of the date
+//! and the storms passing over it ([`crate::storms`]), so that neighbours share their
+//! weather and over the years it adds up to the climate the layers hold.
 //!
 //! - **Season.** The star's declination as the ephemeris has it, as a share of its yearly
 //!   swing, lagging a month behind over land and a month and a half over sea: 1 at the
@@ -15,14 +16,19 @@
 //! - **Rain.** Wet days follow a two-state Markov chain (Richardson 1981) whose wet share
 //!   comes from the day's normal rain, r/(r + 4 mm) (0.4 for 3 mm a day; Geng et al. 1986
 //!   give 0.3–0.5 for temperate climates), with a lag-one persistence of 0.35; a wet day's
-//!   amount is exponential about r divided by that share. Below 0.5 °C it falls as snow.
-//! - **Wind.** The prevailing wind between January's and July's by the season, its speed
-//!   varying day to day as a Rayleigh distribution (Weibull k = 2) and its bearing by 40°.
+//!   amount is exponential about r divided by that share. Storms raise both where they
+//!   pass and lower them elsewhere, scaled by the place's own long-run storminess so the
+//!   year's rain is unchanged. Below 0.5 °C it falls as snow.
+//! - **Storm air.** A warm sector adds warmth and the air behind a cold front takes it away
+//!   (up to about one day-to-day spread), the rest of the spread staying local and random.
+//! - **Wind.** The prevailing wind between January's and July's by the season plus the
+//!   storms' winds, varying day to day.
 //!
 //! Draws are keyed by the day itself, and a month of spin-up runs before the window, so a
 //! date's weather does not depend on where the window starts (to within a thousandth of a
 //! degree, the anomaly's memory of the start).
 
+use crate::storms::{self, Atmosphere, Effect, StormKind};
 use crate::{PipelineError, Result};
 use geoforge_core::ephemeris::{self, Calendar, Equatorial};
 use geoforge_core::grid::Grid;
@@ -58,7 +64,14 @@ pub struct Day {
     pub wind_m_s: f64,
     /// The bearing the wind blows from, degrees.
     pub wind_from_deg: f64,
+    /// Sea-level pressure from the storms, on a 1013 hPa background.
+    pub pressure_hpa: f64,
     pub sky: &'static str,
+    /// The storm passing, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storm: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storm_kind: Option<StormKind>,
 }
 
 /// The weather at a place over a run of days.
@@ -113,30 +126,160 @@ pub fn forecast(world: &World, lat: f64, lon: f64, from_day: f64, count: usize) 
     };
     let calendar = Calendar::new(&body, &[]);
     let year = calendar.year_days;
-    let obliquity = body.exterior.obliquity_deg.to_radians().sin().abs();
-    // The star's declination as a share of its swing, northern sense; a plain sinusoid from
-    // the equinox for a world without a system.
-    let system = world.load_system()?;
-    let focus = world.manifest.focus;
-    let frame = system.as_ref().and_then(|s| Some((s, Equatorial::of(s, focus)?, ephemeris::light_source(s, focus)?)));
-    let season = move |t: f64| match &frame {
-        _ if obliquity < 0.02 => 0.0,
-        Some((s, f, star)) => f.star_declination(s, focus, *star, t).to_radians().sin() / obliquity,
-        None => (std::f64::consts::TAU * t / year).sin(),
-    };
     let step_days = calendar.solar_day_h.map_or(1.0, |h| h / 24.0);
+    let system = world.load_system()?;
+    let atm = Atmosphere::read(&p, &grid, &body, year, season_of(system.clone(), world.manifest.focus, &body, year), world.manifest.root_seed).ok_or_else(missing)?;
+    let to_day = from_day + count as f64 * step_days;
+    let passing = atm.storms(from_day - step_days * SPIN_UP as f64, to_day);
+    let place = Storminess::of(&atm, lat, lon, year);
+    let storms_at = |t: f64| storms::effect(&passing, lat, lon, t, atm.radius_km, atm.omega);
     let seed = world.manifest.root_seed.child(b"weather").child_u64(b"cell", c as u64);
-    let mut days = simulate(&climate, season, year, step_days, from_day, count, seed);
+    let mut days = simulate(&climate, season_of(system, world.manifest.focus, &body, year), year, step_days, from_day, count, seed, &storms_at, &place);
     for d in &mut days {
         (d.year, d.local_day) = calendar.date(d.day);
     }
     Ok(Forecast { lat, lon, at_sea, step_days, days })
 }
 
-/// Draw `count` steps of `step_days` from `from_day` for `climate`, with `season(t)` the
-/// northern season (−1 to 1) on Earth day `t` and `year` the year in Earth days.
+/// A storm on the weather map.
+#[derive(Debug, Clone, Serialize)]
+pub struct StormNow {
+    pub name: String,
+    pub kind: StormKind,
+    pub lat: f64,
+    pub lon: f64,
+    pub depth_hpa: f64,
+    /// Days since it formed.
+    pub age_days: f64,
+}
+
+/// Draw the weather map of day `day` (`width` wide) to `to`: the season's sea-level
+/// pressure plus the storms, isobars every 4 hPa, rain, fronts and storm centres. Returns
+/// the storms on the map.
+///
+/// # Errors
+/// If the climate is not generated, or on IO errors.
+pub fn weather_map(world: &World, day: f64, width: u32, to: &std::path::Path) -> Result<Vec<StormNow>> {
+    use rayon::prelude::*;
+    let body = world.load_body()?;
+    let grid = world.manifest.grid.build()?;
+    let p = crate::load_all(world)?;
+    let missing = || PipelineError::Invalid("the climate is not generated yet: run generate".into());
+    let year = Calendar::new(&body, &[]).year_days;
+    let system = world.load_system()?;
+    let season = season_of(system.clone(), world.manifest.focus, &body, year);
+    let atm = Atmosphere::read(&p, &grid, &body, year, season_of(system, world.manifest.focus, &body, year), world.manifest.root_seed).ok_or_else(missing)?;
+    let storms = atm.storms(day, day);
+    // The season's pressure: January's and July's blended, a month behind the star.
+    let source = crate::views::Source::new(&p, &grid, &body);
+    let pressure = |july| match crate::views::compute(crate::View::Pressure { july }, &source) {
+        Some(crate::views::Map::Quantity(q)) => Some(q.cells),
+        _ => None,
+    };
+    let (jan, jul) = (pressure(false), pressure(true));
+    let mix = 0.5 * (1.0 + season(day - year / 12.0));
+    let elevation = &p.elevation().ok_or_else(missing)?.values;
+    let sea_world = body.interior.has_surface_liquid_water();
+    let height = width / 2;
+    let pixels: Vec<([u8; 3], f32, f32)> = (0..(width * height) as usize)
+        .into_par_iter()
+        .map(|i| {
+            let (lat, lon) = (90.0 - ((i / width as usize) as f64 + 0.5) * 180.0 / f64::from(height), -180.0 + ((i % width as usize) as f64 + 0.5) * 360.0 / f64::from(width));
+            let c = grid.locate(UnitVec3::from_lat_lon(lat, lon)) as usize;
+            let e = f64::from(elevation[c]);
+            let base = if sea_world && e < 0.0 { [24, 52, 96] } else { geoforge_store::render::elevation_color(e.max(0.0)).map(|v| (f64::from(v) * 0.75) as u8) };
+            let seasonal = match (&jan, &jul) {
+                (Some(a), Some(b)) => a[c] * (1.0 - mix) + b[c] * mix,
+                _ => 1013.0,
+            };
+            let fx = storms::effect(&storms, lat, lon, day, atm.radius_km, atm.omega);
+            (base, (seasonal + fx.pressure_hpa) as f32, fx.rain as f32)
+        })
+        .collect();
+    let now: Vec<(&storms::Storm, storms::Fix)> = storms.iter().filter_map(|s| s.at(day).map(|f| (s, f))).filter(|(_, f)| f.depth_hpa > 2.0).collect();
+    let fronts: Vec<(Vec<(f64, f64)>, bool)> = now.iter().filter_map(|(s, f)| s.fronts(*f, atm.radius_km)).flat_map(|[warm, cold]| [(warm, true), (cold, false)]).collect();
+    let centres: Vec<(f64, f64, bool)> = now.iter().map(|(s, f)| (f.lat, f.lon, s.kind == StormKind::TropicalCyclone)).collect();
+    let base: Vec<[u8; 3]> = pixels.iter().map(|p| p.0).collect();
+    let pressure: Vec<f32> = pixels.iter().map(|p| p.1).collect();
+    let rain: Vec<f32> = pixels.iter().map(|p| p.2).collect();
+    geoforge_store::render::render_weather(width, &base, &pressure, &rain, &fronts, &centres).save(to).map_err(geoforge_store::StoreError::from)?;
+    Ok(now.iter().map(|(s, f)| StormNow { name: s.name.clone(), kind: s.kind, lat: f.lat, lon: f.lon, depth_hpa: f.depth_hpa, age_days: day - s.born_day }).collect())
+}
+
+/// The northern season (−1 to 1) on Earth day `t`: the star's declination as a share of its
+/// swing; a plain sinusoid from the equinox for a world without a system; 0 without tilt.
 #[must_use]
-pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_days: f64, from_day: f64, count: usize, seed: Seed) -> Vec<Day> {
+pub fn season_of(system: Option<geoforge_core::body::SolarSystem>, focus: geoforge_core::Key, body: &geoforge_core::BodyContext, year: f64) -> Box<dyn Fn(f64) -> f64> {
+    let obliquity = body.exterior.obliquity_deg.to_radians().sin().abs();
+    let frame = system.and_then(|s| {
+        let (f, star) = (Equatorial::of(&s, focus)?, ephemeris::light_source(&s, focus)?);
+        Some((s, f, star))
+    });
+    Box::new(move |t: f64| match &frame {
+        _ if obliquity < 0.02 => 0.0,
+        Some((s, f, star)) => f.star_declination(s, focus, *star, t).to_radians().sin() / obliquity,
+        None => (std::f64::consts::TAU * t / year).sin(),
+    })
+}
+
+/// How stormy a place is over a year, which scales the storms' share of its weather.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Storminess {
+    /// Wetness factors through the year, and their mean.
+    wet: Vec<f64>,
+    mean_wet: f64,
+    /// Mean warmth the storms bring.
+    warmth: f64,
+    /// Whether storms reach the place at all.
+    stormy: bool,
+}
+
+/// Wetness factor of a storm effect: the odds of rain relative to a calm day.
+fn wetness(e: &Effect) -> f64 {
+    0.15 + 4.0 * e.rain
+}
+
+impl Storminess {
+    /// No storms: weather from the place's climate alone.
+    #[must_use]
+    pub fn calm() -> Self {
+        let w = wetness(&Effect::default());
+        Self { wet: vec![w], mean_wet: w, warmth: 0.0, stormy: false }
+    }
+
+    /// The chance of a wet day for a day whose normal wet share is `share`, under wetness `g`.
+    fn chance(&self, share: f64, g: f64) -> f64 {
+        (share * g / self.mean_wet).min(0.95)
+    }
+
+    /// The factor on a wet day's amount, so that the year's rain is the normal's:
+    /// `share / E[chance · √g]`.
+    fn amount_factor(&self, share: f64) -> f64 {
+        let expected = self.wet.iter().map(|&g| self.chance(share, g) * g.sqrt()).sum::<f64>() / self.wet.len() as f64;
+        share / expected.max(1e-12)
+    }
+
+    /// The place's storminess over the first year from the present (the same for every
+    /// window asked for).
+    #[must_use]
+    pub fn of(atm: &Atmosphere, lat: f64, lon: f64, year: f64) -> Self {
+        let span = year.min(400.0);
+        let reference = atm.storms(0.0, span);
+        let n = 240;
+        let effects: Vec<Effect> = (0..n).map(|k| storms::effect(&reference, lat, lon, span * f64::from(k) / f64::from(n), atm.radius_km, atm.omega)).collect();
+        let wet: Vec<f64> = effects.iter().map(wetness).collect();
+        let mean_wet = wet.iter().sum::<f64>() / f64::from(n);
+        let warmth = effects.iter().map(|e| e.warmth).sum::<f64>() / f64::from(n);
+        Self { wet, mean_wet, warmth, stormy: effects.iter().any(|e| e.rain > 0.05 || e.warmth.abs() > 0.05) }
+    }
+}
+
+/// Draw `count` steps of `step_days` from `from_day` for `climate`, with `season(t)` the
+/// northern season (−1 to 1) on Earth day `t`, `year` the year in Earth days, `storms(t)`
+/// what the storms do here and `place` how stormy it is.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_days: f64, from_day: f64, count: usize, seed: Seed, storms: &dyn Fn(f64) -> Effect, place: &Storminess) -> Vec<Day> {
     let months = koppen::months(climate.mean_c, climate.range_c, climate.precipitation_mm, climate.warm_share);
     let lag = year / 12.0 * if climate.at_sea { 1.5 } else { 1.0 };
     let hemisphere = (climate.lat / 10.0).clamp(-1.0, 1.0);
@@ -149,6 +292,8 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
         (a.t + f * (b.t - a.t), (a.rain + f * (b.rain - a.rain)) * 12.0 / year, s)
     };
     let spread = (0.8 + 0.12 * climate.range_c).clamp(0.8, 6.0);
+    // Where storms pass they carry most of the day-to-day change.
+    let local = if place.stormy { 0.6 } else { 1.0 };
     let memory = TEMPERATURE_MEMORY.powf(step_days);
     let day_range = (9.0 + 9.0 * (-climate.precipitation_mm / 500.0).exp()) * if climate.at_sea { 0.25 } else { 1.0 } * step_days.sqrt().clamp(0.4, 3.0);
     let first = (from_day / step_days).floor() as i64;
@@ -162,24 +307,34 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
             (-2.0 * u1.ln()).sqrt() * (std::f64::consts::TAU * u2).cos()
         };
         let (normal_c, rain_mm_day, s) = normal(t);
-        anomaly = memory * anomaly + spread * (1.0 - memory * memory).sqrt() * gauss(b"temperature");
+        let e = storms(t);
+        anomaly = memory * anomaly + local * spread * (1.0 - memory * memory).sqrt() * gauss(b"temperature");
         let rain = rain_mm_day * step_days;
         let share = rain / (rain + HALF_WET_MM * step_days.max(1.0));
-        let p_wet = if wet { share + RAIN_PERSISTENCE * (1.0 - share) } else { share * (1.0 - RAIN_PERSISTENCE) };
+        // Storms shift the odds and the amounts, keeping the long-run mean.
+        let g = wetness(&e);
+        let share_now = place.chance(share, g);
+        // Storms carry their own persistence; local showers keep a little.
+        let persistence = if place.stormy { 0.15 } else { RAIN_PERSISTENCE };
+        let p_wet = if wet { share_now + persistence * (1.0 - share_now) } else { share_now * (1.0 - persistence) };
         wet = draw(b"wet") < p_wet;
-        let amount = if wet { -(rain / share.max(1e-9)) * draw(b"amount").max(1e-12).ln() } else { 0.0 };
+        let mean_amount = rain / share.max(1e-9) * g.sqrt() * place.amount_factor(share);
+        let amount = if wet { -mean_amount * draw(b"amount").max(1e-12).ln() } else { 0.0 };
         if n < first {
             continue;
         }
-        let mean_c = normal_c + anomaly;
+        let mean_c = normal_c + anomaly + spread * (e.warmth - place.warmth);
         let half = 0.5 * day_range * if wet { 0.7 } else { 1.0 };
         let mix = 0.5 * (1.0 + s * hemisphere.signum());
-        let prevailing = [0, 1].map(|k| climate.wind_jan[k] * (1.0 - mix) + climate.wind_jul[k] * mix);
+        let blowing = [0, 1].map(|k| climate.wind_jan[k] * (1.0 - mix) + climate.wind_jul[k] * mix + e.wind[k]);
         let rayleigh = (-draw(b"wind").max(1e-12).ln()).sqrt() * 2.0 / std::f64::consts::PI.sqrt();
-        let wind = (prevailing[0].hypot(prevailing[1]) + 2.0) * rayleigh;
-        let from = ((-prevailing[0]).atan2(-prevailing[1]).to_degrees() + 40.0 * gauss(b"bearing")).rem_euclid(360.0);
+        // Steady storm winds vary less than light breezes.
+        let steady = blowing[0].hypot(blowing[1]);
+        let wind = steady * (0.75 + 0.25 * rayleigh) + 2.0 * rayleigh;
+        let from = ((-blowing[0]).atan2(-blowing[1]).to_degrees() + 40.0 / (1.0 + steady / 5.0) * gauss(b"bearing")).rem_euclid(360.0);
         let snow = wet && mean_c < 0.5;
         let sky = match () {
+            _ if e.kind == Some(StormKind::TropicalCyclone) && wind > 33.0 => "tropical cyclone",
             _ if wind > 17.0 && wet => "storm",
             _ if snow => "snow",
             _ if amount > 20.0 => "heavy rain",
@@ -187,7 +342,24 @@ pub fn simulate(climate: &Climate, season: impl Fn(f64) -> f64, year: f64, step_
             _ if draw(b"cloud") < share => "cloudy",
             _ => "clear",
         };
-        out.push(Day { day: t, year: 0, local_day: 0.0, mean_c, high_c: mean_c + half, low_c: mean_c - half, precipitation_mm: amount, snow, wind_m_s: wind, wind_from_deg: from, sky });
+        let storm = e.storm.clone().filter(|_| e.rain > 0.3 || wind > 12.0);
+        let storm_kind = storm.as_ref().and(e.kind);
+        out.push(Day {
+            day: t,
+            year: 0,
+            local_day: 0.0,
+            mean_c,
+            high_c: mean_c + half,
+            low_c: mean_c - half,
+            precipitation_mm: amount,
+            snow,
+            wind_m_s: wind,
+            wind_from_deg: from,
+            pressure_hpa: 1013.0 + e.pressure_hpa,
+            sky,
+            storm,
+            storm_kind,
+        });
     }
     out
 }
@@ -208,7 +380,7 @@ mod tests {
     #[test]
     fn weather_adds_up_to_climate() {
         let c = temperate();
-        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(9));
+        let days = simulate(&c, earth_season, 365.25, 1.0, 0.0, 3653, Seed(9), &|_| Effect::default(), &Storminess::calm());
         let n = days.len() as f64;
         let mean = days.iter().map(|d| d.mean_c).sum::<f64>() / n;
         let rain = days.iter().map(|d| d.precipitation_mm).sum::<f64>() / 10.0;
@@ -230,11 +402,34 @@ mod tests {
     #[test]
     fn a_date_has_one_weather() {
         let c = temperate();
-        let a = simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(3));
-        let b = simulate(&c, earth_season, 365.25, 1.0, 195.0, 15, Seed(3));
+        let a = simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(3), &|_| Effect::default(), &Storminess::calm());
+        let b = simulate(&c, earth_season, 365.25, 1.0, 195.0, 15, Seed(3), &|_| Effect::default(), &Storminess::calm());
         for (x, y) in a.iter().zip(&b[5..]) {
             assert!((x.mean_c - y.mean_c).abs() < 1e-3 && x.precipitation_mm == y.precipitation_mm && x.sky == y.sky, "{x:?} {y:?}");
         }
-        assert_ne!(a, simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(4)));
+        assert_ne!(a, simulate(&c, earth_season, 365.25, 1.0, 200.0, 10, Seed(4), &|_| Effect::default(), &Storminess::calm()));
+    }
+
+    /// With storms passing, the years still add up to the climate, and two nearby places
+    /// get rain on the same days while distant ones do not.
+    #[test]
+    fn storms_keep_the_climate_and_are_shared() {
+        let atm = crate::storms::tests::earthlike(4);
+        let c = temperate();
+        let storms = atm.storms(-20.0, 3653.0);
+        let run = |lat: f64, lon: f64, seed: u64| {
+            let place = Storminess::of(&atm, lat, lon, 365.25);
+            let at = |t: f64| storms::effect(&storms, lat, lon, t, atm.radius_km, atm.omega);
+            simulate(&Climate { lat, ..c }, earth_season, 365.25, 1.0, 0.0, 3653, Seed(seed), &at, &place)
+        };
+        let (a, near, far) = (run(50.0, -30.0, 1), run(50.5, -29.0, 2), run(50.0, 60.0, 3));
+        let rain = a.iter().map(|d| d.precipitation_mm).sum::<f64>() / 10.0;
+        let mean = a.iter().map(|d| d.mean_c).sum::<f64>() / a.len() as f64;
+        assert!((rain / 800.0 - 1.0).abs() < 0.15, "rain {rain}");
+        assert!((mean - 10.0).abs() < 0.8, "mean {mean}");
+        let wet = |d: &[Day]| d.iter().map(|x| f64::from(u8::from(x.precipitation_mm > 0.0))).collect::<Vec<_>>();
+        let (near_r, far_r) = (crate::storms::tests::correlation(&wet(&a), &wet(&near)), crate::storms::tests::correlation(&wet(&a), &wet(&far)));
+        assert!(near_r > 0.3 && far_r < 0.1, "near {near_r}, far {far_r}");
+        assert!(a.iter().any(|d| d.storm.is_some()));
     }
 }

@@ -167,6 +167,17 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// The weather map of a day: isobars, fronts, rain and storm centres (PNG), and the
+    /// storms on it.
+    WeatherMap {
+        dir: PathBuf,
+        #[arg(long, default_value_t = 0.0)]
+        day: f64,
+        #[arg(long)]
+        to: Option<PathBuf>,
+        #[arg(long, default_value_t = 1440)]
+        width: u32,
+    },
     /// Print the seed a product (or a product's entity) is generated from.
     Seed {
         dir: PathBuf,
@@ -368,6 +379,20 @@ fn run(cli: Cli) -> R<()> {
         Cmd::Show { dir } => show(&World::open(&dir)?)?,
         Cmd::Positions { dir, day, to } => positions(&World::open(&dir)?, day, to.as_deref())?,
         Cmd::Sky { dir, day, to, width } => sky(&World::open(&dir)?, day, to.as_deref(), width)?,
+        Cmd::WeatherMap { dir, day, to, width } => {
+            let w = World::open(&dir)?;
+            let to = to.unwrap_or_else(|| w.root.join("renders").join(format!("weather_day{day}.png")));
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let storms = pipe::weather::weather_map(&w, day, width, &to)?;
+            println!("{} storms on day {day}:", storms.len());
+            for s in &storms {
+                let kind = if s.kind == pipe::storms::StormKind::Low { "low" } else { "tropical cyclone" };
+                println!("  {:<12} {kind:<16} {:>6.1}° {:>7.1}°  {:>4.0} hPa deep, {:.1} days old", s.name, s.lat, s.lon, s.depth_hpa, s.age_days);
+            }
+            println!("written {}", to.display());
+        }
         Cmd::Weather { dir, lat, lon, day, days, json } => {
             let f = pipe::weather::forecast(&World::open(&dir)?, lat, lon, day, days)?;
             if json {
@@ -651,7 +676,7 @@ fn print_weather(f: &pipe::weather::Forecast) {
             d.high_c,
             d.wind_m_s,
             compass(d.wind_from_deg),
-            d.sky
+            d.storm.as_ref().map_or_else(|| d.sky.to_string(), |name| format!("{} ({name}, {:.0} hPa)", d.sky, d.pressure_hpa))
         );
     }
 }

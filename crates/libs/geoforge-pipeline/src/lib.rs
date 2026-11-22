@@ -16,6 +16,7 @@ pub mod place;
 pub mod registry;
 pub mod sky;
 pub mod stats;
+pub mod storms;
 pub mod weather;
 pub mod views;
 

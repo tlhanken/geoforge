@@ -375,10 +375,17 @@ the warm half) come back within 0.6 K of the mean and 10% of the rain, with wet 
 of days, July 15–21 K warmer than January, snow only in winter, and westerlies from the
 west. A date's weather is the same whatever window it is asked in.
 
-Gaps: no fronts or storms that move across the map (each place is drawn alone, so
-neighbours' weather is unrelated); no droughts or wet years beyond the daily chain; the
-anomaly's spread does not change with the season; tropical cyclones are not in the daily
-weather (they are in `place`'s hazards).
+Storms (`storms` and `weather` tests, on an Earth-like zonal climate): about 2.5 lows a day
+per hemisphere drifting ~70° east over their lives (10–15 m/s), tropical cyclones starting
+westward; storm rain at places 100 km apart correlates above 0.7 and 70° of longitude
+apart below 0.3; wet days at the near pair go together while the far pair's do not; ten
+years with storms still give the climate's rain within 15% and its mean within 0.8 K.
+
+Gaps: storms are drawn, not simulated: no blocking highs, no lows deepening on each other
+or merging, fronts are fixed shapes (no occlusion), and highs are the season's mean
+pressure only; mountains do not steer or stop storms (only land kills tropical ones); the
+local part of the weather is still drawn per place; no droughts or wet years beyond the
+storms; the anomaly's spread does not change with the season.
 
 ### Star systems
 

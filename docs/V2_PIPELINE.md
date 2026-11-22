@@ -58,7 +58,8 @@ Other starting points:
 | `place <dir> --lat L --lon L [--radius-km 100] [--from-day D] [--days N] [--json]` | What is at a place: climate, soil, timber, deposits likely within reach and how many a local map holds, the chance of each hazard over the days (default one local year) |
 | `positions <dir> [--day T] [--to FILE.json]` | Where every star, planet and moon is T Earth days from the present (Kepler orbits), the focus's local date, and how lit its moons are |
 | `sky <dir> [--day T] [--to DIR] [--width 2048]` | The focus's night sky on day T: brightest stars, the system's stars, planets and moons (magnitude, elongation, phase, in view or not) and the eclipses of the year to come; with `--to`, a star chart `sky.png` and a catalogue of every naked-eye star `sky.json` |
-| `weather <dir> --lat L --lon L [--day T] [--days 14] [--json]` | Day-by-day weather at a place from day T: low, mean and high, rain or snow, wind and sky, drawn from its climate and the season of the date (the same every time) |
+| `weather <dir> --lat L --lon L [--day T] [--days 14] [--json]` | Day-by-day weather at a place from day T: low, mean and high, rain or snow, wind, sky and the storm passing, drawn from its climate, the season and the storms (the same every time) |
+| `weather-map <dir> [--day T] [--to FILE.png] [--width 1440]` | The weather map of day T: the season's pressure plus the storms as isobars, fronts, rain and storm centres, and the list of storms |
 | `seed <dir> <product> [--owner KEY]` | The seed a product is generated from |
 | `stats <dir>` | Realism summary with Earth reference values |
 | `census [--galaxy NAME] [--count N] [--from SEED]` | Draw many systems: kinds of star, planets, wet worlds, example seeds |
@@ -357,12 +358,22 @@ product's randomness. `seed <dir> <product>` prints it.
   sight through the disk and a thinner dust layer. The system's own stars, planets
   (geometric albedos by class, Lambert phases) and moons on the date; a planet within 15°
   of the star is lost in its glare.
+- **Storms** (`geoforge_pipeline::storms`, derived): a global, seeded storm field. Lows
+  form along north–south temperature contrasts at 25–70° (favouring the sea; ~2.5 a day
+  per hemisphere on an Earth-sized world, fewer on slow rotators), live 3–7 days, deepen
+  10–35 hPa over 1000–1500 km and are steered east by the season's winds; each has a warm
+  front, a trailing cold front and a warm sector. Tropical cyclones form over sea above
+  26.5 °C at 5–25° (~85 a year per Earth's area of such sea), drift west, recurve and die
+  over land or cool sea. Gradient winds about each low, with friction and inflow. Tracks
+  are seeded by birth day, so a date's storms never depend on how they are asked for.
 - **Weather** (`geoforge_pipeline::weather`, derived): the season from the star's
   declination, lagging a month (1.5 at sea); the day's normal from the climate's rebuilt
   months; an AR(1) temperature anomaly (0.7 a day, 1–5 K by continentality); wet days by a
   two-state Markov chain (wet share r/(r + 4 mm), persistence 0.35) with exponential
   amounts; snow below 0.5 °C; wind between January's and July's, Rayleigh speeds. Steps are
-  local solar days.
+  local solar days. The storms passing raise the odds and amounts of rain, bring warm or
+  cold air and add their winds, scaled by the place's own storminess over a year so the
+  annual rain is unchanged; neighbours share the storms, so their weather goes together.
 - **Magnetic field** (`geoforge_core::magnetism`, printed by `show`): a rocky world's
   dynamo lasts 10 Gyr·√M with plates, 1.5 Gyr·√M under a stagnant lid, 1 Gyr·√M under an
   episodic one (Mars's stopped ~4.1 Gyr ago); giants always have one. Surface field 30
