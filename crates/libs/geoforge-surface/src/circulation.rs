@@ -14,8 +14,9 @@
 //!   gyres meet, climbs across the basin and runs up the far shore (the Gulf Stream and North
 //!   Atlantic Drift), met at the coast by a cold current from the subpolar gyre (the
 //!   Labrador Current); an equatorward jet along shores where the winds upwell (the
-//!   California Current); plus equatorial currents and a circumpolar current where an ocean
-//!   band has no shores.
+//!   California Current); an overturning branch drawing warm water poleward along the
+//!   eastern side of a basin that opens wide onto a polar sea (the North Atlantic Current);
+//!   plus equatorial currents and a circumpolar current where an ocean band has no shores.
 //! - **SST anomaly**: currents carry water across the temperature gradient (poleward
 //!   western boundary currents run warm, equatorward eastern ones cold), as far as a
 //!   boundary current runs before it mixes, and that heat is carried downstream along the
@@ -155,7 +156,9 @@ pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f6
 }
 
 /// Ocean surface currents (m/s, east and north) on the atmosphere grid.
-fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams) -> Vec<(f64, f64)> {
+/// Surface currents (m/s, east and north) and the share of each cell's flow that is the
+/// overturning's warm poleward branch (0–1).
+fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams) -> (Vec<(f64, f64)>, Vec<f64>) {
     let g = &a.g;
     let b = basins(a, radius_km);
     // Zonal wind stress (quadratic drag) averaged over each row's sea.
@@ -241,6 +244,8 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         })
         .collect();
     let fronts = gyre_fronts(g, &tau);
+    let reach = overturning_reach(a, &b, fronts, radius_km);
+    let mut overturning = vec![0.0; g.len()];
     // Scale so the strongest western boundary currents (meridional flow) reach the set speed.
     let mut speeds: Vec<f64> = cur.iter().map(|v| v.1.abs()).filter(|s| *s > 0.0).collect();
     speeds.sort_by(f64::total_cmp);
@@ -310,9 +315,17 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             let shore = if runs_equatorward { (-b.east_km[i] / 700.0).exp() } else { 0.0 };
             v.0 += basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
             v.1 += basin * p.drift_m_s * hemi * (0.6 * crossing * jet * x_rel + 0.8 * beyond * shore);
+            // Where the subpolar sea opens wide onto a polar sea, water sinking there draws
+            // warm water poleward along the basin's eastern side (the North Atlantic Current
+            // into the Norwegian Sea).
+            if reach[i] {
+                let band = smoothstep(front - 5.0, front + 2.0, lat.abs()) * (1.0 - smoothstep(front + 18.0, front + 25.0, lat.abs()));
+                overturning[i] = band * (-b.east_km[i] / OVERTURNING_EAST_KM).exp();
+                v.1 += hemi * OVERTURNING_M_S * overturning[i];
+            }
         }
     }
-    cur
+    (cur, overturning)
 }
 
 fn smoothstep(e0: f64, e1: f64, x: f64) -> f64 {
@@ -336,6 +349,91 @@ fn wind_drift(wind: (f64, f64), lat: f64) -> (f64, f64) {
     let (wu, wv) = (wind.0 * WIND_REF_M_S * 0.03, wind.1 * WIND_REF_M_S * 0.03);
     let turn = -lat.signum() * 30f64.to_radians();
     (wu * turn.cos() - wv * turn.sin(), wu * turn.sin() + wv * turn.cos())
+}
+
+/// Narrowest strait the overturning flows through, km: a sea cell nearer land on both sides
+/// than this is shut (the Bering Strait is 85 km wide; the Denmark Strait 290).
+const STRAIT_KM: f64 = 100.0;
+/// Latitude beyond which open water is the polar sea, degrees.
+const POLAR_SEA_LAT: f64 = 75.0;
+/// Speed of the warm poleward flow the overturning draws, m/s.
+const OVERTURNING_M_S: f64 = 0.25;
+/// Warmth the overturning's deep warm water gives the surface it flows under, °C.
+const OVERTURNING_HEAT_C: f64 = 4.0;
+/// How far from the basin's eastern shore that flow reaches, km (e-folding).
+const OVERTURNING_EAST_KM: f64 = 1500.0;
+
+/// Subpolar sea that the overturning reaches: water from the gyre front poleward that joins a
+/// polar sea through straits wider than [`STRAIT_KM`] without crossing an open circumpolar
+/// band. Deep water forms where a salty subpolar sea opens onto a polar one (the Nordic Seas);
+/// a sea closed off by a narrow strait (the North Pacific behind the Bering Strait) or a polar
+/// ocean ringing a continent (the Southern Ocean) draws no warm water poleward.
+fn overturning_reach(a: &Atmo, b: &Basins, fronts: (Option<GyreFront>, Option<GyreFront>), radius_km: f64) -> Vec<bool> {
+    let g = &a.g;
+    let sea = |x: usize, y: usize| a.land[y * g.w + x] < 0.5;
+    let dy_km = g.res.to_radians() * radius_km;
+    // Passable: sea with sea within STRAIT_KM on every side.
+    let passable: Vec<bool> = (0..g.len())
+        .map(|i| {
+            let (x, y) = (i % g.w, i / g.w);
+            let ky = (STRAIT_KM / dy_km).round().max(1.0) as i64;
+            let kx = (STRAIT_KM / (dy_km * g.lat(y).to_radians().cos().max(0.05))).round().max(1.0) as i64;
+            sea(x, y)
+                && (-ky..=ky).all(|oy| {
+                    let yy = (y as i64 + oy).clamp(0, g.h as i64 - 1) as usize;
+                    (-kx..=kx).all(|ox| sea((x as i64 + ox).rem_euclid(g.w as i64) as usize, yy))
+                })
+        })
+        .collect();
+    let mut reach = vec![false; g.len()];
+    for (north, front) in [(true, fronts.0), (false, fronts.1)] {
+        let Some(front) = front else { continue };
+        let inside = |y: usize| (g.lat(y) > 0.0) == north && g.lat(y).abs() >= front.separation && !b.open_row[y];
+        let mut seen = vec![false; g.len()];
+        let mut stack: Vec<usize> = (0..g.len()).filter(|&i| passable[i] && inside(i / g.w) && g.lat(i / g.w).abs() >= POLAR_SEA_LAT).collect();
+        for &i in &stack {
+            seen[i] = true;
+        }
+        let mut component = Vec::new();
+        while let Some(i) = stack.pop() {
+            component.push(i);
+            let (x, y) = ((i % g.w) as i64, (i / g.w) as i64);
+            for (ox, oy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let ny = y + oy;
+                if !(0..g.h as i64).contains(&ny) {
+                    continue;
+                }
+                let j = ny as usize * g.w + (x + ox).rem_euclid(g.w as i64) as usize;
+                if !seen[j] && passable[j] && inside(ny as usize) {
+                    seen[j] = true;
+                    stack.push(j);
+                }
+            }
+        }
+        // Only a polar sea that the gyre front's own water reaches.
+        if component.iter().any(|&i| g.lat(i / g.w).abs() <= front.front) {
+            for i in component {
+                reach[i] = true;
+            }
+        }
+    }
+    // The coastal cells the strait test shut out still carry the flow along the shore.
+    let mut out = reach.clone();
+    for i in (0..g.len()).filter(|&i| reach[i]) {
+        let (x, y) = ((i % g.w) as i64, (i / g.w) as i64);
+        for oy in -1..=1 {
+            for ox in -1..=1 {
+                let ny = y + oy;
+                if (0..g.h as i64).contains(&ny) {
+                    let j = ny as usize * g.w + (x + ox).rem_euclid(g.w as i64) as usize;
+                    if a.land[j] < 0.5 {
+                        out[j] = true;
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Where the subtropical and subpolar gyres meet in a hemisphere, and where the western
@@ -419,7 +517,7 @@ const ZONAL_MEAN_SMOOTH_DEG: f64 = 10.0;
 
 /// Sea-surface temperature anomaly (°C) from currents crossing the temperature gradient,
 /// carried downstream, plus coastal upwelling.
-fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[f64], radius_km: f64, p: &CirculationParams) -> Vec<f64> {
+fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f64, f64)]; 2], tz: &[f64], radius_km: f64, p: &CirculationParams) -> Vec<f64> {
     let g = &a.g;
     let b = basins(a, radius_km);
     let dy_km = g.res.to_radians() * radius_km;
@@ -466,7 +564,9 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], seasons: [&[(f64, f64)]; 2], tz: &[
                 up += upwelling_drive(winds, lat, width) * (-b.east_km[i] / UPWELLING_KM).exp();
                 up += EQUATORIAL_UPWELLING_SHARE * equatorial_drive(annual, lat, b.west_km[i], b.east_km[i]);
             }
-            (-reach_m * dtdy, -p.upwelling_c * up)
+            // The overturning's branch is deep warm water that keeps giving up heat as it goes
+            // poleward, past where the zonal gradient flattens at the freezing point.
+            (-reach_m * dtdy + OVERTURNING_HEAT_C * overturning[i], -p.upwelling_c * up)
         })
         .unzip();
     // Carry the anomaly along the currents (one atmosphere cell per step at 0.5 m/s): water
@@ -549,7 +649,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 8;
+    const VERSION: u32 = 9;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -575,14 +675,14 @@ impl Generator for Circulation {
         let jan = season_winds(&atmo, &Season::for_body(&atmo, body, -1.0, p.monsoon), p);
         let annual: Vec<(f64, f64)> = jul.iter().zip(&jan).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let has_sea = atmo.land.iter().any(|l| *l < 0.5);
-        let cur = if has_sea { currents(&atmo, &annual, r, p) } else { vec![(0.0, 0.0); g.len()] };
+        let (cur, overturning) = if has_sea { currents(&atmo, &annual, r, p) } else { (vec![(0.0, 0.0); g.len()], vec![0.0; g.len()]) };
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
         let (tz, _) = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c).zonal_temperature(&lats);
         // A locked world's currents carry heat to its night side; the zonal anomaly model does
         // not describe that, so it is left out.
         let locked = crate::atmosphere::Substellar::for_body(body).is_some();
-        let sst = if has_sea && !locked { sst_anomaly(&atmo, &cur, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
+        let sst = if has_sea && !locked { sst_anomaly(&atmo, &cur, &overturning, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
         let n = grid.len();
@@ -650,21 +750,26 @@ mod tests {
 
     /// One ocean basin between two meridional continents (x 40–120) on an Earth-like body,
     /// with its annual winds and currents.
-    fn one_basin() -> (Atmo, CirculationParams, Vectors, Vectors) {
+    fn one_basin() -> (Atmo, CirculationParams, Vectors, (Vectors, Vec<f64>)) {
+        basin_with(|_, _| false)
+    }
+
+    /// The same basin with extra land where `land(x, y)` says.
+    fn basin_with(extra: impl Fn(usize, usize) -> bool) -> (Atmo, CirculationParams, Vectors, (Vectors, Vec<f64>)) {
         let g = AtmoGrid::new(1.0);
-        let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
+        let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 || extra(i % g.w, i / g.w) { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
         let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 6371.0, 23.0, 0.0), 0.0, g.w), &p);
-        let cur = currents(&a, &annual, 6371.0, &p);
-        (a, p, annual, cur)
+        let ocean = currents(&a, &annual, 6371.0, &p);
+        (a, p, annual, ocean)
     }
 
-    fn sst_of(a: &Atmo, p: &CirculationParams, annual: &[(f64, f64)], cur: &[(f64, f64)]) -> Vec<f64> {
+    fn sst_of(a: &Atmo, p: &CirculationParams, annual: &[(f64, f64)], (cur, overturning): &(Vectors, Vec<f64>)) -> Vec<f64> {
         let lats: Vec<f64> = (0..a.g.h).map(|y| a.g.lat(y)).collect();
         let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
         let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
-        sst_anomaly(a, cur, [annual, annual], &tz, 6371.0, p)
+        sst_anomaly(a, cur, overturning, [annual, annual], &tz, 6371.0, p)
     }
 
     /// A clockwise subtropical gyre in the north with a fast poleward western boundary
@@ -672,9 +777,9 @@ mod tests {
     /// upwelling on the eastern side.
     #[test]
     fn gyre_has_western_intensification() {
-        let (a, p, annual, cur) = one_basin();
+        let (a, p, annual, ocean) = one_basin();
         let g = a.g;
-        let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
+        let at = |lat: f64, x: usize| ocean.0[g.index(lat, g.lon(x))];
         // Western boundary (x just east of 40) at 30°N: strong northward flow.
         let wbc = at(31.0, 41);
         assert!(wbc.1 > 0.8, "western boundary current {wbc:?}");
@@ -683,7 +788,7 @@ mod tests {
         assert!(interior.1 < 0.0 && interior.1.abs() < wbc.1 / 10.0, "interior {interior:?}");
         // Southern hemisphere western boundary current runs south.
         assert!(at(-31.0, 41).1 < -0.8);
-        let sst = sst_of(&a, &p, &annual, &cur);
+        let sst = sst_of(&a, &p, &annual, &ocean);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
         assert!(s(40.0, 43) > 1.0, "warm western boundary {}", s(40.0, 43));
         assert!(s(25.0, 119) < -0.5, "cool eastern boundary {}", s(25.0, 119));
@@ -695,9 +800,9 @@ mod tests {
     /// equator, most in the east of the basin.
     #[test]
     fn gyres_close_and_the_equator_upwells() {
-        let (a, p, annual, cur) = one_basin();
+        let (a, p, annual, ocean) = one_basin();
         let g = a.g;
-        let at = |lat: f64, x: usize| cur[g.index(lat, g.lon(x))];
+        let at = |lat: f64, x: usize| ocean.0[g.index(lat, g.lon(x))];
         for lat in [25.0, 32.0] {
             assert!(at(lat, 118).1 < -0.1, "eastern leg at {lat}°N {:?}", at(lat, 118));
             assert!(at(-lat, 118).1 > 0.1, "eastern leg at {lat}°S {:?}", at(-lat, 118));
@@ -707,9 +812,26 @@ mod tests {
         assert!(f.separation > 30.0 && f.separation < f.front - 5.0, "{f:?}");
         let coast = at(f.separation + 4.0, 41);
         assert!(coast.1 < 0.0, "cold coastal current poleward of separation {coast:?}");
-        let sst = sst_of(&a, &p, &annual, &cur);
+        let sst = sst_of(&a, &p, &annual, &ocean);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
         assert!(s(f.separation + 4.0, 41) < s(f.separation - 4.0, 41) - 2.0, "warm current meets cold at the separation");
         assert!(s(0.5, 112) < s(0.5, 50) - 1.0, "equatorial cold tongue in the east: {} vs {}", s(0.5, 112), s(0.5, 50));
+    }
+
+    /// A basin that opens wide onto its polar sea draws warm water poleward along its eastern
+    /// side; the same basin closed off by a one-cell strait at 66°N does not.
+    #[test]
+    fn overturning_needs_an_open_polar_sea() {
+        let (a, p, annual, open) = one_basin();
+        let strait = |x: usize, y: usize| (66..=68).contains(&(90 - y as i64)) && x != 80;
+        let (b, _, annual_b, closed) = basin_with(strait);
+        let g = a.g;
+        let east = g.index(58.0, g.lon(115));
+        assert!(open.1[east] > 0.3, "overturning off the open basin's eastern shore {}", open.1[east]);
+        assert!(closed.1[east] == 0.0, "none behind a strait {}", closed.1[east]);
+        let (so, sc) = (sst_of(&a, &p, &annual, &open), sst_of(&b, &p, &annual_b, &closed));
+        // One basin is the whole latitude circle here, so most of the warmth goes into the
+        // zonal mean the anomaly is taken from; the eastern side keeps its lead.
+        assert!(so[east] > sc[east] + 0.3, "warmer for it: {} vs {}", so[east], sc[east]);
     }
 }

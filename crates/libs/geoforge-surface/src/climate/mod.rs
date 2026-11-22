@@ -119,6 +119,10 @@ fn plateau_warming(t_sea_level: f64, broad_elevation_m: f64) -> f64 {
     PLATEAU_WARMING_C_PER_KM * ((t_sea_level + 5.0) / 15.0).clamp(0.0, 1.0) * broad_elevation_m.max(0.0) / 1000.0
 }
 
+/// Freezing point of seawater, °C.
+const SEA_FREEZE_C: f64 = -1.8;
+/// Warm anomaly at which a current keeps a sea open all winter, °C.
+const OPEN_SEA_ANOMALY_C: f64 = 2.0;
 /// How far inland air chilled over cold water keeps its chill, km.
 const COLD_AIR_REACH_KM: f64 = 300.0;
 /// Extra summer warmth of land under fully sinking air (the moisture model's view of a
@@ -169,6 +173,18 @@ impl Climate {
         let mar = carry(&atmo, &wind_annual, p.maritime_reach_km, r, &vec![1.0; g.len()]);
         // Air over warm currents is warmed deep and carries it far inland (Europe); air over
         // cold upwelling is chilled in a shallow marine layer that the first hills stop.
+        // Open water cannot be colder than freezing: where a warm current keeps a high-latitude
+        // sea open, it stands above a zonal mean pulled down by frozen land and ice by that
+        // much more (the Norwegian Sea).
+        let sst: Vec<f64> = sst
+            .iter()
+            .enumerate()
+            .map(|(i, &a)| {
+                let t0 = tz[i / g.w];
+                let open = (a / OPEN_SEA_ANOMALY_C).clamp(0.0, 1.0);
+                a + (SEA_FREEZE_C - t0).max(0.0) * open * (1.0 - atmo.land[i])
+            })
+            .collect();
         let warm: Vec<f64> = sst.iter().map(|v| v.max(0.0)).collect();
         let cold: Vec<f64> = sst.iter().map(|v| v.min(0.0)).collect();
         let sst_air: Vec<f64> = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &warm).iter().zip(carry(&atmo, &wind_annual, COLD_AIR_REACH_KM, r, &cold)).map(|(w, c)| w + c).collect();
@@ -222,7 +238,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 8;
+    const VERSION: u32 = 9;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {

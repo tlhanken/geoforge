@@ -202,7 +202,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights; earthquake rates and corner magnitudes | 58 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure; sea ice, reefs, productivity | 253 | 58 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure; sea ice, reefs, productivity | 253 | 56 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:
@@ -221,12 +221,11 @@ Biggest open gaps, by layer:
     drains to the sea), London and Kazakhstan.
   - The West African monsoon reaches too far north (Timbuktu 810 mm); Nairobi gets 2800 mm.
   - North-east Siberia is too dry (Yakutsk 15 mm).
-- **Ocean:** the NE Atlantic is half as warm as observed (no overturning circulation), the
-  Brazil Current runs ~3 °C too warm, and the seas off western and
+- **Ocean:** the Brazil Current runs ~3 °C too warm, and the seas off western and
   north-western Australia upwell where the Indonesian Throughflow keeps them warm. With the
   cold currents nearer real (2026-11), cases that had leaned on wrong sea temperatures
-  became gaps: Buenos Aires had rain from a Brazil Current 8 °C too warm, the Bering Sea
-  froze over water 2 °C too cold, and Riyadh was dry beside an Arabian Sea 2 °C too cold.
+  became gaps: Buenos Aires had rain from a Brazil Current 8 °C too warm and Riyadh was dry
+  beside an Arabian Sea 2 °C too cold.
 - **Temperature:** the subtropical interiors are ~5 °C too cold (Phoenix, Riyadh, Timbuktu),
   Europe turns continental too fast, Siberian winters are too mild, Lima's coastal cold
   does not reach the air, and the Antarctic plateau is ~17 °C too warm.

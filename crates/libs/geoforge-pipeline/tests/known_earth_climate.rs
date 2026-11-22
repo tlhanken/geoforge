@@ -92,7 +92,7 @@ const PAMPAS: &str = "Buenos Aires gets half its rain (570 mm, observed 1200): i
 const NORTHWEST_AUSTRALIA: &str = "the seas off north-western Australia upwell under the dry-season trades (Timor Sea −3 °C, observed +2; off Western Australia −4, observed +0.5) where real ones keep a deep warm layer fed from the Pacific through Indonesia (the Leeuwin Current): the Kimberley falls from 1130 to 740 mm and Alice Springs to 140 mm (observed 285)";
 const SOUTH_ATLANTIC: &str = "the modelled tropical South Atlantic is warm enough for storms (26.7 °C at 15°S 25°W, observed ~26), and the wind shear that stops real storms there is not modelled";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
-const ICELAND: &str = "cold East Greenland water chills the air reaching Iceland: Reykjavik is 7 °C cold";
+const ICELAND: &str = "Reykjavik runs 5 °C cold (−0.5 °C): the sea south of Iceland is 3 °C at 63°N 20°W (observed about 7)";
 const KAZAKHSTAN: &str = "the Kazakh steppe is three times too wet and less continental than observed (990 mm, range 22 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
 const TIBET: &str = "Tibetan summers too warm (warmest month 16 °C at 4900 m, observed ~7) and the monsoon does not climb the plateau";
 const ANTARCTICA: &str = "the Antarctic plateau is ~17 °C too warm";
@@ -461,10 +461,8 @@ fn oceans(s: &mut Scorecard, e: &Earth) {
 
 const OCEAN_GAPS: &[(&str, &str)] = &[
     ("Sea of Okhotsk (55°N 150°E)", "the modelled January there is 0 °C (observed about −12): the Siberian winter is too warm"),
-    ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic (a +6.6 °C sea surface anomaly), so its coldest month is +1.6 °C (observed about −3)"),
-    ("Norwegian Sea (68°N 5°E)", "the modelled North Atlantic Current does not reach the Norwegian Sea: its coldest month is −8.7 °C (observed about +3)"),
+    ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic (a +3.6 °C sea surface anomaly), so its coldest month is −0.4 °C (observed about −3)"),
     ("Maldives (4°N 73°E)", "the atolls are far smaller than a one-degree cell, which averages to deep water"),
-    ("Bering Sea (58°N 175°W)", "with its water no longer 2 °C too cold (−1.3 °C under the zonal mean, observed −1.4) the Bering Sea's coldest month is −2.3 °C, short of the −4 °C that freezes it: its real ice forms in the north and is blown south by the winter northerlies, which the model does not carry"),
 ];
 
 /// Sea-level pressure recovered from the modelled winds, against ERA5's 1991–2020 seasonal

@@ -431,8 +431,12 @@ On the A/B chain, the western Pacific warm pool goes from +0.1 to +1.1 (+1.3) an
 pattern correlation from 0.33 to 0.46.
 
 Open:
-- The NE Atlantic is half as warm as it should be (+2.4 vs +4.4): there is no overturning
-  circulation to pull extra warm water into a basin that opens to the polar sea.
+- The NE Atlantic — done: a basin that opens onto a polar sea through straits wider than
+  ~100 km (not the Bering Strait), without crossing a circumpolar band, draws an
+  overturning branch poleward along its eastern side, which keeps giving up heat past
+  where the zonal gradient flattens at freezing. The NE Atlantic box went from +2.4 to
+  +4.0 °C (observed +4.4). The climate lets that open water stand above a zonal mean set
+  by frozen land, so the Norwegian Sea stays open and the Bering Sea freezes.
 - The Brazil Current runs warm (+4 to +5 °C off southern Brazil vs +1.4).
 - Western Australia and the Timor Sea upwell where the Indonesian Throughflow keeps them
   warm (the Leeuwin Current).
@@ -471,9 +475,9 @@ Findings since (November 2026):
   but a gorge this narrow is below the data's resolution.
 - *Frozen seas* (tried, not kept): letting a sea frozen in winter send continental air
   over land fixed Utqiagvik (mean −10.0 °C, range 26; observed −11.0, 31). But it chilled
-  Iceland further through the model's too-cold East Greenland water, halving Reykjavik's
-  rain, and the colder Arctic coast rains more (336 mm vs 140). It wants the NE Atlantic
-  warmed first.
+  Iceland further through the model's then too-cold East Greenland water, halving
+  Reykjavik's rain, and the colder Arctic coast rains more (336 mm vs 140). Worth a retry
+  now that the NE Atlantic is warm.
 - *Siberian winters*: the missing winter cold (Yakutsk −24 °C in the coldest month vs −38,
   Astana −7 vs −15, Winnipeg −7 vs −16) does not follow continentality: Moscow is more
   continental than Astana in the model and already too cold. It wants surface inversions
