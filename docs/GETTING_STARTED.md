@@ -55,6 +55,19 @@ Days are Earth days from the present, which is the world's northern spring equin
 works, far in the future or the past, and gives the same answer every time. `--json` prints
 machine-readable output.
 
+## Take its pulse
+
+```bash
+geoforge report worlds/demo                                  # worlds/demo/report/index.html
+geoforge report worlds/earth --place "London:51.5,-0.1" --place "Cairo:30.0,31.2"
+```
+
+One page to read at a glance: every map in themed groups with its key (classes, ramps,
+chances), the world's numbers against Earth's, three places (picked by climate unless you
+name them) with their hazards and two weeks of weather, the weather map, and the night sky
+with a key to star sizes, colours and planets. The folder opens in a browser or publishes
+as is.
+
 ## Edit a layer
 
 ```bash

@@ -256,6 +256,28 @@ enum Cmd {
         /// The world directory.
         dir: PathBuf,
     },
+    /// A report page to take the world's pulse: every map with its key, the numbers against
+    /// Earth's, places and their weather, the weather map and the night sky.
+    Report {
+        /// The world directory.
+        dir: PathBuf,
+        /// Folder to write (index.html and img/); default <dir>/report.
+        #[arg(long)]
+        to: Option<PathBuf>,
+        /// A place to report on, "name:lat,lon" (repeat for more); default a temperate, a
+        /// tropical and a dry one.
+        #[arg(long = "place")]
+        places: Vec<String>,
+        /// Day of the weather and sky, Earth days from the present.
+        #[arg(long, default_value_t = 30.0)]
+        day: f64,
+        /// Days of weather at each place.
+        #[arg(long, default_value_t = 14)]
+        days: usize,
+        /// Width of the maps, px.
+        #[arg(long, default_value_t = 1200)]
+        width: u32,
+    },
     /// Draw many systems from a galaxy and count them.
     ///
     /// Kinds of star, planets and wet worlds, with example seeds of each for `new`.
@@ -313,5 +335,6 @@ fn run(cli: Cli) -> R<()> {
         Cmd::WeatherMap { dir, day, to, width } => almanac::weather_map(&dir, day, to, width),
         Cmd::Seed { dir, product, owner } => world::seed(&dir, &product, owner),
         Cmd::Stats { dir } => world::stats(&dir),
+        Cmd::Report { dir, to, places, day, days, width } => world::report(&dir, to, &places, day, days, width),
     }
 }

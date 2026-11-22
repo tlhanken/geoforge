@@ -18,6 +18,7 @@ pub mod edit;
 pub mod polar;
 pub mod raster;
 pub mod render;
+pub mod report;
 
 use geoforge_core::body::{BodyContext, SolarSystem};
 use geoforge_core::grid::GridSpec;

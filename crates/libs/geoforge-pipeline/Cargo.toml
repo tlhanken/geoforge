@@ -13,9 +13,9 @@ geoforge-analysis = { path = "../geoforge-analysis" }
 geoforge-almanac = { path = "../geoforge-almanac" }
 geoforge-cosmos = { path = "../geoforge-cosmos" }
 geoforge-store = { path = "../geoforge-store" }
+image = { version = "0.24", default-features = false, features = ["png"] }
 serde = { workspace = true }
 serde_json = "1"
 thiserror = { workspace = true }
 
 [dev-dependencies]
-image = { version = "0.24", default-features = false, features = ["png"] }

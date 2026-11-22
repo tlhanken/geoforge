@@ -48,24 +48,48 @@ pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoin
     sorted.sort_by(|a, b| b.v.total_cmp(&a.v));
     for p in sorted {
         let (x, y) = to_px(p.ra_deg, p.dec_deg);
-        let flux = 10f64.powf(-0.4 * (p.v - 6.5)).max(1.0);
-        let radius = (0.6 + 0.85 * flux.log10()).min(12.0);
-        let peak = (0.35 + 0.3 * flux.log10()).min(1.0);
-        let c = star_rgb(p.temperature_k).map(|v| f32::from(v) * peak as f32);
-        splat(&mut acc, width, height, x, y, radius, c);
-        if p.ring {
-            let r = radius + 4.0;
-            for k in 0..64 {
-                let a = std::f64::consts::TAU * f64::from(k) / 64.0;
-                splat(&mut acc, width, height, x + r * a.cos(), y + r * a.sin(), 0.5, [120.0, 200.0, 140.0]);
-            }
-        }
+        draw_point(&mut acc, width, height, x, y, p, 1.0);
     }
     let mut img = RgbImage::new(width, height);
     for (i, a) in acc.iter().enumerate() {
         img.put_pixel(i as u32 % width, i as u32 / width, Rgb(a.map(|v| v.clamp(0.0, 255.0) as u8)));
     }
     img
+}
+
+/// A key strip for [`render_sky`]: each point drawn as on the chart but `scale` times the
+/// size, centred in its own `cell` px square on the chart's night, left to right (their RA
+/// and Dec are ignored).
+#[must_use]
+pub fn render_sky_key(cell: u32, scale: f64, points: &[SkyPoint]) -> RgbImage {
+    let (width, height) = (cell * points.len().max(1) as u32, cell);
+    let mut acc = vec![[6f32, 8.0, 16.0]; (width * height) as usize];
+    for (i, p) in points.iter().enumerate() {
+        let (x, y) = ((i as f64 + 0.5) * f64::from(cell), 0.5 * f64::from(cell));
+        draw_point(&mut acc, width, height, x, y, p, scale);
+    }
+    let mut img = RgbImage::new(width, height);
+    for (i, a) in acc.iter().enumerate() {
+        img.put_pixel(i as u32 % width, i as u32 / width, Rgb(a.map(|v| v.clamp(0.0, 255.0) as u8)));
+    }
+    img
+}
+
+/// A star by its magnitude and colour, circled if it is a planet or moon; `scale` times the
+/// chart's size.
+fn draw_point(acc: &mut [[f32; 3]], width: u32, height: u32, x: f64, y: f64, p: &SkyPoint, scale: f64) {
+    let flux = 10f64.powf(-0.4 * (p.v - 6.5)).max(1.0);
+    let radius = scale * (0.6 + 0.85 * flux.log10()).min(12.0);
+    let peak = (0.35 + 0.3 * flux.log10()).min(1.0);
+    let c = star_rgb(p.temperature_k).map(|v| f32::from(v) * peak as f32);
+    splat(acc, width, height, x, y, radius, c);
+    if p.ring {
+        let r = radius + 4.0 * scale;
+        for k in 0..64 {
+            let a = std::f64::consts::TAU * f64::from(k) / 64.0;
+            splat(acc, width, height, x + r * a.cos(), y + r * a.sin(), 0.5, [120.0, 200.0, 140.0]);
+        }
+    }
 }
 
 /// Add a soft spot of colour `c` (peak) and size `radius` px at (x, y), wrapping in RA.

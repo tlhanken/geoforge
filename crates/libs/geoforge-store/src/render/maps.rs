@@ -28,6 +28,12 @@ pub fn render_classes(colors: &[Option<[u8; 3]>], grid: &AnyGrid, relief: Option
 /// Preview ramp for chance maps: white for 0 through gold and orange to dark red for 1.
 const CHANCE_RAMP: [(f64, [u8; 3]); 5] = [(0.0, [250, 250, 245]), (0.1, [250, 225, 140]), (0.35, [240, 150, 60]), (0.7, [200, 50, 40]), (1.0, [110, 0, 30])];
 
+/// The key to [`render_chances`]: chance 0–1.
+#[must_use]
+pub fn chance_legend() -> super::Legend {
+    super::Legend::Ramp { stops: CHANCE_RAMP.to_vec(), units: "chance" }
+}
+
 /// A preview of a chance map (values 0–1), hillshaded with `relief`; values at sea (cells
 /// where `sea` is set) are tinted blue, and cells without a value drawn as plain sea or land.
 ///
@@ -67,9 +73,8 @@ pub fn gray_chances(values: &[Option<f64>], grid: &AnyGrid) -> Result<image::Gra
 /// # Errors
 /// For grids without a raster form.
 pub fn render_quantity(values: &[f64], sea: &[bool], contour: f64, span: f64, grid: &AnyGrid, relief: Option<(&Products, f64)>) -> Result<RgbImage> {
-    let mean = values.iter().sum::<f64>() / values.len().max(1) as f64;
-    let diverging = [(0.0, [40, 70, 160]), (0.5, [245, 245, 245]), (1.0, [170, 30, 30])];
-    let colors: Vec<Option<[u8; 3]>> = values.iter().map(|v| Some(ramp(&diverging, (0.5 + (v - mean) / (2.0 * span)).clamp(0.0, 1.0)))).collect();
+    let mean = mean(values);
+    let colors: Vec<Option<[u8; 3]>> = values.iter().map(|v| Some(ramp(&DIVERGING, (0.5 + (v - mean) / (2.0 * span)).clamp(0.0, 1.0)))).collect();
     let mut img = render_classes(&colors, grid, relief)?;
     let GridSpec::Equirect { width, height } = grid.spec() else { return Ok(img) };
     let band = |i: usize| (values[i] / contour).floor();
@@ -87,6 +92,19 @@ pub fn render_quantity(values: &[f64], sea: &[bool], contour: f64, span: f64, gr
         }
     }
     Ok(img)
+}
+
+const DIVERGING: [(f64, [u8; 3]); 3] = [(0.0, [40, 70, 160]), (0.5, [245, 245, 245]), (1.0, [170, 30, 30])];
+
+fn mean(values: &[f64]) -> f64 {
+    values.iter().sum::<f64>() / values.len().max(1) as f64
+}
+
+/// The key to [`render_quantity`] of `values` with `span`, in `units`.
+#[must_use]
+pub fn quantity_legend(values: &[f64], span: f64, units: &'static str) -> super::Legend {
+    let m = mean(values);
+    super::Legend::Ramp { stops: DIVERGING.iter().map(|&(t, c)| (m + (t - 0.5) * 2.0 * span, c)).collect(), units }
 }
 
 /// A 16-bit grayscale image.

@@ -395,6 +395,18 @@ pub struct Calendar {
 }
 
 impl Calendar {
+    /// The calendar of `body`, its moons the tidal partners lighter than it.
+    #[must_use]
+    pub fn of_body(body: &BodyContext) -> Self {
+        let moons: Vec<(String, f64)> = body
+            .tides
+            .iter()
+            .filter(|t| t.mass_kg < body.exterior.mass_kg)
+            .map(|t| (t.name.clone(), orbital_period_days(t.distance_km / geoforge_core::body::AU_KM, body.exterior.mass_kg + t.mass_kg)))
+            .collect();
+        Self::new(body, &moons)
+    }
+
     /// The calendar of `body`, with its moons' orbital periods (Earth days).
     #[must_use]
     pub fn new(body: &BodyContext, moons: &[(String, f64)]) -> Self {

@@ -14,6 +14,7 @@
 
 pub mod place;
 pub mod registry;
+pub mod report;
 pub mod stats;
 pub mod views;
 

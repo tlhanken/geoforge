@@ -13,8 +13,8 @@ mod maps;
 mod sky;
 mod weather;
 
-pub use maps::{gray_chances, gray_quantity, render_chances, render_classes, render_quantity, Gray16, CLASS_SEA};
-pub use sky::{render_sky, star_rgb, SkyPoint};
+pub use maps::{chance_legend, gray_chances, gray_quantity, quantity_legend, render_chances, render_classes, render_quantity, Gray16, CLASS_SEA};
+pub use sky::{render_sky, render_sky_key, star_rgb, SkyPoint};
 pub use weather::render_weather;
 
 use crate::edit::{hsv, key_color};
@@ -28,35 +28,104 @@ use image::{Rgb, RgbImage};
 /// Hypsometric tint (sea level = 0 m).
 #[must_use]
 pub fn elevation_color(e: f64) -> [u8; 3] {
-    const SEA: [(f64, [u8; 3]); 6] = [(-11000.0, [8, 14, 48]), (-6000.0, [16, 32, 92]), (-4000.0, [28, 62, 132]), (-2000.0, [48, 98, 170]), (-200.0, [92, 150, 210]), (0.0, [150, 200, 235])];
-    const LAND: [(f64, [u8; 3]); 8] = [
-        (0.0, [70, 120, 60]),
-        (200.0, [110, 150, 80]),
-        (500.0, [170, 180, 105]),
-        (1000.0, [200, 180, 120]),
-        (2000.0, [170, 130, 90]),
-        (3000.0, [140, 105, 85]),
-        (4500.0, [190, 185, 180]),
-        (6500.0, [250, 250, 250]),
-    ];
-    ramp(if e < 0.0 { &SEA } else { &LAND }, e)
+    ramp(if e < 0.0 { &ELEVATION_SEA } else { &ELEVATION_LAND }, e)
 }
+
+const ELEVATION_SEA: [(f64, [u8; 3]); 6] = [(-11000.0, [8, 14, 48]), (-6000.0, [16, 32, 92]), (-4000.0, [28, 62, 132]), (-2000.0, [48, 98, 170]), (-200.0, [92, 150, 210]), (0.0, [150, 200, 235])];
+const ELEVATION_LAND: [(f64, [u8; 3]); 8] = [
+    (0.0, [70, 120, 60]),
+    (200.0, [110, 150, 80]),
+    (500.0, [170, 180, 105]),
+    (1000.0, [200, 180, 120]),
+    (2000.0, [170, 130, 90]),
+    (3000.0, [140, 105, 85]),
+    (4500.0, [190, 185, 180]),
+    (6500.0, [250, 250, 250]),
+];
 
 /// Elevation tint for a world without seas (relative to the mean radius), after the
 /// colouring of Mars laser-altimetry maps: blue lows to white highs.
 #[must_use]
 pub fn dry_elevation_color(e: f64) -> [u8; 3] {
-    const STOPS: [(f64, [u8; 3]); 8] = [
-        (-9000.0, [30, 20, 90]),
-        (-5000.0, [50, 90, 190]),
-        (-2000.0, [70, 170, 200]),
-        (0.0, [110, 190, 110]),
-        (2000.0, [220, 200, 90]),
-        (5000.0, [200, 120, 60]),
-        (9000.0, [150, 80, 60]),
-        (16000.0, [250, 245, 240]),
-    ];
-    ramp(&STOPS, e)
+    ramp(&DRY_ELEVATION, e)
+}
+
+const DRY_ELEVATION: [(f64, [u8; 3]); 8] = [
+    (-9000.0, [30, 20, 90]),
+    (-5000.0, [50, 90, 190]),
+    (-2000.0, [70, 170, 200]),
+    (0.0, [110, 190, 110]),
+    (2000.0, [220, 200, 90]),
+    (5000.0, [200, 120, 60]),
+    (9000.0, [150, 80, 60]),
+    (16000.0, [250, 245, 240]),
+];
+const TEMPERATURE: [(f64, [u8; 3]); 8] =
+    [(-45.0, [60, 0, 110]), (-25.0, [40, 70, 200]), (-10.0, [90, 160, 230]), (0.0, [210, 235, 250]), (10.0, [250, 240, 160]), (20.0, [250, 170, 60]), (28.0, [220, 70, 30]), (35.0, [130, 0, 20])];
+const TEMPERATURE_RANGE: [(f64, [u8; 3]); 5] = [(0.0, [240, 240, 250]), (10.0, [150, 200, 240]), (25.0, [240, 200, 90]), (45.0, [200, 60, 40]), (70.0, [90, 0, 40])];
+const PRECIPITATION: [(f64, [u8; 3]); 7] =
+    [(0.0, [150, 90, 40]), (200.0, [220, 190, 120]), (500.0, [235, 235, 170]), (1000.0, [120, 200, 110]), (2000.0, [30, 140, 90]), (3500.0, [20, 90, 160]), (6000.0, [40, 20, 120])];
+const CRUST_AGE: [(f64, [u8; 3]); 7] =
+    [(0.0, [220, 40, 40]), (20.0, [250, 160, 40]), (60.0, [240, 230, 80]), (120.0, [80, 190, 110]), (180.0, [40, 110, 190]), (400.0, [70, 40, 130]), (2500.0, [40, 30, 60])];
+const ROCK_AGE: [(f64, [u8; 3]); 7] =
+    [(0.0, [230, 60, 50]), (66.0, [245, 170, 60]), (252.0, [240, 230, 90]), (541.0, [110, 190, 120]), (1000.0, [60, 150, 200]), (2500.0, [70, 70, 170]), (4000.0, [50, 30, 80])];
+const SST_ANOMALY: [(f64, [u8; 3]); 5] = [(-8.0, [30, 60, 160]), (-3.0, [120, 170, 225]), (0.0, [245, 245, 245]), (3.0, [245, 170, 120]), (8.0, [170, 30, 30])];
+const WARM_SHARE: [(f64, [u8; 3]); 5] = [(0.15, [180, 90, 40]), (0.35, [235, 200, 120]), (0.5, [240, 240, 230]), (0.65, [140, 200, 150]), (0.85, [40, 110, 160])];
+/// Lakes (open and closed) and rivers (smallest and largest drawn) over the land.
+const LAKE: [u8; 3] = [50, 110, 200];
+const SALT_LAKE: [u8; 3] = [120, 170, 190];
+const STREAM: [u8; 3] = [110, 160, 230];
+const GREAT_RIVER: [u8; 3] = [10, 40, 150];
+
+/// Wind and current speed: calm white to dark blue at `top`, m/s.
+fn speed_stops(top: f64) -> [(f64, [u8; 3]); 4] {
+    [(0.0, [235, 238, 245]), (top * 0.3, [170, 200, 230]), (top * 0.7, [70, 120, 200]), (top, [40, 40, 140])]
+}
+
+/// What a render's colours mean, for a key beside it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Legend {
+    /// The classes the map shows: name and colour.
+    Classes(Vec<(String, [u8; 3])>),
+    /// Colours at values, in `units`.
+    Ramp { stops: Vec<(f64, [u8; 3])>, units: &'static str },
+}
+
+/// The key to [`render`]'s colours for product `p` (`sea` as there); `None` where the colours
+/// only tell areas apart (plates, watersheds) or the product is missing.
+#[must_use]
+pub fn legend(p: ProductId, ctx: &Products, sea: bool) -> Option<Legend> {
+    let ramp_of = |stops: &[(f64, [u8; 3])], units| Some(Legend::Ramp { stops: stops.to_vec(), units });
+    let classes = |named: Vec<(String, [u8; 3])>| {
+        let mut seen = std::collections::BTreeMap::new();
+        for (n, c) in named {
+            seen.entry(n).or_insert(c);
+        }
+        Some(Legend::Classes(seen.into_iter().collect()))
+    };
+    match ctx.get(p)? {
+        // The sea's shallowest stop and the land's lowest meet at 0 m.
+        ProductData::Elevation(_) | ProductData::RoughElevation(_) if sea => ramp_of(&[&ELEVATION_SEA[1..5], &ELEVATION_LAND[..]].concat(), "m"),
+        ProductData::Elevation(_) | ProductData::RoughElevation(_) => ramp_of(&DRY_ELEVATION, "m from the mean radius"),
+        ProductData::CrustAge(_) => ramp_of(&CRUST_AGE, "Ma (continents greyed)"),
+        ProductData::Temperature(_) => ramp_of(&TEMPERATURE, "°C"),
+        ProductData::TemperatureRange(_) => ramp_of(&TEMPERATURE_RANGE, "K, warmest to coldest month"),
+        ProductData::Precipitation(_) => ramp_of(&PRECIPITATION, "mm a year"),
+        ProductData::RockAge(_) => ramp_of(&ROCK_AGE, "Ma"),
+        ProductData::SstAnomaly(_) => ramp_of(&SST_ANOMALY, "K from the zonal mean"),
+        ProductData::PrecipitationWarmShare(_) => ramp_of(&WARM_SHARE, "share falling in the warm half-year"),
+        ProductData::WindJan(_) | ProductData::WindJul(_) => ramp_of(&speed_stops(15.0), "m/s"),
+        ProductData::OceanCurrents(_) => ramp_of(&speed_stops(1.0), "m/s"),
+        ProductData::CrustType(_) => classes(<geoforge_core::surface::CrustType as Category>::ALL.iter().map(|c| (c.name().to_string(), c.color())).collect()),
+        ProductData::Lithology(pt) => classes(pt.table.rows.values().map(|r| (r.name.clone(), r.color)).collect()),
+        ProductData::Biome(pt) => classes(pt.table.rows.values().map(|r| (r.name.clone(), r.color)).collect()),
+        ProductData::Provinces(pt) => classes(pt.table.rows.values().map(|r| (r.kind.name().to_string(), r.kind.color())).collect()),
+        ProductData::Lakes(_) | ProductData::Rivers(_) => {
+            Some(Legend::Classes(vec![("Lake".into(), LAKE), ("Salt lake (no outlet)".into(), SALT_LAKE), ("Stream".into(), STREAM), ("Great river".into(), GREAT_RIVER)]))
+        }
+        ProductData::Deposits(t) => classes(t.rows.values().map(|d| (d.kind.replace('_', " "), deposit_color(&d.kind))).collect()),
+        _ => None,
+    }
 }
 
 fn ramp(stops: &[(f64, [u8; 3])], x: f64) -> [u8; 3] {
@@ -74,18 +143,15 @@ fn ramp(stops: &[(f64, [u8; 3])], x: f64) -> [u8; 3] {
 }
 
 fn temperature_color(t: f64) -> [u8; 3] {
-    ramp(
-        &[(-45.0, [60, 0, 110]), (-25.0, [40, 70, 200]), (-10.0, [90, 160, 230]), (0.0, [210, 235, 250]), (10.0, [250, 240, 160]), (20.0, [250, 170, 60]), (28.0, [220, 70, 30]), (35.0, [130, 0, 20])],
-        t,
-    )
+    ramp(&TEMPERATURE, t)
 }
 
 fn precip_color(p: f64) -> [u8; 3] {
-    ramp(&[(0.0, [150, 90, 40]), (200.0, [220, 190, 120]), (500.0, [235, 235, 170]), (1000.0, [120, 200, 110]), (2000.0, [30, 140, 90]), (3500.0, [20, 90, 160]), (6000.0, [40, 20, 120])], p)
+    ramp(&PRECIPITATION, p)
 }
 
 fn age_color(a: f64) -> [u8; 3] {
-    ramp(&[(0.0, [220, 40, 40]), (20.0, [250, 160, 40]), (60.0, [240, 230, 80]), (120.0, [80, 190, 110]), (180.0, [40, 110, 190]), (400.0, [70, 40, 130]), (2500.0, [40, 30, 60])], a)
+    ramp(&CRUST_AGE, a)
 }
 
 fn shade(c: [u8; 3], k: f64) -> [u8; 3] {
@@ -167,9 +233,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             })?
         }
         ProductData::Temperature(f) => image_of(spec, |i| lit(i, temperature_color(f64::from(f.values[i]))))?,
-        ProductData::TemperatureRange(f) => {
-            image_of(spec, |i| lit(i, ramp(&[(0.0, [240, 240, 250]), (10.0, [150, 200, 240]), (25.0, [240, 200, 90]), (45.0, [200, 60, 40]), (70.0, [90, 0, 40])], f64::from(f.values[i]))))?
-        }
+        ProductData::TemperatureRange(f) => image_of(spec, |i| lit(i, ramp(&TEMPERATURE_RANGE, f64::from(f.values[i]))))?,
         ProductData::Precipitation(f) => image_of(spec, |i| {
             let c = precip_color(f64::from(f.values[i]));
             if is_sea(i) {
@@ -182,15 +246,15 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
         ProductData::Lithology(pt) => image_of(spec, |i| lit(i, pt.row_at(i as u32).map_or([30, 30, 30], |r| r.color)))?,
         ProductData::RockAge(f) => image_of(spec, |i| {
             let a = f64::from(f.values[i]);
-            ramp(&[(0.0, [230, 60, 50]), (66.0, [245, 170, 60]), (252.0, [240, 230, 90]), (541.0, [110, 190, 120]), (1000.0, [60, 150, 200]), (2500.0, [70, 70, 170]), (4000.0, [50, 30, 80])], a)
+            ramp(&ROCK_AGE, a)
         })?,
         ProductData::SstAnomaly(f) => image_of(spec, |i| match is_sea(i) {
             false => [215, 210, 200],
-            true => ramp(&[(-8.0, [30, 60, 160]), (-3.0, [120, 170, 225]), (0.0, [245, 245, 245]), (3.0, [245, 170, 120]), (8.0, [170, 30, 30])], f64::from(f.values[i])),
+            true => ramp(&SST_ANOMALY, f64::from(f.values[i])),
         })?,
         ProductData::PrecipitationWarmShare(f) => image_of(spec, |i| match is_sea(i) {
             true => [40, 50, 75],
-            false => lit(i, ramp(&[(0.15, [180, 90, 40]), (0.35, [235, 200, 120]), (0.5, [240, 240, 230]), (0.65, [140, 200, 150]), (0.85, [40, 110, 160])], f64::from(f.values[i]))),
+            false => lit(i, ramp(&WARM_SHARE, f64::from(f.values[i]))),
         })?,
         ProductData::WindJan(f) | ProductData::WindJul(f) | ProductData::OceanCurrents(f) => {
             let ocean = p == ProductId::OceanCurrents;
@@ -198,7 +262,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             let mut img = image_of(spec, |i| {
                 let v = f.values[i];
                 let sp = f64::from(v[0]).hypot(f64::from(v[1]));
-                let base = ramp(&[(0.0, [235, 238, 245]), (top * 0.3, [170, 200, 230]), (top * 0.7, [70, 120, 200]), (top, [40, 40, 140])], sp);
+                let base = ramp(&speed_stops(top), sp);
                 match is_sea(i) {
                     false => {
                         if ocean {
@@ -294,8 +358,8 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             for (c, &o) in lk.owner.values.iter().enumerate() {
                 if o != 0 {
                     let col = match lk.table.get(geoforge_core::key::Key(u64::from(o))) {
-                        Some(l) if l.endorheic => [120, 170, 190],
-                        _ => [50, 110, 200],
+                        Some(l) if l.endorheic => SALT_LAKE,
+                        _ => LAKE,
                     };
                     put(&mut img, grid, c as u32, col);
                 }
@@ -308,7 +372,7 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
                     continue;
                 }
                 let t = (f64::from(e.attrs.strahler_order) - f64::from(min_order)) / 6.0;
-                let col = blend([110, 160, 230], [10, 40, 150], t.clamp(0.0, 1.0));
+                let col = blend(STREAM, GREAT_RIVER, t.clamp(0.0, 1.0));
                 for k in [e.from, e.to] {
                     if let Some(n) = rv.nodes.get(k) {
                         put(&mut img, grid, n.cell, col);

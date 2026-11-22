@@ -48,6 +48,10 @@ weather-map dir day="0": build
 sky dir day="0": build
     ./target/release/geoforge sky {{dir}} --day {{day}} --to {{dir}}/renders
 
+# A report page with every map and its key, places, weather and sky: just report worlds/world-42
+report dir *flags="": build
+    ./target/release/geoforge report {{dir}} {{flags}}
+
 # Export a layer to edit: just edit worlds/world-42 rough_elevation
 edit dir product: build
     ./target/release/geoforge export {{dir}} {{product}} --caps

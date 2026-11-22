@@ -362,6 +362,15 @@ clusters, nebulae (emission, reflection, dark clouds) and supernova remnants int
 chart and catalogue; let it raise the sky's young-star count (the Gould Belt gap) and the
 supernova risk.
 
+## 8f. Report — done
+
+`geoforge report` writes one page (`index.html` and `img/`) to take a world's pulse:
+maps grouped as rock, air and sea, water and life, resources, hazards, each with its key
+(`render::legend` for products, the view's classes or ramp for derived views); numbers
+against Earth's; three places picked by Köppen class (or named) with hazards and weather;
+the weather map; the sky chart with a key to magnitudes, spectral colours and planets.
+Open: a verdict section written by hand stays outside it.
+
 ## 8e. Mountains, gyres and the weak climates — todo
 
 From the Thumi pulse (November 2026). The Earth checks in brackets are what each item should

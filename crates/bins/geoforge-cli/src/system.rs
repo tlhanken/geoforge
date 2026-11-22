@@ -7,17 +7,25 @@ use geoforge_core::grid::GridSpec;
 use geoforge_core::magnetism::MagneticField;
 use geoforge_core::BodyContext;
 use geoforge_store::World;
+use std::fmt::Write;
 use std::path::Path;
 
 pub fn show(w: &World) -> R<()> {
+    print!("{}", show_text(w)?);
+    Ok(())
+}
+
+/// The system and the focus, as `show` prints them.
+pub fn show_text(w: &World) -> R<String> {
+    let mut out = String::new();
     let body = w.load_body()?;
     if let Some(sys) = w.load_system()? {
-        println!("system {} (seed {}), {:.2} Gyr old", sys.root.name, w.manifest.root_seed.0, sys.root.epoch.system_age_gyr);
+        writeln!(out, "system {} (seed {}), {:.2} Gyr old", sys.root.name, w.manifest.root_seed.0, sys.root.epoch.system_age_gyr)?;
         if let Some(jd) = sys.root.present_jd_tt {
-            println!("  the present: {} (its real calendar)", geoforge_almanac::ephemeris::utc_date(jd));
+            writeln!(out, "  the present: {} (its real calendar)", geoforge_almanac::ephemeris::utc_date(jd))?;
         }
         if let Some(site) = &sys.root.site {
-            println!("  drawn from the {}, {:.1} kpc from its centre", site.galaxy, site.radius_kpc);
+            writeln!(out, "  drawn from the {}, {:.1} kpc from its centre", site.galaxy, site.radius_kpc)?;
         }
         for n in &sys.nodes {
             let a = n.elements.map_or(String::new(), |e| format!("  a={:.4} AU e={:.3}", e.a_au, e.e));
@@ -34,11 +42,13 @@ pub fn show(w: &World) -> R<()> {
                 NodeKind::Ring(p) => format!("rings {:.0}–{:.0} km", p.inner_au * geoforge_core::body::AU_KM, p.outer_au * geoforge_core::body::AU_KM),
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };
-            println!("  {:<14} {kind} {a}{mark}", n.name);
+            writeln!(out, "  {:<14} {kind} {a}{mark}", n.name)?;
         }
     }
-    println!(
-        "\nfocus {}: radius {:.0} km, g {:.2} m/s², day {:.1} h, obliquity {:.1}°, flux {:.0} W/m² ({:.2}× Earth), ocean {:.2} km GEL, surface pressure {:.2} bar",
+    writeln!(
+        out,
+        "
+focus {}: radius {:.0} km, g {:.2} m/s², day {:.1} h, obliquity {:.1}°, flux {:.0} W/m² ({:.2}× Earth), ocean {:.2} km GEL, surface pressure {:.2} bar",
         body.name,
         body.exterior.radius_km,
         body.gravity_m_s2(),
@@ -48,31 +58,31 @@ pub fn show(w: &World) -> R<()> {
         body.irradiance.flux_w_m2 / 1361.0,
         body.interior.surface_ocean_gel_km(),
         body.interior.surface_pressure_bar()
-    );
+    )?;
     if body.interior.has_atmosphere() {
         let rot = body.exterior.rotation_h;
         if let Some(s) = geoforge_surface::atmosphere::Substellar::for_body(&body) {
-            println!("circulation: tidally locked; air rises under the star (0°N {:.0}°E) and returns along the ground from the night side; equatorial jet {:.1}", s.lon, s.superrotation);
+            writeln!(out, "circulation: tidally locked; air rises under the star (0°N {:.0}°E) and returns along the ground from the night side; equatorial jet {:.1}", s.lon, s.superrotation)?;
         } else if body.interior.has_solid_surface() {
             let cells = geoforge_surface::atmosphere::Cells::for_body(rot, body.exterior.radius_km, 0.0, 0.0);
-            println!("circulation: {} cells per hemisphere; eddy-driven jets: {}; Hadley cell to {:.0}°", cells.count(), cells.jets, cells.hadley);
+            writeln!(out, "circulation: {} cells per hemisphere; eddy-driven jets: {}; Hadley cell to {:.0}°", cells.count(), cells.jets, cells.hadley)?;
         } else {
             let p = geoforge_surface::bands::Profile::for_body(&body, &geoforge_surface::bands::BandsParams::default());
-            println!("bands: jets per hemisphere: {}; equatorial wind {:+.0} m/s", p.jets, p.wind(0.0));
+            writeln!(out, "bands: jets per hemisphere: {}; equatorial wind {:+.0} m/s", p.jets, p.wind(0.0))?;
         }
     }
-    println!("magnetic field: {}", describe_field(&body));
+    writeln!(out, "magnetic field: {}", describe_field(&body))?;
     if body.interior.has_atmosphere() && body.interior.has_solid_surface() {
-        println!("air: {}", describe_air(&body));
+        writeln!(out, "air: {}", describe_air(&body))?;
     }
     if !body.tides.is_empty() {
-        println!("tides: {}", describe_tides(&body));
+        writeln!(out, "tides: {}", describe_tides(&body))?;
     }
-    println!("calendar: {}", describe_calendar(&calendar_of(&body)));
+    writeln!(out, "calendar: {}", describe_calendar(&calendar_of(&body)))?;
     if let GridSpec::Equirect { width, height } = w.manifest.grid {
-        println!("grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width));
+        writeln!(out, "grid {width}×{height} equirectangular ({:.0} km cells at the equator)", 2.0 * std::f64::consts::PI * body.exterior.radius_km / f64::from(width))?;
     }
-    Ok(())
+    Ok(out)
 }
 
 /// "30 µT dipole tilted 7°; magnetopause 9.5 radii against a 2.0 nPa wind; auroras at 71°
@@ -149,13 +159,7 @@ fn describe_tides(body: &BodyContext) -> String {
 
 /// The focus's calendar; its moons are the tidal partners lighter than it.
 pub fn calendar_of(body: &BodyContext) -> Calendar {
-    let moons: Vec<(String, f64)> = body
-        .tides
-        .iter()
-        .filter(|t| t.mass_kg < body.exterior.mass_kg)
-        .map(|t| (t.name.clone(), geoforge_core::derived::orbital_period_days(t.distance_km / geoforge_core::body::AU_KM, body.exterior.mass_kg + t.mass_kg)))
-        .collect();
-    Calendar::new(body, &moons)
+    Calendar::of_body(body)
 }
 
 /// "solar day 24.0 h; year 365.3 days, 365.2 local days; month (Moon) 29.5 days, 12.4 a year".

@@ -225,13 +225,23 @@ pub struct StormNow {
     pub age_days: f64,
 }
 
-/// Draw the weather map of day `day` (`width` wide) to `to`: the season's sea-level
-/// pressure plus the storms, isobars every 4 hPa, rain, fronts and storm centres. Returns
-/// the storms on the map.
+/// Draw the weather map of day `day` (`width` wide) to `to` ([`weather_map_image`]).
+/// Returns the storms on the map.
 ///
 /// # Errors
 /// If the climate is not generated, or on IO errors.
 pub fn weather_map(world: &World, day: f64, width: u32, to: &std::path::Path) -> Result<Vec<StormNow>> {
+    let (img, storms) = weather_map_image(world, day, width)?;
+    img.save(to).map_err(geoforge_store::StoreError::from)?;
+    Ok(storms)
+}
+
+/// The weather map of day `day`, `width` wide: the season's sea-level pressure plus the
+/// storms, isobars every 4 hPa, rain, fronts and storm centres; and the storms on it.
+///
+/// # Errors
+/// If the climate is not generated.
+pub fn weather_map_image(world: &World, day: f64, width: u32) -> Result<(image::RgbImage, Vec<StormNow>)> {
     use rayon::prelude::*;
     let body = world.load_body()?;
     let grid = world.manifest.grid.build()?;
@@ -270,8 +280,8 @@ pub fn weather_map(world: &World, day: f64, width: u32, to: &std::path::Path) ->
     let base: Vec<[u8; 3]> = pixels.iter().map(|p| p.0).collect();
     let pressure: Vec<f32> = pixels.iter().map(|p| p.1).collect();
     let rain: Vec<f32> = pixels.iter().map(|p| p.2).collect();
-    geoforge_store::render::render_weather(width, &base, &pressure, &rain, &fronts, &centres).save(to).map_err(geoforge_store::StoreError::from)?;
-    Ok(now.iter().map(|(s, f)| StormNow { name: s.name.clone(), kind: s.kind, lat: f.lat, lon: f.lon, depth_hpa: f.depth_hpa, age_days: day - s.born_day }).collect())
+    let img = geoforge_store::render::render_weather(width, &base, &pressure, &rain, &fronts, &centres);
+    Ok((img, now.iter().map(|(s, f)| StormNow { name: s.name.clone(), kind: s.kind, lat: f.lat, lon: f.lon, depth_hpa: f.depth_hpa, age_days: day - s.born_day }).collect()))
 }
 
 /// The northern season (−1 to 1) on Earth day `t`: the star's declination as a share of its
