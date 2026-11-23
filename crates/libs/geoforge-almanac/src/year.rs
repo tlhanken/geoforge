@@ -8,7 +8,7 @@ use crate::drought::{self, Droughts, Month};
 use crate::ephemeris;
 use crate::weather::{self, Day};
 use crate::Result;
-use geoforge_core::time::{Calendar, Date, Month as CalendarMonth};
+use geoforge_core::time::{Calendar, Date, Instant, Month as CalendarMonth};
 use geoforge_store::World;
 use serde::Serialize;
 
@@ -75,8 +75,7 @@ pub fn year(world: &World, lat: f64, lon: f64, year: i64, calendar: &dyn Calenda
     let days = forecast
         .days
         .into_iter()
-        .skip(lead)
-        .take(count)
+        .filter(|w| (first..last).contains(&clock.day_count(Instant::from_earth_days(w.day + 0.5 * step)).0))
         .map(|w| {
             let t = w.day;
             let sun = clock.day.and_then(|d| drought::sun_times(lat, obliquity * season(t + 0.5 * step), d.hours()));
@@ -86,7 +85,7 @@ pub fn year(world: &World, lat: f64, lon: f64, year: i64, calendar: &dyn Calenda
                 let Some(here) = at(world.manifest.focus) else { return Vec::new() };
                 sys.children(world.manifest.focus).iter().filter_map(|m| at(m.key).map(|pos| (m.name.clone(), ephemeris::lit_fraction(pos, here, [0.0; 3])))).collect()
             });
-            let date = calendar.date(geoforge_core::time::Instant::from_earth_days(t + 0.5 * step));
+            let date = calendar.date(Instant::from_earth_days(t + 0.5 * step));
             AlmanacDay { date, weather: w, sun, moons }
         })
         .collect();

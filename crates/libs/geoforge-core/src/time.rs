@@ -232,6 +232,19 @@ impl Clock {
     pub fn first_day_from(&self, t: Instant) -> i64 {
         ((t - Instant::EPOCH) / self.day_len() - 1e-9).ceil() as i64
     }
+
+    /// The year day `k` (from the epoch) belongs to: the one it begins in.
+    #[must_use]
+    pub fn year_of_day(&self, k: i64) -> i64 {
+        let n = self.year_of(self.day_start(k)).0;
+        if self.first_day_from(self.year_start(n + 1)) <= k {
+            n + 1
+        } else if self.first_day_from(self.year_start(n)) > k {
+            n - 1
+        } else {
+            n
+        }
+    }
 }
 
 /// A month of a year: its name, when it starts after the year's start, and how long it is.
@@ -275,25 +288,31 @@ pub trait Calendar: std::fmt::Debug + Send + Sync {
         format!("year {year}")
     }
 
+    /// The first day (counted from the epoch) of each month of year `year`, then the next
+    /// year's: months and years are counted in the same whole days, so rounding in a month's
+    /// start never moves a day between them.
+    fn first_days(&self, year: i64) -> Vec<i64> {
+        let clock = self.clock();
+        let start = clock.year_start(year);
+        self.months(year).iter().map(|m| clock.first_day_from(start + m.start)).chain(std::iter::once(clock.first_day_from(clock.year_start(year + 1)))).collect()
+    }
+
     /// The date of `t`.
     fn date(&self, t: Instant) -> Date {
         let clock = self.clock();
         let (k, of_day) = clock.day_count(t);
-        let begins = clock.day_start(k);
-        let (year, into) = clock.year_of(begins);
-        let months = self.months(year);
-        let month = months.iter().rposition(|m| m.start <= into).unwrap_or(0);
-        let first = clock.first_day_from(clock.year_start(year) + months[month].start);
-        Date { year, month, day: (k - first).max(0) as u32, of_day }
+        let year = clock.year_of_day(k);
+        let firsts = self.first_days(year);
+        let month = firsts[..firsts.len() - 1].iter().rposition(|&f| f <= k).unwrap_or(0);
+        Date { year, month, day: (k - firsts[month]).max(0) as u32, of_day }
     }
 
     /// When `date` begins (its `of_day` ignored); `None` if its month or day is not in its year.
     fn start_of(&self, date: &Date) -> Option<Instant> {
-        let clock = self.clock();
-        let m = self.months(date.year).into_iter().nth(date.month)?;
-        let from = clock.year_start(date.year) + m.start;
-        let begins = clock.day_start(clock.first_day_from(from) + i64::from(date.day));
-        (begins - from < m.len).then_some(begins)
+        let firsts = self.first_days(date.year);
+        let (&first, &next) = (firsts.get(date.month)?, firsts.get(date.month + 1)?);
+        let k = first + i64::from(date.day);
+        (k < next).then(|| self.clock().day_start(k))
     }
 
     /// The date of `t` written out: the weekday if the calendar keeps a week, the day and
@@ -525,7 +544,7 @@ mod tests {
         for k in -400..400 {
             let t = Instant::from_earth_days(f64::from(k) * 9.37 + 0.3);
             let d = cal.date(t);
-            assert_eq!(d.year, clock.year_of(clock.day_start(clock.day_count(t).0)).0, "a day is in the year it begins in");
+            assert_eq!(d.year, clock.year_of_day(clock.day_count(t).0), "a day is in the year it begins in");
             let start = cal.start_of(&d).unwrap();
             assert!(start <= t && t - start < clock.day_len(), "{} {d:?}", cal.name());
             assert!((((t - start) / clock.day_len()) - d.of_day).abs() < 1e-6);
@@ -596,6 +615,32 @@ mod tests {
         assert!(Custom::new(mars, full).is_err());
         let fraction = CalendarDef { months: vec![MonthDef { name: "Half".into(), days: 30.5 }, MonthDef { name: "Rest".into(), days: 0.0 }], ..def };
         assert!(Custom::new(mars, fraction).is_err());
+    }
+
+    #[test]
+    fn whole_day_months_keep_their_lengths() {
+        // Month starts summed from lengths and day starts multiplied out differ in the last
+        // bit; neither may move a day into the wrong month.
+        let months = (0..11)
+            .map(|i| MonthDef { name: format!("m{i}"), days: [31.0, 28.0, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0][i] })
+            .chain(std::iter::once(MonthDef { name: "m11".into(), days: 0.0 }));
+        let def = CalendarDef { name: "g".into(), months: months.collect(), week: vec![], present_year: 0, era: None };
+        for clock in [Clock::new(Some(Span::from_earth_days(1.0)), Span::from_earth_days(365.0)), earth(), Clock::new(Some(Span::from_hours(24.6)), Span::from_earth_days(686.98))] {
+            let def =
+                if clock.days_per_year() > 400.0 { CalendarDef { months: def.months.iter().map(|m| MonthDef { days: 2.0 * m.days, ..m.clone() }).collect(), ..def.clone() } } else { def.clone() };
+            let c = Custom::new(clock, def.clone()).unwrap();
+            for y in -3..4 {
+                let (a, b) = (clock.first_day_from(clock.year_start(y)), clock.first_day_from(clock.year_start(y + 1)));
+                let mut counts = vec![0; 12];
+                for k in a..b {
+                    let d = c.date(clock.day_start(k));
+                    assert_eq!(d.year, y);
+                    counts[d.month] += 1;
+                    assert_eq!(c.start_of(&d), Some(clock.day_start(k)));
+                }
+                assert!(counts[..11].iter().zip(&def.months).all(|(&n, m)| f64::from(n) == m.days), "year {y}: {counts:?}");
+            }
+        }
     }
 
     #[test]

@@ -191,7 +191,7 @@ impl Wetness {
     pub fn new(seed: Seed, lat: f64, lon: f64, annual_mm: f64, year_days: f64, basin: Option<Basin>) -> Self {
         let draw = |label: &[u8]| unit(seed.child(b"cycle").child(label));
         let width = basin.map_or(0.0, |b| b.width_km);
-        let earth_year = crate::exposure::EARTH_YEAR_DAYS * width.max(1.0) / EARTH_BASIN_KM;
+        let earth_year = crate::exposure::EARTH_YEAR_DAYS * basin.map_or(1.0, |b| b.width_km / EARTH_BASIN_KM);
         let periods = [2.5 + 2.5 * draw(b"p1"), 4.0 + 3.0 * draw(b"p2")].map(|y| y * earth_year);
         let (along, weight) = basin.map_or((0.0, 0.0), |b| b.response(lat, lon));
         let pattern = weight * along + (1.0 - weight) * lattice(seed.child(b"pattern"), lat, lon, PATTERN_DEG);

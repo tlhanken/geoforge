@@ -69,10 +69,10 @@ pub struct Day {
     /// Rain or the water of snow, mm.
     pub precipitation_mm: f64,
     pub snow: bool,
-    /// The soil's water at the day's end, a share of the 150 mm it holds (over land; a bucket
-    /// filled by rain and snowmelt, emptied by evaporation).
+    /// The soil's water at the day's end, a share of the 150 mm it holds: a bucket filled by
+    /// rain and snowmelt, emptied by evaporation (1 at sea).
     pub soil: f64,
-    /// Snow lying at the day's end, mm of water.
+    /// Snow lying at the day's end, mm of water (0 at sea).
     pub snowpack_mm: f64,
     pub wind_m_s: f64,
     /// The bearing the wind blows from, degrees.
@@ -441,9 +441,9 @@ pub fn simulate(
     let first = (from_day / step_days).floor() as i64;
     let (mut anomaly, mut wet) = (0.0, false);
     // The soil and snow at the spin-up's start, from two normal years of half-months before.
-    let (mut soil, mut pack) = (0.5 * crate::drought::SOIL_MM, 0.0);
+    let (mut soil, mut pack) = (crate::drought::SOIL_MM, 0.0);
     let begin = (first - SPIN_UP) as f64 * step_days;
-    for i in (1..=48).rev() {
+    for i in (1..=48).rev().filter(|_| !climate.at_sea) {
         let t = begin - f64::from(i) * year / 24.0;
         let (c, r, _) = normal(t);
         (soil, pack) = crate::drought::bucket(soil, pack, r * slow(t) * year / 24.0, c < 0.5, c, year / 24.0);
@@ -473,7 +473,9 @@ pub fn simulate(
         let amount = if wet { -mean_amount * draw(b"amount").max(1e-12).ln() } else { 0.0 };
         let mean_c = normal_c + anomaly + spread * (e.warmth - place.warmth);
         let snow = wet && mean_c < 0.5;
-        (soil, pack) = crate::drought::bucket(soil, pack, amount, snow, mean_c, step_days);
+        if !climate.at_sea {
+            (soil, pack) = crate::drought::bucket(soil, pack, amount, snow, mean_c, step_days);
+        }
         if n < first {
             continue;
         }
