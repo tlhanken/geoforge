@@ -112,7 +112,7 @@ Getting started with the command: `docs/GETTING_STARTED.md`. Formatting follows
 |---|---|
 | `geoforge-core` | data and the body's own physics: keys, seeds, geometry, grids, the five shapes, body and system types, products, the `Generator` trait, radiation, magnetism |
 | `geoforge-names` | pronounceable names from a seed (no dependencies) |
-| `geoforge-cosmos` | galaxies, stellar evolution, systems and their bodies, the stellar neighbourhood |
+| `geoforge-cosmos` | galaxies (components, morphologies), their stars by sectors with edits, stellar evolution, systems and their bodies, the night sky |
 | `geoforge-surface` | the surface layers as `Generator`s |
 | `geoforge-analysis` | derived readings of the surface: Köppen, soils and deposits (and the giant-deposit generator), hazards, oceans, pressure |
 | `geoforge-store` | the world directory: manifest, products, edit views and patches, renders, derived cache |

@@ -54,6 +54,17 @@ pub fn galactic_system(seed: Seed, galaxy: &Galaxy) -> Result<Generated, Barren>
     build(seed, &draw_phenotype(galaxy, seed))
 }
 
+/// The system at star `id` of `field`, seeded by the star's identity; `None` if the field
+/// has no such star.
+///
+/// # Errors
+/// When the system has no solid body to focus on.
+pub fn system_at(field: &crate::starfield::Starfield, id: &geoforge_core::galactic::StarId) -> Option<Result<Generated, Barren>> {
+    let star = field.star(id)?;
+    let seed = id.seed(field.galaxy_seed());
+    Some(build(seed, &crate::population::of_star(&star, field.galaxy(), field.galaxy_seed(), seed)))
+}
+
 /// The system of phenotype `ph`.
 ///
 /// # Errors
@@ -339,7 +350,13 @@ mod tests {
             let Ok(gen) = galactic_system(Seed(s), &g) else { continue };
             let ctx = any_body(&gen.system, gen.focus).unwrap();
             let host = gen.system.nodes.iter().find_map(|n| if let NodeKind::Star(st) = &n.node { Some(st.clone()) } else { None }).unwrap();
-            if host.stage.is_main_sequence() && host.mass_solar < 0.4 && ctx.interior.has_surface_liquid_water() && gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Star(_))).count() == 1
+            // Locking takes time: worlds of young systems may still turn.
+            let old = gen.system.root.epoch.system_age_gyr > 1.0;
+            if old
+                && host.stage.is_main_sequence()
+                && host.mass_solar < 0.4
+                && ctx.interior.has_surface_liquid_water()
+                && gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Star(_))).count() == 1
             {
                 let period_h = orbital_period_days(ctx.orbit.a_au, host.mass_solar * SOLAR_MASS_KG) * 24.0;
                 assert!((ctx.exterior.rotation_h / period_h - 1.0).abs() < 0.34, "seed {s}: day {} h, year {period_h} h", ctx.exterior.rotation_h);

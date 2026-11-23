@@ -12,7 +12,17 @@ use geoforge_store::World;
 use std::path::{Path, PathBuf};
 
 #[allow(clippy::too_many_arguments)]
-pub fn new_world(dir: &Path, seed: u64, galaxy: GalaxyPreset, habitable: bool, width: u32, body: Option<PathBuf>, archetype: Option<geoforge_core::Archetype>, focus: Option<String>) -> R<()> {
+pub fn new_world(
+    dir: &Path,
+    seed: u64,
+    galaxy: GalaxyPreset,
+    galaxy_file: Option<&Path>,
+    habitable: bool,
+    width: u32,
+    body: Option<PathBuf>,
+    archetype: Option<geoforge_core::Archetype>,
+    focus: Option<String>,
+) -> R<()> {
     if seed > i64::MAX as u64 {
         return Err("seed must be at most 9223372036854775807".into());
     }
@@ -23,8 +33,12 @@ pub fn new_world(dir: &Path, seed: u64, galaxy: GalaxyPreset, habitable: bool, w
         let (sys, b) = geoforge_cosmos::sol::archetype(Seed(seed), a);
         (system, body) = (Some(sys), Some(b));
     }
-    let recipe = if habitable { Recipe::Habitable } else { Recipe::Galaxy(galaxy.galaxy()) };
+    let own: Option<geoforge_cosmos::Galaxy> = galaxy_file.map(|p| -> R<_> { Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?) }).transpose()?;
+    let recipe = if habitable { Recipe::Habitable } else { Recipe::Galaxy(own.clone().unwrap_or_else(|| galaxy.galaxy())) };
     let w = pipe::create_world(dir, &NewWorld { seed: Seed(seed), recipe, grid: GridSpec::Equirect { width, height: width / 2 }, body, system, focus })?;
+    if let Some(g) = &own {
+        w.save_doc(geoforge_store::GALAXY_MODEL, g)?;
+    }
     show(&w)?;
     println!("\ncreated {} — next: geoforge generate {}", dir.display(), dir.display());
     Ok(())

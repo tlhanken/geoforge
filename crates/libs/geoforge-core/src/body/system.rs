@@ -32,13 +32,29 @@ pub struct SystemRoot {
     pub present_jd_tt: Option<f64>,
 }
 
-/// Where in a galaxy's population a system was drawn: the roster's "location".
+/// Where a system is in its galaxy: the roster's "location".
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GalacticSite {
     /// The galaxy model's name, e.g. "Milky Way".
     pub galaxy: String,
     /// Distance from the galaxy's centre, kpc (the Sun: 8.2).
     pub radius_kpc: f64,
+    /// Position in the galaxy, pc from its centre, z toward its north pole. `None` (systems
+    /// made before positions): at `radius_kpc` in the plane, at an azimuth from the system's
+    /// seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_pc: Option<[f64; 3]>,
+    /// The seed of the galaxy's stars. `None`: drawn from the system's seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub galaxy_seed: Option<crate::seed::Seed>,
+    /// The star the system was made at, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub star: Option<crate::galactic::StarId>,
+    /// How the system's frame sits in the galaxy: its rows are the system frame's axes in
+    /// galactic coordinates as seen from the system (x toward the galaxy's centre, z toward
+    /// its north pole). `None`: a rotation from the system's seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<[[f64; 3]; 3]>,
 }
 
 /// Keplerian orbital elements. The period is derived from `a_au` and the parent's mass.

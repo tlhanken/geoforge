@@ -11,13 +11,15 @@
 //!
 //! | Module | Concern |
 //! |---|---|
-//! | [`galaxy`] | galaxy models: initial mass function, star formation history, metals |
-//! | [`population`] | a system's phenotype drawn from a galaxy: site, age, metals, stars at birth |
+//! | [`galaxy`] | galaxy models: components, shapes, arms, dust, morphologies |
+//! | [`sectors`] | a galaxy's stars generated where they are looked at, by nested cubes |
+//! | [`starfield`] | the stars with a world's edits over them |
+//! | [`population`] | a system's phenotype drawn from a galaxy (or taken from a star): site, age, metals, stars at birth |
 //! | [`stars`] | stellar evolution: main sequence, giants, white dwarfs, neutron stars, black holes |
 //! | `planets` | planets for any star at birth, and what survives the star's death |
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
-//! | [`sky`] | the naked-eye stars around a system and its galaxy's glow |
+//! | [`sky`] | the naked-eye stars around a system, dimmed by dust, and its galaxy's glow |
 //! | [`sol`] | the real Solar System from published elements, at a moment of its calendar |
 //! | [`system`] | the habitable recipe's orbital tree: star, planets, belts, moons |
 //! | [`worlds`] | what each body is made of: shells, air, water, regime; the CO₂ thermostat |
@@ -32,8 +34,10 @@ pub mod galactic;
 pub mod galaxy;
 mod planets;
 pub mod population;
+pub mod sectors;
 pub mod sky;
 pub mod sol;
+pub mod starfield;
 pub mod stars;
 pub mod system;
 pub mod worlds;
@@ -41,6 +45,7 @@ pub mod worlds;
 pub use context::{any_body, belt_member, body_context, find_body};
 pub use galactic::{galactic_system, Barren};
 pub use galaxy::{Galaxy, GalaxyPreset};
+pub use starfield::Starfield;
 pub use system::{generate_system, Generated};
 pub use worlds::{describe, interior_for, regulate_co2, Setting};
 

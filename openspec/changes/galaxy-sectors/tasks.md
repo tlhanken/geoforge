@@ -1,34 +1,39 @@
 # Tasks — galaxy-sectors
 
 ## 1. Galaxy components
-- [ ] 1.1 Component shapes and densities: exponential disk with age-dependent height, Sérsic spheroid, bar, flattened power-law halo, logarithmic arms, nucleus
-- [ ] 1.2 The Milky Way as components, its numbers checked against sources (local densities, thick disk and halo shares, scale lengths and heights, bar, arms)
-- [ ] 1.3 Morphologies (Sa–Sd barred or not, S0, E, dE/dSph, dIrr, starburst) replacing the presets; galaxy documents load
-- [ ] 1.4 Luminosity tables per component and brightness bin
+- [x] 1.1 Component shapes and densities: exponential disk with age-dependent height, exponential ellipsoid (bulge, bar), Hernquist spheroid, flattened broken power-law halo, Plummer nucleus, logarithmic arms (`galaxy/{shape, arms}.rs`)
+- [x] 1.2 The Milky Way as components, its numbers from Bland-Hawthorn & Gerhard (2016) and Vallée (2015); the thin disk's mass set by the 10 pc census (`galaxy/presets.rs`)
+- [x] 1.3 Morphologies (Sa–Sd barred or not, S0, E, dSph, dIrr, starburst) replacing the presets; galaxy documents load (`new --galaxy-file`, `galaxy/galaxy.json`)
+- [x] 1.4 Luminosity tables per population and brightness bin (`sectors/tables.rs`); the galaxy-integrated IMF (α = 2.6 above 1 M☉)
 
 ## 2. Sectors
-- [ ] 2.1 Cube levels per bin from its reach; cube keys
-- [ ] 2.2 Stars per cube: Poisson counts on the integrated density, positions by the density, kinds from the tables
-- [ ] 2.3 Star identities and their seeds
-- [ ] 2.4 Queries: within a radius to an absolute magnitude; brighter than an apparent magnitude from a point
+- [x] 2.1 Cube levels per bin from its reach; cube keys (`sectors/bins.rs`)
+- [x] 2.2 Stars per cube: Poisson counts on the integrated density, positions by the density, kinds from the tables (`sectors/field.rs`); a disk's plane split once for all its age slices
+- [x] 2.3 Star identities and their seeds (`geoforge-core::galactic::StarId`)
+- [x] 2.4 Queries: within a radius to an absolute magnitude (`near`); brighter than an apparent magnitude from a point (`visible`); a star by identity (`star`); cubes in parallel
 
 ## 3. Young groups and dust
-- [ ] 3.1 Birth events: rate from star formation, masses, ages, bound share, spreading, members per bin on demand; field tables over 300 Myr
-- [ ] 3.2 Dust layer and clouds; extinction along a ray
+- [x] 3.1 Birth events of 100 M☉ and more (smaller groups as young field stars): rate from star formation, masses, ages, bound share, spreading, members per bin on demand (`sectors/groups.rs`)
+- [x] 3.2 Dust layer and clouds; extinction along a ray; an angular index of clouds per observer (`sectors/dust.rs`)
 
 ## 4. The night sky
-- [ ] 4.1 The sky from sectors, the system's own stars removed, in the system's frame
-- [ ] 4.2 The glow from all components through the dust, cached; a sum of sources
-- [ ] 4.3 Checks at the Sun's place: naked-eye count, first magnitude, giants, the Gould Belt, the 10 pc census, the band and bulge
+- [x] 4.1 The sky from sectors, the system's own stars removed, in the system's frame (`sky.rs`); crowded places listed to a brighter limit
+- [x] 4.2 The glow from all populations' unresolved light through the dust
+- [x] 4.3 Checks at the Sun's place: about 9,000 naked-eye stars, 20–25 of the first magnitude, giants the commonest, B stars in groups, 0.08 systems per pc³, the band bright toward Sagittarius and Cygnus on the real Earth
 
 ## 5. A system's place
-- [ ] 5.1 `GalacticSite` with position and star identity
-- [ ] 5.2 Standalone systems draw a position; the habitable recipe keeps a Sun-like primary
-- [ ] 5.3 A system made at a star from its phenotype and seed
-- [ ] 5.4 Existing worlds placed at their stored radius
+- [x] 5.1 `GalacticSite` with position, galaxy seed, star identity and orientation
+- [x] 5.2 Standalone systems draw a position from every component by mass; the habitable recipe a Sun-like place; the real Earth the Sun's, its ecliptic turned as it is
+- [x] 5.3 A system made at a star from its phenotype and seed (`galactic::system_at`, `geoforge visit`)
+- [x] 5.4 Existing worlds placed at their stored radius
 
 ## 6. Edits
-- [ ] 6.1 Edit types and `galaxy/stars.json` in the store
-- [ ] 6.2 Edits applied in every query
-- [ ] 6.3 `geoforge star add|move|change|remove`; `geoforge stars export|import`
-- [ ] 6.4 Constellations: stored per observer, drawn on the chart, `geoforge constellation add|remove`
+- [x] 6.1 Edit types (`StarEdits`, `StarRecord`, `ClusterEdit`, `Constellation`) and `galaxy/stars.json`, `constellations.json` in the store
+- [x] 6.2 Edits applied in every query (`starfield.rs`)
+- [x] 6.3 `geoforge star add|move|change|remove|cluster`; `geoforge stars near|export|import`
+- [x] 6.4 Constellations: stored per observer, drawn on the chart, `geoforge constellation add|remove|list`
+
+## 7. Next
+- [ ] 7.1 Brown dwarfs: the IMF below 0.08 M☉ and their cooling (item 14)
+- [ ] 7.2 Other galaxies in the night sky, from the universe layers (TODO 12b)
+- [ ] 7.3 A Gould-Belt-like local structure: the Sun's sky sits in a local excess of young stars

@@ -175,11 +175,15 @@ pub fn build(world: &World, opts: &Options) -> Result<Report> {
 
     // The sky.
     let sky_html = match &system {
-        Some(sys) => match geoforge_almanac::sky::sky(sys, world.manifest.focus, opts.day, calendar.year_days) {
-            Ok(s) => {
+        Some(sys) => match geoforge_almanac::sky::starfield(world)
+            .map_err(|e| e.to_string())
+            .and_then(|field| geoforge_almanac::sky::sky(sys, world.manifest.focus, opts.day, calendar.year_days, &field).map(|s| (s, field)))
+        {
+            Ok((s, field)) => {
                 let (gw, gh) = (360, 180);
+                let lines: Vec<[(f64, f64); 2]> = s.figures(&world.load_constellations().unwrap_or_default(), &field).iter().flat_map(|f| f.lines.iter().copied()).collect();
                 let points: Vec<SkyPoint> = s.stars.iter().chain(s.bodies.iter().filter(|b| b.v <= geoforge_cosmos::sky::NAKED_EYE)).map(sky_point).collect();
-                images.push(("sky".into(), render::render_sky(opts.width, &s.glow(gw, gh), gw, &points, &s.ecliptic)));
+                images.push(("sky".into(), render::render_sky(opts.width, &s.glow(gw, gh), gw, &points, &s.ecliptic, &lines)));
                 let key = |points: &[SkyPoint]| render::render_sky_key(56, KEY_SCALE, points);
                 images.push(("sky_key_magnitude".into(), key(&MAGNITUDES.map(|v| key_point(v, 5800.0, false)))));
                 images.push(("sky_key_colour".into(), key(&SPECTRAL.map(|(_, t)| key_point(1.0, t, false)))));

@@ -21,7 +21,11 @@
 //! Orbits here are fixed ellipses, so every orbit's size is set from its measured period
 //! (the two-body period then is the real one): the Moon's from the sidereal month, which the
 //! Sun's pull makes 0.1% longer than its true size gives, a drift of 6° a year otherwise.
-//! The neighbourhood stars of the sky are still drawn from the galaxy model.
+//! The neighbourhood stars of the sky are still drawn from the galaxy model, around the Sun's
+//! place (8.2 kpc from the centre, 25 pc above the plane; Bland-Hawthorn & Gerhard 2016) and
+//! with the J2000 ecliptic turned in the galaxy as it is (the galactic axes of the
+//! Hipparcos catalogue, ESA 1997, vol. 1 §1.5.3), so the Milky Way crosses the sky where it
+//! does.
 //!
 //! A world's present is its northern spring equinox ([`archetype`]): for Earth the March
 //! equinox of 2026, for another body its own last one before that.
@@ -205,10 +209,27 @@ pub fn at(seed: Seed, jd_tt: f64) -> SolarSystem {
         name: "Solar System".into(),
         epoch: Epoch { system_age_gyr: 4.568 },
         placement: None,
-        site: Some(GalacticSite { galaxy: "Milky Way".into(), radius_kpc: 8.2 }),
+        site: Some(GalacticSite {
+            galaxy: "Milky Way".into(),
+            radius_kpc: 8.2,
+            position_pc: Some([8200.0, 0.0, 25.0]),
+            galaxy_seed: Some(seed.child(b"galaxy")),
+            star: None,
+            orientation: Some(ecliptic_in_galactic()),
+        }),
         present_jd_tt: Some(jd_tt),
     };
     SolarSystem { root, nodes }
+}
+
+/// The J2000 ecliptic's axes in galactic coordinates (rows).
+fn ecliptic_in_galactic() -> [[f64; 3]; 3] {
+    // The galactic axes (toward the centre, longitude 90°, the north pole) in the ICRS.
+    const GALACTIC: [[f64; 3]; 3] =
+        [[-0.054_875_560_4, -0.873_437_090_2, -0.483_835_015_5], [0.494_109_427_9, -0.444_829_630_0, 0.746_982_244_5], [-0.867_666_149_0, -0.198_076_373_4, 0.455_983_776_2]];
+    let (s, c) = OBLIQUITY_J2000_DEG.to_radians().sin_cos();
+    let ecliptic = [[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]];
+    ecliptic.map(|e| GALACTIC.map(|g| g[0] * e[0] + g[1] * e[1] + g[2] * e[2]))
 }
 
 /// The Solar System and the archetype's body in it, at that body's present: Earth's 2026

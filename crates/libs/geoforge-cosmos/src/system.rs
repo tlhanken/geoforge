@@ -193,8 +193,19 @@ pub fn generate_system(seed: Seed) -> Generated {
         nodes.extend(moons.into_iter().filter(|n| n.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
-    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: None, present_jd_tt: None };
+    let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: Some(sunlike_site(seed)), present_jd_tt: None };
     Generated { system: SolarSystem { root, nodes }, focus }
+}
+
+/// A place in the Milky Way like the Sun's: within a kiloparsec or so of its radius, at any
+/// azimuth, in the old thin disk (an exponential of 250 pc in height).
+fn sunlike_site(seed: Seed) -> geoforge_core::body::GalacticSite {
+    let g = crate::galaxy::Galaxy::milky_way();
+    let mut d = Draw::new(seed.child(b"site"));
+    let r = (g.reference_kpc + d.normal(0.0, 0.7)).clamp(g.reference_kpc - 1.5, g.reference_kpc + 1.5) * 1000.0;
+    let phi = std::f64::consts::TAU * d.u();
+    let z = -250.0 * d.u().max(1e-12).ln() * if d.u() < 0.5 { 1.0 } else { -1.0 };
+    crate::population::site(&g, [r * phi.cos(), r * phi.sin(), z], seed.child(b"galaxy"), None, &mut d)
 }
 
 /// A planet being placed: its orbit, settled with its neighbours before it gets a key.

@@ -49,6 +49,11 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+/// Where a world keeps its galaxy model, its star edits and its constellations.
+pub const GALAXY_MODEL: &str = "galaxy/galaxy.json";
+const STAR_EDITS: &str = "galaxy/stars.json";
+const CONSTELLATIONS: &str = "constellations.json";
+
 /// `world.toml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
@@ -183,6 +188,66 @@ impl World {
         std::fs::write(self.body_dir().join("body.json"), serde_json::to_string_pretty(b)?)?;
         Ok(())
     }
+    /// The world's galaxy documents: the galaxy model (`galaxy.json`, if the world has its
+    /// own) and the edits over its stars (`stars.json`).
+    #[must_use]
+    pub fn galaxy_dir(&self) -> PathBuf {
+        self.root.join("galaxy")
+    }
+
+    /// A JSON document at `rel` under the world, if it exists.
+    ///
+    /// # Errors
+    /// On IO or parse errors (a missing file is `Ok(None)`).
+    pub fn load_doc<T: serde::de::DeserializeOwned>(&self, rel: &str) -> Result<Option<T>> {
+        let p = self.root.join(rel);
+        if !p.exists() {
+            return Ok(None);
+        }
+        Ok(Some(serde_json::from_str(&std::fs::read_to_string(p)?)?))
+    }
+
+    /// Write `doc` as JSON at `rel` under the world.
+    ///
+    /// # Errors
+    /// On IO errors.
+    pub fn save_doc<T: Serialize>(&self, rel: &str, doc: &T) -> Result<()> {
+        let p = self.root.join(rel);
+        if let Some(dir) = p.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(p, serde_json::to_string_pretty(doc)?)?;
+        Ok(())
+    }
+
+    /// The edits over the galaxy's generated stars (none if the world has made none).
+    ///
+    /// # Errors
+    /// On IO or parse errors.
+    pub fn load_star_edits(&self) -> Result<geoforge_core::galactic::StarEdits> {
+        Ok(self.load_doc(STAR_EDITS)?.unwrap_or_default())
+    }
+
+    /// # Errors
+    /// On IO errors.
+    pub fn save_star_edits(&self, edits: &geoforge_core::galactic::StarEdits) -> Result<()> {
+        self.save_doc(STAR_EDITS, edits)
+    }
+
+    /// The constellations the focus's sky is drawn with.
+    ///
+    /// # Errors
+    /// On IO or parse errors.
+    pub fn load_constellations(&self) -> Result<Vec<geoforge_core::galactic::Constellation>> {
+        Ok(self.load_doc(CONSTELLATIONS)?.unwrap_or_default())
+    }
+
+    /// # Errors
+    /// On IO errors.
+    pub fn save_constellations(&self, c: &[geoforge_core::galactic::Constellation]) -> Result<()> {
+        self.save_doc(CONSTELLATIONS, &c)
+    }
+
     /// The focus world's own calendar (`calendar.json` beside its `body.json`), if it has one.
     ///
     /// # Errors

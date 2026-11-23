@@ -1,6 +1,7 @@
 //! A world's sky on a date: the naked-eye stars of its neighbourhood, the galaxy's glow, the
-//! other stars and planets of its system, its moons and their phases, and the eclipses to
-//! come. All of it is derived from the system file and its seed; nothing is stored.
+//! other stars and planets of its system, its moons and their phases, the eclipses to come,
+//! and the world's constellations. The stars are the galaxy's ([`Starfield`]) around the
+//! system's place, with the world's edits; all else is derived from the system file.
 //!
 //! Coordinates are the world's own right ascension and declination: its equator, and its
 //! northern spring equinox (the present) at RA 0.
@@ -11,10 +12,13 @@
 //! 0.49, Neptune 0.44; small bodies 0.1) and a Lambert sphere's phase law.
 
 use crate::ephemeris::{self, Eclipse, Equatorial};
+use crate::Result;
 use geoforge_core::body::{BodyClass, NodeKind, SolarSystem, AU_KM};
+use geoforge_core::galactic::{Constellation, StarId};
 use geoforge_core::key::Key;
-use geoforge_cosmos::sky::{self as stars, Neighbourhood, LY_PER_PC, NAKED_EYE};
-use geoforge_cosmos::{Galaxy, GalaxyPreset};
+use geoforge_cosmos::sky::{self as stars, Neighbourhood, Observer, LY_PER_PC, NAKED_EYE};
+use geoforge_cosmos::{Galaxy, Starfield};
+use geoforge_store::World;
 use serde::Serialize;
 
 /// Parsecs per AU.
@@ -36,6 +40,9 @@ pub enum Kind {
 /// Something in the sky.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Object {
+    /// A neighbourhood star's identity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<StarId>,
     pub name: Option<String>,
     pub kind: Kind,
     pub ra_deg: f64,
@@ -81,23 +88,75 @@ pub struct Sky {
     #[serde(skip)]
     neighbourhood: Neighbourhood,
     #[serde(skip)]
-    frame: Equatorial,
+    pub frame: Frame,
 }
 
-/// The sky of `world` on `day`, with the eclipses over the `eclipse_days` that follow.
+/// The stars of `world`'s galaxy as it has them: its own galaxy model if it has one, its
+/// edits over them.
+///
+/// # Errors
+/// If the world has no system, or its galaxy documents do not read.
+pub fn starfield(world: &World) -> Result<Starfield> {
+    let system = world.load_system()?.ok_or_else(|| crate::Error::Invalid("this world has no solar system (a hand-made body), so no galaxy around it".into()))?;
+    let galaxy: Option<Galaxy> = world.load_doc(geoforge_store::GALAXY_MODEL)?;
+    Ok(Starfield::of_system(&system, galaxy, world.load_star_edits()?))
+}
+
+/// A world's sky frame: where it sees from in its galaxy, and its equator and equinox.
+#[derive(Debug, Clone)]
+pub struct Frame {
+    pub observer: Observer,
+    pub equatorial: Equatorial,
+}
+
+impl Frame {
+    /// The frame of `world` in `system` among `field`'s stars.
+    ///
+    /// # Errors
+    /// If `world` is not a body orbiting something in `system`.
+    pub fn of(system: &SolarSystem, world: Key, field: &Starfield) -> std::result::Result<Self, String> {
+        let equatorial = Equatorial::of(system, world).ok_or("the world orbits nothing")?;
+        Ok(Self { observer: Observer::of_system(system, field.galaxy().reference_kpc), equatorial })
+    }
+
+    /// Where `p` (pc, in the galaxy) lies in this sky: RA, Dec (degrees) and distance (pc).
+    #[must_use]
+    pub fn radec_of(&self, p: [f64; 3]) -> (f64, f64, f64) {
+        let v = [0, 1, 2].map(|k| p[k] - self.observer.position_pc[k]);
+        let d = norm(v).max(1e-9);
+        let (ra, dec) = self.equatorial.ra_dec(self.observer.to_system_frame(v.map(|x| x / d)));
+        (ra, dec, d)
+    }
+
+    /// The place in the galaxy (pc) at RA and Dec (degrees), `distance_pc` away.
+    #[must_use]
+    pub fn galactic_of(&self, ra_deg: f64, dec_deg: f64, distance_pc: f64) -> [f64; 3] {
+        let (ra, dec) = (ra_deg.to_radians(), dec_deg.to_radians());
+        let local = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
+        let f = &self.equatorial;
+        let dir = [0, 1, 2].map(|k| f.x[k] * local[0] + f.y[k] * local[1] + f.z[k] * local[2]);
+        let u = self.observer.to_galaxy_frame(dir);
+        [0, 1, 2].map(|k| self.observer.position_pc[k] + distance_pc * u[k])
+    }
+}
+
+/// The sky of `world` on `day` among `field`'s stars, with the eclipses over the
+/// `eclipse_days` that follow.
 ///
 /// # Errors
 /// If `world` is not a body orbiting something in `system`.
-pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64) -> Result<Sky, String> {
-    let frame = Equatorial::of(system, world).ok_or("the world orbits nothing")?;
-    let (galaxy, radius_kpc) = galaxy_of(system);
-    let neighbourhood = stars::neighbourhood(&galaxy, radius_kpc, system.root.seed.child(b"sky"));
+pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64, field: &Starfield) -> std::result::Result<Sky, String> {
+    let place = Frame::of(system, world, field)?;
+    let frame = place.equatorial;
+    let neighbourhood = stars::neighbourhood(field, &place.observer, NAKED_EYE);
+    let radius_kpc = neighbourhood.radius_kpc;
     let stars = neighbourhood
         .stars
         .iter()
         .map(|s| {
             let (ra, dec) = frame.ra_dec(s.direction);
             Object {
+                id: Some(s.id),
                 name: s.name.clone(),
                 kind: Kind::Star,
                 ra_deg: ra,
@@ -127,7 +186,14 @@ pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64) -> Res
                 .collect()
         })
         .unwrap_or_default();
-    Ok(Sky { day, galaxy: galaxy.name.clone(), radius_kpc, stars, bodies, eclipses: ephemeris::eclipses(system, world, day, eclipse_days), ecliptic, neighbourhood, frame })
+    Ok(Sky { day, galaxy: neighbourhood.galaxy.clone(), radius_kpc, stars, bodies, eclipses: ephemeris::eclipses(system, world, day, eclipse_days), ecliptic, neighbourhood, frame: place })
+}
+
+/// A constellation's lines on the sky, (RA, Dec) at each end, degrees.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Figure {
+    pub name: String,
+    pub lines: Vec<[(f64, f64); 2]>,
 }
 
 impl Sky {
@@ -141,7 +207,7 @@ impl Sky {
             let (ra, dec) = chart_coords(i % width, i / width, width, height);
             let (ra, dec) = (ra.to_radians(), dec.to_radians());
             let local = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
-            let f = &self.frame;
+            let f = &self.frame.equatorial;
             let dir = [0, 1, 2].map(|k| f.x[k] * local[0] + f.y[k] * local[1] + f.z[k] * local[2]);
             *v = self.neighbourhood.glow(dir) as f32;
         }
@@ -151,26 +217,38 @@ impl Sky {
     }
 }
 
+impl Sky {
+    /// Where `p` (pc, in the galaxy) lies in this sky: RA, Dec (degrees) and distance (pc).
+    #[must_use]
+    pub fn radec_of(&self, p: [f64; 3]) -> (f64, f64, f64) {
+        self.frame.radec_of(p)
+    }
+
+    /// The place in the galaxy (pc) at RA and Dec (degrees), `distance_pc` away.
+    #[must_use]
+    pub fn galactic_of(&self, ra_deg: f64, dec_deg: f64, distance_pc: f64) -> [f64; 3] {
+        self.frame.galactic_of(ra_deg, dec_deg, distance_pc)
+    }
+
+    /// The figures of `constellations`, their stars found in this sky or else in `field`.
+    #[must_use]
+    pub fn figures(&self, constellations: &[Constellation], field: &Starfield) -> Vec<Figure> {
+        let at = |id: &StarId| {
+            self.stars.iter().find(|o| o.id == Some(*id)).map(|o| (o.ra_deg, o.dec_deg)).or_else(|| {
+                field.star(id).map(|s| {
+                    let (ra, dec, _) = self.radec_of(s.position_pc);
+                    (ra, dec)
+                })
+            })
+        };
+        constellations.iter().map(|c| Figure { name: c.name.clone(), lines: c.lines.iter().filter_map(|[a, b]| Some([at(a)?, at(b)?])).collect() }).collect()
+    }
+}
+
 /// RA and Dec at the centre of chart pixel (x, y): RA 360 at the left edge, 0 at the right.
 #[must_use]
 pub fn chart_coords(x: usize, y: usize, width: usize, height: usize) -> (f64, f64) {
     (360.0 * (1.0 - (x as f64 + 0.5) / width as f64), 90.0 - 180.0 * (y as f64 + 0.5) / height as f64)
-}
-
-/// The galaxy the system was drawn from and how far from its centre; the Milky Way at the
-/// Sun's radius for a habitable-recipe system.
-fn galaxy_of(system: &SolarSystem) -> (Galaxy, f64) {
-    match &system.root.site {
-        Some(site) => {
-            let galaxy = GalaxyPreset::ALL.into_iter().map(GalaxyPreset::galaxy).find(|g| g.name == site.galaxy).unwrap_or_default();
-            (galaxy, site.radius_kpc)
-        }
-        None => {
-            let g = Galaxy::milky_way();
-            let r = g.layout.reference_kpc;
-            (g, r)
-        }
-    }
 }
 
 /// The system's stars, planets and the world's own moons (or, for a moon, its planet and
@@ -199,6 +277,7 @@ fn bodies(system: &SolarSystem, world: Key, day: f64, frame: &Equatorial) -> Vec
         let (ra, dec) = frame.ra_dec(to);
         let elongation = brightest.filter(|b| *b != p).map(|b| angle(to, sub(b, here)));
         out.push(Object {
+            id: None,
             name: Some(n.name.clone()),
             kind: Kind::Sun,
             ra_deg: ra,
@@ -243,6 +322,7 @@ fn bodies(system: &SolarSystem, world: Key, day: f64, frame: &Equatorial) -> Vec
         let lit = ephemeris::lit_fraction(p, here, star);
         let temperature_k = star_nodes.iter().find(|(m, _)| at(m.key) == star).map_or(5772.0, |(_, s)| s.temperature_k);
         out.push(Object {
+            id: None,
             name: Some(n.name.clone()),
             kind,
             ra_deg: ra,
@@ -309,7 +389,8 @@ mod tests {
             ]
         }))
         .unwrap();
-        let s = sky(&sys, Key(3), 0.0, 400.0).unwrap();
+        let field = Starfield::of_system(&sys, None, geoforge_core::galactic::StarEdits::default());
+        let s = sky(&sys, Key(3), 0.0, 400.0, &field).unwrap();
         let get = |n: &str| s.bodies.iter().find(|b| b.name.as_deref() == Some(n)).unwrap();
         let (sun, moon, jup) = (get("Sun"), get("Moon"), get("Jupiter"));
         assert!((sun.v + 26.75).abs() < 0.1, "Sun {}", sun.v);
@@ -321,5 +402,33 @@ mod tests {
         assert!(s.stars.len() > 4000 && s.ecliptic.len() == 360);
         let glow = s.glow(36, 18);
         assert!(glow.iter().copied().fold(0.0, f32::max) == 1.0);
+        // Positions turn both ways, and a constellation of the brightest stars is drawn.
+        let star = &s.stars[0];
+        let p = s.galactic_of(star.ra_deg, star.dec_deg, star.distance / LY_PER_PC);
+        let (ra, dec, d) = s.radec_of(p);
+        assert!((ra - star.ra_deg).abs() < 1e-6 && (dec - star.dec_deg).abs() < 1e-6 && (d * LY_PER_PC - star.distance).abs() < 1e-6);
+        let c = Constellation { name: "Kite".into(), lines: vec![[s.stars[0].id.unwrap(), s.stars[1].id.unwrap()], [s.stars[1].id.unwrap(), s.stars[2].id.unwrap()]] };
+        let f = s.figures(&[c], &field);
+        assert_eq!(f[0].lines.len(), 2);
+        assert_eq!(f[0].lines[0][0], (s.stars[0].ra_deg, s.stars[0].dec_deg));
+    }
+
+    /// From the real Earth the Milky Way crosses the sky where it does: bright through
+    /// Sagittarius and Cygnus, faint at the galactic poles; and the sky holds about the Sun's
+    /// 9,110 naked-eye stars.
+    #[test]
+    fn the_milky_way_crosses_the_real_sky() {
+        let (sys, body) = geoforge_cosmos::sol::archetype(geoforge_core::Seed(1), Archetype::Earth);
+        let field = Starfield::of_system(&sys, None, geoforge_core::galactic::StarEdits::default());
+        let s = sky(&sys, body.key, 0.0, 30.0, &field).unwrap();
+        assert!((7_000..12_000).contains(&s.stars.len()), "{} naked-eye stars", s.stars.len());
+        let glow = s.glow(360, 180);
+        let at = |ra: f64, dec: f64| glow[((90.0 - dec).floor() as usize).min(179) * 360 + ((360.0 - ra).floor() as usize).min(359)];
+        let best =
+            |ra: f64, dec: f64| (-6..=6).flat_map(|i| (-6..=6).map(move |j| (ra + f64::from(i), dec + f64::from(j)))).map(|(r, d)| at(r.rem_euclid(360.0), d.clamp(-89.0, 89.0))).fold(0.0, f32::max);
+        // Toward the centre (Sagittarius), in Cygnus, at the poles (Coma Berenices, Sculptor).
+        let (centre, cygnus, north, south) = (best(270.0, -28.0), best(305.0, 40.0), at(192.9, 27.1), at(12.9, -27.1));
+        assert!(centre > 5.0 * north && centre > 5.0 * south, "centre {centre}, poles {north} {south}");
+        assert!(cygnus > 3.0 * north, "Cygnus {cygnus}, pole {north}");
     }
 }

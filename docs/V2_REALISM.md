@@ -47,7 +47,9 @@ erosion 17 s, circulation 1 s, climate 5 s, hydrology 2 s, biomes <0.1 s).
 | Temperate grassland, of land | 0.14 | 0.15 | 0.11 | 0.12 | 0.11 | 0.13 | 0.08 |
 
 Figures are for the code as of the real-Earth check below (climate v3, circulation v3,
-biomes v3).
+biomes v3), and for systems as they were drawn before galaxy-sectors (November 2026): the
+galaxy recipe now draws a system from every component by mass, so these seeds now make
+other systems.
 
 The generated worlds are not Earth: most get 0.88–0.93× Earth's starlight and differ in
 size, air pressure, day length and tilt. The carbonate–silicate thermostat (set in the solar
@@ -364,14 +366,16 @@ magnetosphere.
   reaches +23.44° 93 days after the March equinox and −23.44° in December.
 - Sky (`sky` tests): the Sun at −26.75, Jupiter at opposition −2.7 (observed −2.7), the
   full Moon −13.0 (observed −12.7: moons get albedo 0.15 against the Moon's 0.12, and there
-  is no opposition surge). Drawn around a
-  Milky Way system at the Sun's radius: ~6,400 naked-eye stars (the Sun's sky: 9,110 in the
-  Bright Star Catalogue) and about 30 brighter than magnitude 1.5 (22). K giants are the most
-  common naked-eye stars, as in the catalogue; young B and A stars are too few, because the
-  Sun sits in the Gould Belt's local excess of them, which a smooth disk lacks. The
-  galaxy's band is 3–4 times the pole's brightness with a dust lane along it, brightest
-  toward the centre.
-- A system 1.7 kpc from the centre sees ~78,000 naked-eye stars (12 times the density).
+  is no opposition surge). The stars are the galaxy's sectors around the system
+  (galaxy-sectors, November 2026): at the Sun's place in the Milky Way model, over six seeds,
+  8,500–9,200 naked-eye stars (the Sun's sky: 9,110 in the Bright Star Catalogue), 18–26
+  brighter than magnitude 1.5 (22), 135–167 brighter than 3 (~150), 320–360 systems within 10
+  pc (the census: 339), giants about half of the naked-eye stars, the young B stars in
+  groups. On the real Earth (the Sun 8.2 kpc out and 25 pc up, the ecliptic turned as it
+  is) the band runs through Sagittarius, five times the poles' brightness and broken by dust
+  clouds, and through Cygnus. Gap: no Gould-Belt-like local excess of young stars.
+- Inside the bulge stars crowd so that a sky lists them to a brighter limit (about four
+  Suns' skies' worth), the rest in the glow.
 
 ### Weather
 

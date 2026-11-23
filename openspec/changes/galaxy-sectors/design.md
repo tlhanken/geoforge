@@ -111,6 +111,22 @@ Extinction along a ray is the smooth layer's (integrated analytically) plus that
 clouds the ray passes (Gaussian blobs in the arm cubes, with masses from a cloud mass
 function). The same clouds host the birth events and cut dark lanes in the glow.
 
+### As built
+
+- The galaxy-integrated IMF is steeper than the canonical one above a solar mass (α = 2.6;
+  Scalo 1986's field slope of 2.5–2.7, Kroupa & Weidner 2003's integrated galactic IMF): with
+  the canonical 2.3 the Sun's sky held 11,400 stars and twice the third- and fourth-magnitude
+  ones; with 2.6 it holds 8,500–9,200 (9,110 observed), 18–26 brighter than 1.5 (22), and 320–
+  360 systems within 10 pc (339).
+- Groups under 100 M☉ (a quarter of the young mass under dN/dM ∝ M⁻² from 10 M☉) are young
+  field stars, not events: a 10 kpc sky would otherwise draw two million events.
+- A disk's plane is split once per cube for all its age slices: the arms' factor is linear in
+  the contrast, so each leaf keeps its mass and its arm-weighted mass.
+- In crowded places (a bulge) a sky lists stars to a brighter limit, about four Suns' worth,
+  and the rest join the glow.
+- A world made at a star from a standalone world (`geoforge visit`) gets the home system's
+  star added to the galaxy in both worlds, so each sees the other.
+
 ## The night sky
 
 The sky from a point: the stars brighter than 6.5 (any limit, for telescopes later) with

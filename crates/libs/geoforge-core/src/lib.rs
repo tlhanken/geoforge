@@ -4,6 +4,7 @@
 pub mod body;
 pub mod derived;
 pub mod energy_balance;
+pub mod galactic;
 pub mod geom;
 pub mod grid;
 pub mod key;

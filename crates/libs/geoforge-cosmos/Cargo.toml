@@ -9,4 +9,5 @@ license.workspace = true
 [dependencies]
 geoforge-core = { path = "../geoforge-core" }
 geoforge-names = { path = "../geoforge-names" }
+rayon = "1.10"
 serde = { workspace = true }

@@ -1,6 +1,8 @@
 //! A system's phenotype drawn from a galaxy: where it is, when it was born, how metal-rich,
 //! and its stars at birth. This is one entry of a galaxy's roster (the solar-systems layer);
-//! the orbital tree is built from it.
+//! the orbital tree is built from it. A system is drawn from the whole galaxy, its component
+//! by mass and its place by that component's shape ([`draw`]), or taken from a star of the
+//! galaxy's sectors ([`of_star`]).
 //!
 //! Stars come in singles, binaries and triples, more often the heavier the primary
 //! (Duchêne & Kraus 2013): about 25% of red dwarfs have a companion (Winters et al. 2019;
@@ -11,7 +13,8 @@
 //! Mass ratios are flat; orbits under 12 days are circular, wider ones evenly eccentric.
 
 use crate::draw::Draw;
-use crate::galaxy::{power_integral, Galaxy, Imf, StarFormation};
+use crate::galaxy::{power_integral, Galaxy, Imf};
+use crate::sectors::GalacticStar;
 use crate::stars::evolve;
 use geoforge_core::body::{GalacticSite, Star};
 use geoforge_core::seed::Seed;
@@ -52,14 +55,12 @@ impl Phenotype {
     }
 }
 
-/// Draw a system from `galaxy`.
+/// Draw a system from `galaxy`, its world's galaxy seeded from `seed`.
 #[must_use]
 pub fn draw(galaxy: &Galaxy, seed: Seed) -> Phenotype {
     let mut d = Draw::new(seed.child(b"phenotype"));
-    let radius_kpc = galactic_radius(&mut d, galaxy);
-    let age_gyr = birth_lookback(&mut d, &galaxy.history);
-    let m = &galaxy.metals;
-    let metallicity_dex = (m.at_reference_dex + m.gradient_dex_per_kpc * (radius_kpc - galaxy.layout.reference_kpc) + m.per_gyr_dex * age_gyr + d.normal(0.0, m.scatter_dex)).clamp(-2.5, 0.6);
+    let (c, age_gyr, position) = galaxy.draw_star(&mut d);
+    let metallicity_dex = galaxy.metallicity(c, position, age_gyr, d.gauss());
     let primary_mass = draw_mass(&mut d, &galaxy.imf);
 
     let mut companions = Vec::new();
@@ -71,39 +72,42 @@ pub fn draw(galaxy: &Galaxy, seed: Seed) -> Phenotype {
             companions.push(companion(&mut d, primary_mass, primary_mass + inner.initial_mass, Some(inner_log_p)));
         }
     }
-    Phenotype { site: GalacticSite { galaxy: galaxy.name.clone(), radius_kpc }, age_gyr, metallicity_dex, primary_mass, companions }
+    let site = site(galaxy, position, seed.child(b"galaxy"), None, &mut d);
+    Phenotype { site, age_gyr, metallicity_dex, primary_mass, companions }
+}
+
+/// The phenotype of the system at `star` of a galaxy named `galaxy` seeded `galaxy_seed`: the
+/// star's birth, and its companion with an orbit drawn from `seed`.
+#[must_use]
+pub fn of_star(star: &GalacticStar, galaxy: &Galaxy, galaxy_seed: Seed, seed: Seed) -> Phenotype {
+    let mut d = Draw::new(seed.child(b"phenotype at a star"));
+    let k = star.kind;
+    let companions = k
+        .companion_mass
+        .map(|mc| {
+            let mut c = companion(&mut d, k.initial_mass, k.initial_mass, None);
+            c.initial_mass = mc;
+            vec![c]
+        })
+        .unwrap_or_default();
+    let site = site(galaxy, star.position_pc, galaxy_seed, Some(star.id), &mut d);
+    Phenotype { site, age_gyr: k.age_gyr, metallicity_dex: k.metallicity_dex, primary_mass: k.initial_mass, companions }
+}
+
+/// A site at `position` (pc) in `galaxy`, its frame turned at random.
+pub(crate) fn site(galaxy: &Galaxy, position: [f64; 3], galaxy_seed: Seed, star: Option<geoforge_core::galactic::StarId>, d: &mut Draw) -> GalacticSite {
+    GalacticSite {
+        galaxy: galaxy.name.clone(),
+        radius_kpc: position[0].hypot(position[1]) / 1000.0,
+        position_pc: Some(position),
+        galaxy_seed: Some(galaxy_seed),
+        star,
+        orientation: Some(d.rotation()),
+    }
 }
 
 /// Share of multiples that are triples (Raghavan et al. 2010: 12% of 46%).
 const TRIPLE_SHARE: f64 = 0.27;
-
-/// Distance from the centre, kpc: an exponential disk (surface density ∝ e^(−R/h), so radii
-/// follow R·e^(−R/h)) cut at its edge.
-fn galactic_radius(d: &mut Draw, g: &Galaxy) -> f64 {
-    let h = g.layout.scale_length_kpc;
-    loop {
-        let r = -h * (d.u().max(1e-12).ln() + d.u().max(1e-12).ln());
-        if r <= g.layout.edge_kpc {
-            return r;
-        }
-    }
-}
-
-/// How long ago the system was born, Gyr.
-fn birth_lookback(d: &mut Draw, h: &StarFormation) -> f64 {
-    let u = d.u();
-    if d.u() < h.burst_share {
-        return u * h.burst_gyr;
-    }
-    match h.decline_gyr {
-        // Rate ∝ e^(−t/τ) since the first stars: lookback density ∝ e^(lookback/τ).
-        Some(tau) if tau.abs() > 1e-6 => {
-            let k = (h.age_gyr / tau).clamp(-700.0, 700.0);
-            (tau * (1.0 + u * k.exp_m1()).ln()).clamp(0.0, h.age_gyr)
-        }
-        _ => u * h.age_gyr,
-    }
-}
 
 /// An initial mass from the IMF, by inverting its cumulative distribution segment by segment.
 fn draw_mass(d: &mut Draw, imf: &Imf) -> f64 {
@@ -204,12 +208,16 @@ mod tests {
         assert_eq!(draw(&g, Seed(9)), draw(&g, Seed(9)));
     }
 
-    /// The Milky Way near the Sun, star by star: about three quarters are red dwarfs, 5–8%
+    /// The Milky Way near the Sun, star by star: three quarters or more are red dwarfs (61%
+    /// of the 10 pc census's 540 stars, brown dwarfs and planets are M stars, ~85% of its
+    /// stars; Reylé et al. 2021), 5–8%
     /// white dwarfs (4.8×10⁻³ pc⁻³ of ~0.08), giants and blue stars rare, neutron stars
     /// ~0.5% and black holes ~0.2% of stars ever born (10⁸–10⁹ of each in the Galaxy).
     #[test]
     fn milky_way_census() {
-        let ph = sample(&Galaxy::milky_way(), 20_000);
+        let near_sun = |p: &Phenotype| (6.5..10.0).contains(&p.site.radius_kpc) && p.site.position_pc.is_some_and(|q| q[2].abs() < 600.0);
+        let ph: Vec<Phenotype> = sample(&Galaxy::milky_way(), 100_000).into_iter().filter(near_sun).collect();
+        assert!(ph.len() > 8_000, "{} near the Sun", ph.len());
         let n = ph.len() as f64;
         let share = |f: &dyn Fn(&Star) -> bool| ph.iter().filter(|p| f(&p.primary())).count() as f64 / n;
         let red_dwarfs = share(&|s| s.stage == StellarStage::MainSequence && s.initial_mass() < 0.6);
@@ -218,7 +226,7 @@ mod tests {
         let blue = share(&|s| s.stage == StellarStage::MainSequence && s.temperature_k > 10_000.0);
         let neutron = share(&|s| s.stage == StellarStage::NeutronStar);
         let holes = share(&|s| s.stage == StellarStage::BlackHole);
-        assert!((0.70..0.82).contains(&red_dwarfs), "red dwarfs {red_dwarfs}");
+        assert!((0.70..0.87).contains(&red_dwarfs), "red dwarfs {red_dwarfs}");
         assert!((0.04..0.09).contains(&white_dwarfs), "white dwarfs {white_dwarfs}");
         assert!((0.003..0.03).contains(&giants), "giants {giants}");
         assert!(blue < 0.003, "B stars {blue}");
@@ -237,6 +245,17 @@ mod tests {
         assert!((-0.2..0.0).contains(&mean), "local mean [Fe/H] {mean}");
     }
 
+    /// Systems are drawn from every component by mass: the bulge's share of the Milky Way's
+    /// stars, and each with a place, a frame and its world's galaxy seed.
+    #[test]
+    fn systems_have_places() {
+        let ph = sample(&Galaxy::milky_way(), 4000);
+        let inner = ph.iter().filter(|p| p.site.radius_kpc < 2.0).count() as f64 / 4000.0;
+        assert!((0.2..0.45).contains(&inner), "{inner} within 2 kpc");
+        assert!(ph.iter().all(|p| p.site.position_pc.is_some() && p.site.orientation.is_some() && p.site.galaxy_seed.is_some()));
+        assert_eq!(ph[0].site.galaxy_seed, Some(Seed(0).child(b"galaxy")));
+    }
+
     #[test]
     fn galaxies_differ() {
         let old = sample(&crate::galaxy::GalaxyPreset::Elliptical.galaxy(), 5_000);
@@ -245,7 +264,8 @@ mod tests {
         assert_eq!(blue(&old), 0, "no blue stars in an old elliptical");
         assert!(blue(&young) > 5, "a starburst has blue stars: {}", blue(&young));
         let wd = |set: &[Phenotype]| set.iter().filter(|p| p.primary().stage == StellarStage::WhiteDwarf).count() as f64 / set.len() as f64;
-        assert!(wd(&old) > 1.3 * wd(&sample(&Galaxy::milky_way(), 5_000)), "ellipticals are rich in white dwarfs");
+        let disk = sample(&crate::galaxy::GalaxyPreset::Spiral(crate::galaxy::SpiralStage::C, false).galaxy(), 5_000);
+        assert!(wd(&old) > 1.3 * wd(&disk), "ellipticals are richer in white dwarfs than a star-forming disk: {} vs {}", wd(&old), wd(&disk));
         let dwarf = sample(&crate::galaxy::GalaxyPreset::Dwarf.galaxy(), 2_000);
         assert!(dwarf.iter().map(|p| p.metallicity_dex).sum::<f64>() / 2_000.0 < -0.6);
     }

@@ -57,6 +57,27 @@ Days are Earth days from the present, which is the world's northern spring equin
 works, far in the future or the past, and gives the same answer every time. `--json` prints
 machine-readable output.
 
+## The stars around a world
+
+Its stars are its galaxy's, generated where they are looked at, the same from every world
+of the galaxy. Positions are given in the world's own sky (RA and Dec in degrees, distance in
+light years); a star by its identity or name:
+
+```bash
+geoforge stars near worlds/demo --radius-ly 20                 # the nearest systems, faint ones too
+geoforge star add worlds/demo --name Beacon --ra 83 --dec -5 --distance-ly 40 --mass 3
+geoforge star move worlds/demo Beacon --distance-ly 60
+geoforge star cluster worlds/demo --name Hearth --ra 150 --dec -10 --distance-ly 400 --members 800 --age-gyr 0.05
+geoforge constellation add worlds/demo Kite --line Beacon-Vaepemor --line Vaepemor-Baene
+geoforge stars export worlds/demo --to stars.csv --limit 5      # edit in a spreadsheet, then
+geoforge stars import worlds/demo stars.csv
+geoforge visit worlds/demo Baene --to worlds/baene              # a new world at that star
+```
+
+Edits live in `galaxy/stars.json`, constellations in `constellations.json`; `sky` draws both.
+`new --galaxy-file my-galaxy.json` makes a world in a galaxy of your own (components,
+arms, dust; see `geoforge_cosmos::galaxy`).
+
 The almanac dates its days in a calendar: `--calendar twelfths` (twelve equal months),
 `lunar` or `lunar:<moon>` (new moon to new moon), or `world` (the default): the world's own,
 if `bodies/<name>/calendar.json` gives one, for example

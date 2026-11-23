@@ -1,5 +1,5 @@
 //! Star charts: an equirectangular sky with the galaxy's glow, stars by magnitude and
-//! colour, planets circled, and the star's yearly path.
+//! colour, planets circled, the star's yearly path and the world's constellations.
 
 use image::{Rgb, RgbImage};
 
@@ -18,9 +18,10 @@ pub struct SkyPoint {
 /// An equirectangular sky chart `width` wide (half as tall): RA 360° at the left edge to 0°
 /// at the right, as the sky looks from below, Dec +90° at the top. `glow` is a grid
 /// `glow_width` wide (0–1), drawn as the galaxy's haze; `path` (RA, Dec) a dotted line (the
-/// star's yearly path). Lines every 30°, the equator brighter.
+/// star's yearly path); `lines` constellation lines between (RA, Dec) ends, along great
+/// circles. Lines every 30°, the equator brighter.
 #[must_use]
-pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoint], path: &[(f64, f64)]) -> RgbImage {
+pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoint], path: &[(f64, f64)], lines: &[[(f64, f64); 2]]) -> RgbImage {
     let height = width / 2;
     let glow_height = glow.len() / glow_width.max(1);
     let mut acc = vec![[0f32; 3]; (width * height) as usize];
@@ -43,6 +44,23 @@ pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoin
     for &(ra, dec) in path {
         let (x, y) = to_px(ra, dec);
         splat(&mut acc, width, height, x, y, 1.0, [110.0, 90.0, 40.0]);
+    }
+    let unit = |(ra, dec): (f64, f64)| {
+        let (r, d) = (f64::to_radians(ra), f64::to_radians(dec));
+        [d.cos() * r.cos(), d.cos() * r.sin(), d.sin()]
+    };
+    for [a, b] in lines {
+        let (u, v) = (unit(*a), unit(*b));
+        let angle = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]).clamp(-1.0, 1.0).acos();
+        let steps = (angle.to_degrees() / 360.0 * f64::from(width) * 1.5).ceil().max(1.0) as usize;
+        for i in 0..=steps {
+            // Along the great circle from u to v.
+            let t = i as f64 / steps as f64;
+            let (wa, wb) = if angle < 1e-9 { (1.0 - t, t) } else { (((1.0 - t) * angle).sin() / angle.sin(), (t * angle).sin() / angle.sin()) };
+            let p = [0, 1, 2].map(|k| wa * u[k] + wb * v[k]);
+            let (x, y) = to_px(p[1].atan2(p[0]).to_degrees(), p[2].clamp(-1.0, 1.0).asin().to_degrees());
+            splat(&mut acc, width, height, x, y, 0.8, [36.0, 52.0, 80.0]);
+        }
     }
     let mut sorted: Vec<&SkyPoint> = points.iter().collect();
     sorted.sort_by(|a, b| b.v.total_cmp(&a.v));

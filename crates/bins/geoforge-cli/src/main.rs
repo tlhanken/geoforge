@@ -7,6 +7,7 @@ use std::process::ExitCode;
 
 mod almanac;
 mod edit;
+mod stars;
 mod system;
 mod world;
 
@@ -37,9 +38,14 @@ enum Cmd {
         /// The world's seed: the same seed makes the same world.
         #[arg(long, default_value_t = 42)]
         seed: u64,
-        /// The galaxy to draw the system from: milky-way, elliptical, dwarf, starburst.
+        /// The galaxy to draw the system from: milky-way; sa, sb, sc, sd (spirals) or sba … sbd
+        /// (barred); lenticular, elliptical, dwarf-spheroidal, dwarf (irregular), starburst.
         #[arg(long, default_value = "milky-way", value_parser = parse_galaxy)]
         galaxy: GalaxyPreset,
+        /// A galaxy of your own (a JSON galaxy document, as `galaxy/galaxy.json` of any world
+        /// holds it) instead of a preset; the world keeps it.
+        #[arg(long, conflicts_with_all = ["archetype", "habitable"])]
+        galaxy_file: Option<PathBuf>,
         /// Force a habitable system: a Sun-like star (F8–K5) with an Earth-like world in its
         /// habitable zone, whatever the galaxy would draw.
         #[arg(long, conflicts_with_all = ["body", "archetype"])]
@@ -327,11 +333,41 @@ enum Cmd {
         #[arg(long, default_value_t = 1200)]
         width: u32,
     },
+    /// Edit the galaxy's stars around the world: add one, move, change or remove one, add a
+    /// cluster. Positions are in the focus's sky (RA and Dec in degrees, distance in light
+    /// years); stars by identity (from `stars near` or `stars export`) or name.
+    Star {
+        #[command(subcommand)]
+        action: StarCmd,
+    },
+    /// The stars around the world: the nearest of every brightness, or the sky's to a
+    /// magnitude written out to edit in a spreadsheet and read back.
+    Stars {
+        #[command(subcommand)]
+        action: StarsCmd,
+    },
+    /// The world's own constellations, drawn on its sky chart.
+    Constellation {
+        #[command(subcommand)]
+        action: ConstellationCmd,
+    },
+    /// Make a new world at a star of this world's galaxy: the system born with that star, the
+    /// galaxy and its star edits carried over.
+    Visit {
+        /// The world whose sky holds the star.
+        dir: PathBuf,
+        /// The star: its identity or name.
+        star: String,
+        /// The new world's directory.
+        #[arg(long)]
+        to: PathBuf,
+    },
     /// Draw many systems from a galaxy and count them.
     ///
     /// Kinds of star, planets and wet worlds, with example seeds of each for `new`.
     Census {
-        /// The galaxy: milky-way, elliptical, dwarf, starburst.
+        /// The galaxy (as for `new`): milky-way, sa … sd, sba … sbd, lenticular, elliptical,
+        /// dwarf-spheroidal, dwarf, starburst.
         #[arg(long, default_value = "milky-way", value_parser = parse_galaxy)]
         galaxy: GalaxyPreset,
         /// How many seeds, and the first.
@@ -359,12 +395,145 @@ fn main() -> ExitCode {
     }
 }
 
+#[derive(Subcommand)]
+enum StarCmd {
+    /// Add a star.
+    Add {
+        dir: PathBuf,
+        #[arg(long)]
+        name: String,
+        #[arg(long, allow_hyphen_values = true)]
+        ra: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        dec: f64,
+        #[arg(long)]
+        distance_ly: f64,
+        /// Initial mass, M☉.
+        #[arg(long, default_value_t = 1.0)]
+        mass: f64,
+        #[arg(long, default_value_t = 4.6)]
+        age_gyr: f64,
+        /// [Fe/H], dex.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        feh: f64,
+        /// An unresolved companion's initial mass, M☉.
+        #[arg(long)]
+        companion: Option<f64>,
+    },
+    /// Move a star (any of RA, Dec, distance).
+    Move {
+        dir: PathBuf,
+        star: String,
+        #[arg(long, allow_hyphen_values = true)]
+        ra: Option<f64>,
+        #[arg(long, allow_hyphen_values = true)]
+        dec: Option<f64>,
+        #[arg(long)]
+        distance_ly: Option<f64>,
+    },
+    /// Rename a star or make it something else.
+    Change {
+        dir: PathBuf,
+        star: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        mass: Option<f64>,
+        #[arg(long)]
+        age_gyr: Option<f64>,
+        #[arg(long, allow_hyphen_values = true)]
+        feh: Option<f64>,
+    },
+    /// Take a star away.
+    Remove { dir: PathBuf, star: String },
+    /// Add a cluster of stars born together.
+    Cluster {
+        dir: PathBuf,
+        #[arg(long)]
+        name: String,
+        #[arg(long, allow_hyphen_values = true)]
+        ra: f64,
+        #[arg(long, allow_hyphen_values = true)]
+        dec: f64,
+        #[arg(long)]
+        distance_ly: f64,
+        /// Plummer radius, pc.
+        #[arg(long, default_value_t = 2.0)]
+        radius_pc: f64,
+        /// Stars of every brightness.
+        #[arg(long, default_value_t = 500)]
+        members: u32,
+        #[arg(long, default_value_t = 0.1)]
+        age_gyr: f64,
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        feh: f64,
+    },
+}
+
+#[derive(Subcommand)]
+enum StarsCmd {
+    /// The systems within a distance, nearest first, faint ones and all.
+    Near {
+        dir: PathBuf,
+        #[arg(long, default_value_t = 20.0)]
+        radius_ly: f64,
+    },
+    /// Write the sky's stars to a magnitude (CSV, or JSON for a .json file).
+    Export {
+        dir: PathBuf,
+        #[arg(long)]
+        to: PathBuf,
+        #[arg(long, default_value_t = 6.5)]
+        limit: f64,
+    },
+    /// Read an edited export back: changed rows become changes, rows without an identity
+    /// added stars.
+    Import { dir: PathBuf, from: PathBuf },
+}
+
+#[derive(Subcommand)]
+enum ConstellationCmd {
+    /// Add (or replace) a constellation from lines between stars, each `A-B` (identities or
+    /// names).
+    Add {
+        dir: PathBuf,
+        name: String,
+        #[arg(long = "line", required = true)]
+        lines: Vec<String>,
+    },
+    Remove {
+        dir: PathBuf,
+        name: String,
+    },
+    List {
+        dir: PathBuf,
+    },
+}
+
 type R<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn run(cli: Cli) -> R<()> {
     use geoforge_store::World;
     match cli.cmd {
-        Cmd::New { dir, seed, galaxy, habitable, width, body, archetype, focus } => world::new_world(&dir, seed, galaxy, habitable, width, body, archetype, focus),
+        Cmd::New { dir, seed, galaxy, galaxy_file, habitable, width, body, archetype, focus } => world::new_world(&dir, seed, galaxy, galaxy_file.as_deref(), habitable, width, body, archetype, focus),
+        Cmd::Star { action } => match action {
+            StarCmd::Add { dir, name, ra, dec, distance_ly, mass, age_gyr, feh, companion } => stars::add(&dir, &name, ra, dec, distance_ly, mass, age_gyr, feh, companion),
+            StarCmd::Move { dir, star, ra, dec, distance_ly } => stars::move_star(&dir, &star, ra, dec, distance_ly),
+            StarCmd::Change { dir, star, name, mass, age_gyr, feh } => stars::change(&dir, &star, name, mass, age_gyr, feh),
+            StarCmd::Remove { dir, star } => stars::remove(&dir, &star),
+            StarCmd::Cluster { dir, name, ra, dec, distance_ly, radius_pc, members, age_gyr, feh } => stars::cluster(&dir, &name, ra, dec, distance_ly, radius_pc, members, age_gyr, feh),
+        },
+        Cmd::Stars { action } => match action {
+            StarsCmd::Near { dir, radius_ly } => stars::near(&dir, radius_ly),
+            StarsCmd::Export { dir, to, limit } => stars::export(&dir, &to, limit),
+            StarsCmd::Import { dir, from } => stars::import(&dir, &from),
+        },
+        Cmd::Constellation { action } => match action {
+            ConstellationCmd::Add { dir, name, lines } => stars::constellation_add(&dir, &name, &lines),
+            ConstellationCmd::Remove { dir, name } => stars::constellation_remove(&dir, &name),
+            ConstellationCmd::List { dir } => stars::constellation_list(&dir),
+        },
+        Cmd::Visit { dir, star, to } => stars::visit(&dir, &star, &to),
         Cmd::Generate { dir, force, until, from, render } => world::generate(&dir, force, until, from, render),
         Cmd::Plan { dir } => world::plan(&dir),
         Cmd::Status { dir } => world::status(&dir),

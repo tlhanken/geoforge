@@ -179,16 +179,24 @@ Still needed:
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.
 
-## 12. Galaxy sectors and the night sky — next (OpenSpec `galaxy-sectors`)
+## 12. Galaxy sectors and the night sky — done (OpenSpec `galaxy-sectors`)
 - A galaxy of components (nucleus, bulge and bar, thin disk by age, arms, thick disk, halo,
-  dust) and morphologies (Sa–Sd barred or not, S0, E, dE/dSph, dIrr, starburst).
+  dust) and morphologies (Sa–Sd barred or not, S0, E, dSph, dIrr, starburst); the Milky Way
+  from Bland-Hawthorn & Gerhard (2016) and Vallée (2015).
 - Stars that live in the galaxy: nested cubes sized by how far their stars are seen, each
   cube generated from its seed, each star with an identity that seeds its system; young
-  stars in clusters and associations; dust clouds.
-- The sky read from them (neighbouring systems see each other; the Gould Belt); a system's
-  place in its galaxy (standalone or made at a star).
-- Edits: stars added, moved, changed, removed; clusters added; an observer's own
-  constellations; export and import of a sky's stars.
+  stars in clusters and associations of 100 M☉ and more; dust clouds where stars form.
+- The sky read from them: neighbouring systems see each other; the real Earth's band runs
+  through Sagittarius and Cygnus; the Sun's place holds 8,500–9,200 naked-eye stars (9,110
+  observed), 18–26 brighter than 1.5 (22) and 320–360 systems within 10 pc (339), with the
+  galaxy-integrated IMF (α = 2.6 above 1 M☉). Systems are drawn from every component by mass
+  (a quarter of the Milky Way's in its bulge), with a place, a frame and a galaxy seed.
+- Edits: `geoforge star add|move|change|remove|cluster`, `stars near|export|import`,
+  `constellation add|remove|list` (drawn on the chart), `visit` (a new world at a star).
+- Still open: a Gould-Belt-like local excess of young stars around the Sun (the real sky's
+  young B stars); proper motions; a faster sky in a crowded core (cut to a brighter limit
+  today); generated galaxy-recipe seeds now draw different systems than before (the
+  realism tables' s-worlds predate this).
 
 ## 12b. Later, above one galaxy
 - The universe zoom: universe, superclusters and galaxy rosters (the v2-architecture
@@ -208,13 +216,13 @@ Still needed:
   shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
   range along every coast; then the water level by date in the almanac.
 
-## 13. Star systems [5] (after 12: a system is built from its star)
+## 13. Star systems [5] (next: a system is built from its star now)
 - Period ratios nearer Kepler's.
 - Hot Jupiters.
 - Obliquity stability with and without a big moon.
 - Trojans.
 
-## 14. Other worlds [Still open] (brown dwarfs come with 12's IMF below 0.08 M☉)
+## 14. Other worlds [Still open] (and brown dwarfs: the IMF below 0.08 M☉, their cooling)
 - Ice-shell worlds (Europa).
 - Locked worlds carrying heat to the night side.
 - Asynchronous rotation.

@@ -381,6 +381,22 @@ Open: SPI-6 and -12, onset and end of each drought, eclipses and meteor showers 
 almanac, a printable month page, the far teleconnections from the circulation, and the
 internals (weather, storms, sky) on `Instant`.
 
+## 8a. Galaxy sectors — done (November 2026)
+
+OpenSpec change `galaxy-sectors`. A galaxy is a list of components
+(`geoforge_cosmos::galaxy`): shapes (exponential disks whose stars thicken with age,
+exponential ellipsoids for bulges and bars, Hernquist spheroids, Plummer nuclei, flattened
+broken power-law halos), histories and metallicity relations, logarithmic arms that gather
+young stars, and dust. Stars are generated where they are looked at
+(`geoforge_cosmos::sectors`): each brightness bin in cubes half as wide as it is seen from,
+each cube a pure function of the galaxy's seed and its key, each star an identity that seeds
+its system; young stars come from birth events (clusters and associations of 100 M☉ and more,
+a twentieth bound, the rest spreading at 1.5 pc/Myr), dust from a smooth layer and molecular
+clouds placed with them. The sky reads them through the dust (`sky`, `starfield` with the
+world's edits). Calibration: the galaxy-integrated IMF (α = 2.6 above 1 M☉; with the canonical
+2.3 the Sun's sky held 11,400 stars and twice the third- and fourth-magnitude ones) and the
+thin disk's mass set by the 10 pc census. A sky takes under a second on two cores.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often
