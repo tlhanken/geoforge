@@ -462,6 +462,13 @@ in January: 80% of the ocean (78%) and 75% of land below 1.5 km (72%). The clima
 lost Mongolia's rain, the Pampas and the Great Plains (gaps with causes); the base winds
 lack the East Asian summer monsoon, so the turned westerlies dry China's interior.
 
+**Seasons apart** (November 2026): the warmest and coldest months are computed apart, each
+with its own season's continentality, a shorter summer reach for sea air, frozen seas barely
+maritime, and a winter high over high-latitude interiors. Judged on observed winds with
+`geoforge compare`, the land temperature error fell from 3.84 to 3.67 °C and the range
+north of 50°N is within 1 °C; on the model's own winds the suite lost 5 cases to its
+January winds over Europe and its July winds over the Sahara.
+
 Open:
 - The NE Atlantic — done: a basin that opens onto a polar sea through straits wider than
   ~100 km (not the Bering Strait), without crossing a circumpolar band, draws an

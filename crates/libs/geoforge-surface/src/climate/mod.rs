@@ -99,7 +99,10 @@ pub struct Coarse {
     pub t_sl: Vec<f64>,
     /// Seasonal swing coefficient: range = swing × (0.13 + 0.87 × continentality).
     pub swing: Vec<f64>,
-    pub maritime: Vec<f64>,
+    /// How maritime the air is in the local summer and winter half-years, each carried
+    /// inland by that season's winds.
+    pub maritime_summer: Vec<f64>,
+    pub maritime_winter: Vec<f64>,
     pub precip: Vec<f64>,
     /// Precipitation of the northern-summer (July) and northern-winter (January) seasons.
     pub precip_jul: Vec<f64>,
@@ -128,6 +131,35 @@ const COLD_AIR_REACH_KM: f64 = 300.0;
 /// Extra summer warmth of land under fully sinking air (the moisture model's view of a
 /// desert summer), °C.
 const DESERT_SUMMER_C: f64 = 8.0;
+
+/// Extra winter cold of a fully continental high-latitude interior under its winter high: clear,
+/// calm, long nights over snow let the ground radiate its heat away, and the cold air pools
+/// in a shallow inversion (Yakutsk's January is −38 °C).
+const WINTER_HIGH_C: f64 = 5.0;
+/// Cooling of an interior below its zonal mean per unit continentality above a coast's (× the
+/// latitude factor), °C.
+const INTERIOR_C: f64 = 7.0;
+/// How far sea air reaches inland in summer, as a share of the winter reach.
+const SUMMER_REACH_SHARE: f64 = 0.75;
+/// How much of open water's warmth a frozen sea still gives the winter air (through leads and
+/// thin ice).
+const FROZEN_SEA_WARMTH: f64 = 0.2;
+
+/// A place's warmest- and coldest-month sea-level temperatures, from its annual zonal and
+/// sea-warmed temperature `t`, the zonal seasonal swing, and how continental its air is in
+/// each half-year. Summer and winter are set apart: the summer swing follows the summer
+/// winds' continentality, and the winter one the winter winds' (Europe's winter westerlies
+/// bring the Atlantic in), and a high-latitude interior has the winter high's cold besides
+/// (none at sea, nor on a world without seasons).
+fn summer_winter(t: f64, swing: f64, lat: f64, land: f64, cont_summer: f64, cont_winter: f64, seasons: bool) -> (f64, f64) {
+    let swing = swing.abs();
+    let (hi, polar) = if seasons { ((lat.to_radians().sin().abs() - 0.3).max(0.0), crate::elevation::smoothstep(45.0, 65.0, lat.abs())) } else { (0.0, 0.0) };
+    let interior = INTERIOR_C * (0.5 * (cont_summer + cont_winter) - 0.35) * hi * land.max(0.3);
+    let summer = t + 0.5 * swing * (0.13 + 0.87 * cont_summer) - interior;
+    let high = WINTER_HIGH_C * land * ((cont_winter - 0.5) / 0.5).clamp(0.0, 1.0) * polar;
+    let winter = t - 0.5 * swing * (0.13 + 0.87 * cont_winter) - interior - high;
+    (summer, winter)
+}
 
 fn continentality(is_land: bool, maritime: f64, coast_km: f64) -> f64 {
     if is_land {
@@ -172,9 +204,8 @@ impl Climate {
         let (tz, tmean) = if locked.is_some() { radiation.substellar_temperature(&lats) } else { radiation.zonal_temperature(&lats) };
         let swing_z: Vec<f64> = lats.iter().map(|&l| if locked.is_some() { 0.0 } else { radiation.seasonal_range(l) }).collect();
 
-        // 2–4. Continentality and current-warmed air from annual-mean winds.
+        // 2–4. Current-warmed air from annual-mean winds; continentality from each season's.
         let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
-        let mar = carry(&atmo, &wind_annual, p.maritime_reach_km, r, &vec![1.0; g.len()]);
         // Air over warm currents is warmed deep and carries it far inland (Europe); air over
         // cold upwelling is chilled in a shallow marine layer that the first hills stop.
         // Open water cannot be colder than freezing: where a warm current keeps a high-latitude
@@ -189,6 +220,38 @@ impl Climate {
                 a + (SEA_FREEZE_C - t0).max(0.0) * open * (1.0 - atmo.land[i])
             })
             .collect();
+        // How far the sea's air reaches inland, by each season's winds, read back by hemisphere
+        // as the local summer's and winter's. A sea frozen in a season (all year on the polar
+        // seas) warms or cools that season's air little: under ice it is no longer maritime.
+        let open_sea = |k: usize| -> Vec<f64> {
+            (0..g.len())
+                .map(|i| {
+                    let lat = g.lat(i / g.w);
+                    let winter = (k == 1) == (lat >= 0.0);
+                    let half = 0.5 * swing_z[i / g.w].abs() * 0.13;
+                    let t_sea = tz[i / g.w] + sst[i] + if winter { -half } else { half };
+                    if t_sea < SEA_FREEZE_C {
+                        FROZEN_SEA_WARMTH
+                    } else {
+                        1.0
+                    }
+                })
+                .collect()
+        };
+        // (The sea's own air keeps its open-water reckoning: the sea-ice view is set on it.)
+        // Summer sun heats sea air over land within days, so it reaches inland only part as
+        // far as in winter.
+        let maritime = |k: usize, reach: f64| -> Vec<f64> {
+            let (iced, open) = (carry(&atmo, &season_winds[k], reach, r, &open_sea(k)), carry(&atmo, &season_winds[k], reach, r, &vec![1.0; g.len()]));
+            (0..g.len()).map(|i| atmo.land[i] * iced[i] + (1.0 - atmo.land[i]) * open[i]).collect()
+        };
+        let summer_reach = SUMMER_REACH_SHARE * p.maritime_reach_km;
+        let (jul_s, jan_s, jul_w, jan_w) = (maritime(0, summer_reach), maritime(1, summer_reach), maritime(0, p.maritime_reach_km), maritime(1, p.maritime_reach_km));
+        let (mut mar_summer, mut mar_winter) = (vec![0.0; g.len()], vec![0.0; g.len()]);
+        for i in 0..g.len() {
+            let north = g.lat(i / g.w) >= 0.0;
+            (mar_summer[i], mar_winter[i]) = if north { (jul_s[i], jan_w[i]) } else { (jan_s[i], jul_w[i]) };
+        }
         let warm: Vec<f64> = sst.iter().map(|v| v.max(0.0)).collect();
         let cold: Vec<f64> = sst.iter().map(|v| v.min(0.0)).collect();
         let sst_air: Vec<f64> = carry(&atmo, &wind_annual, p.maritime_reach_km * 0.6, r, &warm).iter().zip(carry(&atmo, &wind_annual, COLD_AIR_REACH_KM, r, &cold)).map(|(w, c)| w + c).collect();
@@ -203,18 +266,19 @@ impl Climate {
             let y = i / g.w;
             let lat = lats[y];
             let is_land = atmo.land[i] >= 0.5;
-            let cont = continentality(is_land, mar[i], if is_land { 400.0 } else { 0.0 });
-            // Interiors at higher latitude are colder than the zonal mean; mild west coasts warmer.
-            let (hi, t0) = match &locked {
-                Some(s) => (0.0, interpolate(&lats, &tz, 90.0 - s.zenith(lat, g.lon(i % g.w)))),
-                None => ((lat.to_radians().sin().abs() - 0.3).max(0.0), tz[y]),
+            let coast = if is_land { 400.0 } else { 0.0 };
+            let (cont_s, cont_w) = (continentality(is_land, mar_summer[i], coast), continentality(is_land, mar_winter[i], coast));
+            let t0 = match &locked {
+                Some(s) => interpolate(&lats, &tz, 90.0 - s.zenith(lat, g.lon(i % g.w))),
+                None => tz[y],
             };
-            let t = t0 - 7.0 * (cont - 0.35) * hi * atmo.land[i].max(0.3) + sst_air[i];
+            let t = t0 + sst_air[i];
             t_sl[i] = t;
             swing[i] = swing_z[y];
-            let range = swing[i].abs() * (0.13 + 0.87 * cont);
-            let half = 0.5 * range * swing[i].signum();
-            let t_here = t - lapse * atmo.elev[i] / 1000.0 + plateau_warming(t, broad[i].min(atmo.elev[i]));
+            let (summer, winter) = summer_winter(t, swing[i], lat, atmo.land[i], cont_s, cont_w, locked.is_none());
+            let mean = 0.5 * (summer + winter);
+            let half = 0.5 * (summer - winter) * swing[i].signum();
+            let t_here = mean - lapse * atmo.elev[i] / 1000.0 + plateau_warming(mean, broad[i].min(atmo.elev[i]));
             t_mean_here[i] = t_here;
             t_season[0][i] = t_here + half; // northern summer
             t_season[1][i] = t_here - half; // northern winter
@@ -235,14 +299,14 @@ impl Climate {
         let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
         let precip_jan = seasons.pop().expect("two seasons");
         let precip_jul = seasons.pop().expect("two seasons");
-        Coarse { grid: g, t_sl, swing, maritime: mar, precip, precip_jul, precip_jan, elev: atmo.elev, broad_elev: broad, global_mean_t: tmean }
+        Coarse { grid: g, t_sl, swing, maritime_summer: mar_summer, maritime_winter: mar_winter, precip, precip_jul, precip_jan, elev: atmo.elev, broad_elev: broad, global_mean_t: tmean }
     }
 }
 
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 10;
+    const VERSION: u32 = 11;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -292,14 +356,15 @@ impl Generator for Climate {
                 let ll = pt.to_lat_lon();
                 let e = f64::from(elev[i]);
                 let is_land = !sea(i);
-                let mar = g.sample(&co.maritime, ll.lat_deg, ll.lon_deg);
-                let cont = continentality(is_land, mar, coast_km[i]);
-                let t_sl = g.sample(&co.t_sl, ll.lat_deg, ll.lon_deg) + 3.5 * wave_t.fbm(pt, 3.0, 3);
+                let cont_s = continentality(is_land, g.sample(&co.maritime_summer, ll.lat_deg, ll.lon_deg), coast_km[i]);
+                let cont_w = continentality(is_land, g.sample(&co.maritime_winter, ll.lat_deg, ll.lon_deg), coast_km[i]);
+                let t_zonal = g.sample(&co.t_sl, ll.lat_deg, ll.lon_deg) + 3.5 * wave_t.fbm(pt, 3.0, 3);
+                let swing = g.sample(&co.swing, ll.lat_deg, ll.lon_deg);
+                let (summer, winter) = summer_winter(t_zonal, swing, ll.lat_deg, if is_land { 1.0 } else { 0.0 }, cont_s, cont_w, swing != 0.0);
+                let (t_sl, range) = (0.5 * (summer + winter), summer - winter);
                 // Plateau warming needs the ground itself to be high, not just nearby ranges.
                 let broad = g.sample(&co.broad_elev, ll.lat_deg, ll.lon_deg).min(e);
                 let t = t_sl - lapse * ground_m(wet, e) / 1000.0 + if is_land { plateau_warming(t_sl, broad) } else { 0.0 };
-                let swing = g.sample(&co.swing, ll.lat_deg, ll.lon_deg).abs();
-                let range = swing * (0.13 + 0.87 * cont);
                 let mut pr = g.sample(&co.precip, ll.lat_deg, ll.lon_deg).max(0.0) * (0.8 * wave_p.fbm(pt, 4.0, 3)).exp();
                 if is_land {
                     // Local relief above the atmosphere grid's smooth surface catches more rain,
@@ -397,5 +462,37 @@ pub fn pet_mm(t: f64) -> f64 {
         0.0
     } else {
         28.0 * (t + 5.0).powf(1.2)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A continental interior at 62°N: a much colder winter than the sea's, and a summer only
+    /// somewhat warmer (the winter high).
+    #[test]
+    fn a_high_latitude_interior_has_its_winter_high() {
+        let (sea_s, sea_w) = summer_winter(-2.0, 46.0, 62.0, 0.0, 0.05, 0.05, true);
+        let (land_s, land_w) = summer_winter(-2.0, 46.0, 62.0, 1.0, 0.9, 0.9, true);
+        assert!(land_s > sea_s + 5.0 && sea_w - land_w > land_s - sea_s + 5.0, "sea {sea_s:.1}/{sea_w:.1}, land {land_s:.1}/{land_w:.1}");
+        // No winter high at 30°N: the range is the swing's continental share alone.
+        let (s, w) = summer_winter(15.0, 25.0, 30.0, 1.0, 0.9, 0.9, true);
+        assert!((s - w - 25.0 * (0.13 + 0.87 * 0.9)).abs() < 1e-9, "{s} {w}");
+    }
+
+    /// Maritime winters and continental summers (Europe under its westerlies) make a warmer
+    /// year than continental winters and maritime summers.
+    #[test]
+    fn maritime_winters_warm_the_year() {
+        let (es, ew) = summer_winter(5.0, 43.0, 55.0, 1.0, 0.7, 0.4, true);
+        let (ms, mw) = summer_winter(5.0, 43.0, 55.0, 1.0, 0.4, 0.7, true);
+        assert!(es + ew > ms + mw + 3.0 && es - ew < ms - mw);
+    }
+
+    /// Without seasons nothing swings.
+    #[test]
+    fn a_locked_world_has_no_seasons() {
+        assert_eq!(summer_winter(10.0, 0.0, 60.0, 1.0, 0.9, 0.9, false), (10.0, 10.0));
     }
 }

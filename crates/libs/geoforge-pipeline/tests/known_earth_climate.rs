@@ -93,7 +93,6 @@ const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 
 const ARABIA: &str =
     "the summer rain belt reaches into Arabia (350 mm at 22°N 47°E, all of it in summer), which cools it; the northern Arabian Sea, no longer 2 °C too cold, rains 870 mm at 20°N 62°E (observed ~100)";
 const PAMPAS: &str = "the Pampas are too dry (170 mm at 35°S 62°W, Buenos Aires 140 mm; observed ~800 and 1200): with the low winds turned along the Andes little Amazon air reaches them, and the Brazil Current offshore is no longer 8 °C too warm";
-const NORTHWEST_AUSTRALIA: &str = "the seas off north-western Australia upwell under the dry-season trades (Timor Sea −3 °C, observed +2; off Western Australia −4, observed +0.5) where real ones keep a deep warm layer fed from the Pacific through Indonesia (the Leeuwin Current): the Kimberley falls from 1130 to 740 mm and Alice Springs to 140 mm (observed 285)";
 const SOUTH_ATLANTIC: &str = "the modelled tropical South Atlantic is warm enough for storms (26.7 °C at 15°S 25°W, observed ~26), and the wind shear that stops real storms there is not modelled";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
 const ICELAND: &str = "Reykjavik runs 5 °C cold (−0.5 °C): the sea south of Iceland is 3 °C at 63°N 20°W (observed about 7)";
@@ -109,12 +108,18 @@ const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Ulaanbaatar", MONGOLIA),
     ("Riyadh", ARABIA),
     ("Timbuktu", WEST_AFRICA),
-    ("Phoenix", SOUTHWEST),
+    ("Cape Town", "Cape Town runs 5 °C warm (21.7 °C; 20.1 on observed winds): its winter air is all maritime, over a sea 1.2 °C warm"),
+    (
+        "In Salah",
+        "the model's July winds bring Mediterranean air into the central Sahara, maritime in summer and not in winter, which holds the year down to 20 °C; on observed winds In Salah is 24.8 °C",
+    ),
     ("Lima", LIMA),
-    ("Utqiagvik", "the Arctic coast runs 4 °C warm"),
     ("Vostok", ANTARCTICA),
 ];
-const RANGE_GAPS: &[(&str, &str)] = &[("Yakutsk", SIBERIA)];
+const RANGE_GAPS: &[(&str, &str)] = &[
+    ("Moscow", "the model's January winds bring little Atlantic air to Moscow (a maritime share of 0.2 in winter), so its range is 35 °C; on observed winds it is 30 °C, with the mean right (5.5 °C)"),
+    ("Manaus", "4.0 °C, at the line (3.6 on observed winds, observed 1.7)"),
+];
 const RAIN_GAPS: &[(&str, &str)] = &[
     ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
     ("Yakutsk", "the Siberian interior gets an eighth of its rain"),
@@ -126,14 +131,17 @@ const RAIN_GAPS: &[(&str, &str)] = &[
     ("Astana", KAZAKHSTAN),
     ("Nairobi", "the East African highlands are drenched (2800 mm, observed 870)"),
     ("Lhasa", TIBET),
-    ("Buenos Aires", PAMPAS),
+    ("Los Angeles", "Los Angeles gets 140 mm (observed 380; 142 mm on observed winds): not yet traced"),
+    ("Tehran", "the Alborz's rain spreads to its dry southern foot (745 mm at Tehran; 339 mm on observed winds)"),
+    ("Utqiagvik", "the Arctic coast gets 340 mm (observed 140): not yet traced"),
+    ("Summit, Greenland", "Greenland's top gets 97 mm (observed 250): its mean is −35 °C, 5 °C colder than observed, and the colder air holds less vapour"),
     ("Riyadh", ARABIA),
-    ("Alice Springs", NORTHWEST_AUSTRALIA),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
     ("Great Plains", "Gulf air turned north along the Rockies' foot drenches the plains (1000 mm at 40°N 100°W, observed ~500), wet enough for forest"),
     ("Pampas", PAMPAS),
+    ("Arabia", ARABIA),
     ("Sahel", WEST_AFRICA),
     ("Eastern US", "the eastern US is too dry for forest (640 mm at 38°N 82°W, observed ~1100)"),
     ("Kazakh steppe", KAZAKHSTAN),
@@ -472,6 +480,7 @@ const SST_GAPS: &[(&str, &str)] = &[(
     "the Canary Current runs 6 °C cold (observed −3): since the jets were kept off the coast its southward flow is 0.11 m/s (0.20 before), so the water lingers over the upwelling",
 )];
 const OCEAN_GAPS: &[(&str, &str)] = &[
+    ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic, so its coldest month stays above the ice line"),
     ("Sea of Okhotsk (55°N 150°E)", "the modelled January there is 0 °C (observed about −12): the Siberian winter is too warm"),
     ("central Arctic (85°N 0°)", "the central Arctic is 1 °C warmer than before the North Atlantic jets were kept off the coasts (−8.8 °C at 85°N 0°), just enough to open in summer"),
     ("Bering Sea (58°N 175°W)", "the North Pacific jet, turned up the Alaskan coast and kept off it, runs north into the Bering Sea (0.27 m/s, +0.9 °C), which stays open"),
@@ -523,6 +532,7 @@ fn pressure(s: &mut Scorecard, e: &Earth) {
 }
 
 const PRESSURE_GAPS: &[(&str, &str)] = &[
+    ("Australian high (30°S 130°E)", "the July high is 1032 hPa: the land between 20 and 30°S runs 1.4 °C cold on observed winds, more in winter"),
     ("Siberian high (48°N 100°E)", "the modelled Siberian winter is 5–15 K too warm (Ulaanbaatar −16 °C in January, observed −20; Yakutsk −24, observed −39), so its cold dome is weaker"),
     ("Antarctic trough (65°S 90°E)", "the modelled westerlies peak at 40–45°S (observed 50–55°S), so the trough is shallower"),
 ];
@@ -573,7 +583,7 @@ fn storm_field(s: &mut Scorecard, e: &Earth) {
     s.range("storms", "mid-latitude lows formed a day, world".to_string(), lows, 3.0..=8.0, "");
 }
 
-const STORM_GAPS: &[(&str, &str)] = &[("South Atlantic (20°S 25°W)", SOUTH_ATLANTIC)];
+const STORM_GAPS: &[(&str, &str)] = &[];
 
 /// The classifier alone, fed station normals: its own errors, apart from the climate's.
 fn classifier(s: &mut Scorecard) {

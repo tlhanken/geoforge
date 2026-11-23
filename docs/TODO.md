@@ -61,16 +61,30 @@ Still needed:
 - the flip that stops the western boundary current past its separation breaks the gyre's
   closure locally: draw it into ψ instead.
 
-## 4. A seasonal climate [8e]
-One continentality serves both halves of the year. Needed: winter and summer computed apart,
-with winter highs (Siberian, Canadian), surface inversions, and sea ice stored and read back.
+## 4. A seasonal climate [8e] — temperature done
+Done: the warmest and coldest months are computed apart (`climate::summer_winter`). Each
+half-year's continentality comes from that season's winds; sea air reaches three quarters as
+far inland in summer as in winter; a sea frozen in a season is barely maritime in it (the
+frozen-sea effect, for land; the sea's own air keeps the open-water reckoning the sea-ice
+view is set on); and a high-latitude interior gets the winter high's cold on top.
 
-It fixes:
-- Yakutsk (−24 °C coldest month vs −38) and Siberia's dry winters, which make Dw where
-  Df belongs;
-- Moscow too cold, Utqiagvik too warm;
-- no ice in the Okhotsk Sea or the Baltic;
-- the frozen-sea effect on land, tried twice without it.
+On observed winds (the A/B page), against the earlier climate:
+- land temperature error 3.84 → 3.67 °C, range correlation 0.78 → 0.81, Köppen 36.5% →
+  38.4% of land in full class, 62.4% → 63.5% by group;
+- the range north of 50°N is within 1 °C (it was 6 °C short at 60–80°N);
+- Moscow 5.5 °C (observed 5.4, was 2.7), Yakutsk −7.9 °C with a 50 °C range (observed −8.7
+  and 57; was −5.3 and 46), Utqiagvik −9.7 °C (observed −11).
+
+On the model's own winds the climate suite went 190 → 185: its January winds bring little
+Atlantic air to Moscow and its July winds bring sea air into the Sahara.
+
+Still needed:
+- sea ice stored as a product and read back by the climate, not a view set on its numbers;
+- surface inversions in basins (Yakutsk, Verkhoyansk, Fairbanks);
+- Siberia's dry winters (Dw where Df belongs);
+- the Southern Hemisphere's continental ranges, 5–11 °C too wide at 20–50°S (Australia,
+  southern Africa, Argentina; before this change too);
+- Greenland's top, whose range is 51 °C on observed winds (observed 27).
 
 ## 5. Monsoons and storm tracks [8e]
 - The summer monsoon winds over South America, Africa and Australia are rectangles of fast
