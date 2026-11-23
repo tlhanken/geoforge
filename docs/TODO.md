@@ -114,7 +114,8 @@ Still needed:
   events), its months' rain, SPI-3 and soil water; `place` reports drought frequency.
 - Slow rain anomalies (regional AR(1) plus an ENSO-like cycle) in all daily weather.
 - Still needed: SPI-6/12, drought onset and end, eclipses and meteor showers in the
-  almanac, a printable month page, and tying the cycle to an ocean basin.
+  almanac, a printable month page, tying the cycle to an ocean basin, and a faster drought
+  record (20 years of daily weather take ~8 s on a 1024-wide Earth).
 
 ## 7. Rain and temperature misses [8e, V2_REALISM]
 - London: no rain shadow.

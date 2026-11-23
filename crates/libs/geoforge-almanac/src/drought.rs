@@ -12,13 +12,15 @@
 //! - **SPI-3**, the standardized precipitation index over three months (McKee et al. 1993):
 //!   each three-month total set against the same months in the other years, here by a
 //!   log-normal fit; −1 and below is a moderate drought, −1.5 a severe one. Months whose
-//!   three-month normal is under 10 mm are too dry to read.
+//!   three-month totals average under 10 mm are too dry to read. The record is the place's
+//!   own daily weather over the years, so the index is set on the same storms and showers
+//!   as the days it reads.
 //! - **Soil water**: a 150 mm bucket filled by rain and emptied by evaporation, potential
 //!   evaporation rising with temperature (5 mm a day at 25 °C, none below −3 °C) and cut as
 //!   the soil dries.
 
 use crate::ephemeris::Calendar;
-use crate::weather::{normals, Climate};
+use crate::weather::Climate;
 use crate::Result;
 use geoforge_core::seed::{unit, Seed};
 use geoforge_store::World;
@@ -126,24 +128,6 @@ fn gauss(seed: Seed) -> f64 {
     (-2.0 * u1.ln()).sqrt() * (TAU * u2).cos()
 }
 
-/// A Gamma(`shape`, 1) draw (Marsaglia & Tsang 2000).
-fn gamma(shape: f64, seed: Seed) -> f64 {
-    if shape < 1.0 {
-        return gamma(shape + 1.0, seed.child(b"boost")) * unit(seed.child(b"u")).max(1e-12).powf(1.0 / shape);
-    }
-    let d = shape - 1.0 / 3.0;
-    let c = 1.0 / (9.0 * d).sqrt();
-    for k in 0..64u64 {
-        let s = seed.child_u64(b"try", k);
-        let x = gauss(s.child(b"x"));
-        let v = (1.0 + c * x).powi(3);
-        if v > 0.0 && unit(s.child(b"u")).max(1e-12).ln() < 0.5 * x * x + d - d * v + d * v.ln() {
-            return d * v;
-        }
-    }
-    shape
-}
-
 /// One month of a place's simulated record.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Month {
@@ -181,27 +165,35 @@ pub struct Droughts {
 }
 
 impl Droughts {
-    /// The months of a run of days already drawn (`(Earth day, rain mm, mean °C)` each), read
-    /// against this record: each whole month's rain, its SPI-3 (once two months precede it)
-    /// and the soil's water, carried on from the record's.
-    #[must_use]
-    pub fn read(&self, days: &[(f64, f64, f64)]) -> Vec<Month> {
+    /// The whole months of a run of days (`(Earth day, rain mm, mean °C)` each, in order):
+    /// (the months' index, rain mm, mean °C).
+    fn totals(&self, days: &[(f64, f64, f64)]) -> Vec<(i64, f64, f64)> {
         let index = |t: f64| (t / self.month_days).floor() as i64;
         let (Some(a), Some(b)) = (days.first(), days.last()) else { return Vec::new() };
-        // Whole months only.
         let (from, to) = (index(a.0 - 1e-9) + 1, index(b.0 + 1e-9) - 1);
-        let mut totals: Vec<(i64, f64, f64, usize)> = (from..=to).map(|k| (k, 0.0, 0.0, 0)).collect();
+        let mut sums: Vec<(f64, f64, usize)> = vec![(0.0, 0.0, 0); (to - from + 1).max(0) as usize];
         for &(t, mm, c) in days {
-            if let Some(m) = totals.iter_mut().find(|m| m.0 == index(t)) {
-                (m.1, m.2, m.3) = (m.1 + mm, m.2 + c, m.3 + 1);
+            let k = index(t) - from;
+            if (0..sums.len() as i64).contains(&k) {
+                let m = &mut sums[k as usize];
+                (m.0, m.1, m.2) = (m.0 + mm, m.1 + c, m.2 + 1);
             }
         }
+        sums.iter().zip(from..).map(|(m, k)| (k, m.0, m.1 / m.2.max(1) as f64)).collect()
+    }
+
+    /// The months of a run of days already drawn (`(Earth day, rain mm, mean °C)` each, in
+    /// order), read against this record: each whole month's rain, its SPI-3 (once two
+    /// months precede it) and the soil's water, carried on from the record's.
+    #[must_use]
+    pub fn read(&self, days: &[(f64, f64, f64)]) -> Vec<Month> {
+        let totals = self.totals(days);
+        let Some(&(from, ..)) = totals.first() else { return Vec::new() };
         let mut soil = self.months.iter().zip(self.first..).find(|(_, k)| *k == from - 1).map_or(0.5, |(m, _)| m.soil) * SOIL_MM;
         totals
             .iter()
             .enumerate()
-            .map(|(i, &(k, mm, sum_c, n))| {
-                let temp = sum_c / n.max(1) as f64;
+            .map(|(i, &(k, mm, temp))| {
                 soil = (soil + mm - self.month_days * (0.18 * (temp + 3.0)).max(0.0) * soil / SOIL_MM).clamp(0.0, SOIL_MM);
                 let spi3 = (i >= 2).then(|| totals[i - 2].1 + totals[i - 1].1 + mm).and_then(|three| self.fits[k.rem_euclid(12) as usize].map(|(mean, sd)| ((three + 1.0).ln() - mean) / sd));
                 Month { day: (k as f64 + 0.5) * self.month_days, rain_mm: mm, spi3, soil: soil / SOIL_MM }
@@ -210,69 +202,39 @@ impl Droughts {
     }
 }
 
-/// `years` of monthly rain, SPI-3 and soil water at a place, ending with the month of Earth
-/// day `now`: each month's normal rain times the slow factor, scattered as the sum of its
-/// wet days' falls would be.
+/// A place's droughts from `years` of its days already drawn (`(Earth day, rain mm, mean
+/// °C)` each, in order), months of `month_days`: each whole month's rain, SPI-3 and soil
+/// water, and how often and how long it was in drought.
 #[must_use]
-pub fn record(climate: &Climate, wet: &Wetness, season: impl Fn(f64) -> f64, year: f64, now: f64, years: usize, seed: Seed) -> Droughts {
-    let normal = normals(climate, season, year);
-    let month_days = year / 12.0;
-    let count = years * 12;
-    let first = ((now / month_days).floor() as i64) - count as i64 + 1;
-    let mut months = Vec::with_capacity(count);
-    let mut soil = 0.5 * SOIL_MM;
-    for k in first..first + count as i64 {
-        let t = (k as f64 + 0.5) * month_days;
-        let (temp, rain_day, _) = normal(t);
-        let normal_mm = rain_day * month_days;
-        // Wet days a month, and the month's total as the sum of that many exponential falls.
-        let share = rain_day / (rain_day + crate::weather::HALF_WET_MM);
-        let wet_days = (share * month_days).max(0.3);
-        let rain_mm = normal_mm * wet.factor(t) * gamma(wet_days, seed.child_u64(b"month", k as u64)) / wet_days;
-        let pet = month_days * (0.18 * (temp + 3.0)).max(0.0);
-        soil = (soil + rain_mm - pet * soil / SOIL_MM).clamp(0.0, SOIL_MM);
-        months.push((Month { day: t, rain_mm, spi3: None, soil: soil / SOIL_MM }, temp, normal_mm));
-    }
-    // SPI-3: each calendar month's three-month totals, log-normal over the years.
-    // (total, normal) of the three months ending with each month, from the third on.
-    let three: Vec<(f64, f64)> = (0..count).map(|i| if i < 2 { (0.0, 0.0) } else { ((i - 2..=i).map(|j| months[j].0.rain_mm).sum(), (i - 2..=i).map(|j| months[j].2).sum()) }).collect();
+pub fn record(days: &[(f64, f64, f64)], month_days: f64, years: usize) -> Droughts {
+    let blank = Droughts { years, moderate_share: 0.0, severe_share: 0.0, longest_months: 0, dry_soil_share: None, months: Vec::new(), first: 0, fits: vec![None; 12], month_days };
+    let totals = blank.totals(days);
+    let Some(&(first, ..)) = totals.first() else { return blank };
+    let count = totals.len();
+    let three: Vec<f64> = (0..count).map(|i| if i < 2 { 0.0 } else { (i - 2..=i).map(|j| totals[j].1).sum() }).collect();
     let mut fits = vec![None; 12];
     for (cal, fit) in fits.iter_mut().enumerate() {
-        // The record's months of this calendar month (by the months' index, so a run of
-        // days drawn later reads against the same fit).
-        let idx: Vec<usize> = (2..count).filter(|&i| (first + i as i64).rem_euclid(12) as usize == cal).collect();
-        let sums: Vec<(f64, f64)> = idx.iter().map(|&i| three[i]).collect();
-        if sums.len() < 3 || sums.iter().map(|s| s.1).sum::<f64>() / (sums.len() as f64) < 10.0 {
+        let logs: Vec<f64> = (2..count).filter(|&i| (first + i as i64).rem_euclid(12) as usize == cal).map(|i| (three[i] + 1.0).ln()).collect();
+        let mean_mm = (2..count).filter(|&i| (first + i as i64).rem_euclid(12) as usize == cal).map(|i| three[i]).sum::<f64>() / logs.len().max(1) as f64;
+        if logs.len() < 3 || mean_mm < 10.0 {
             continue;
         }
-        let logs: Vec<f64> = sums.iter().map(|s| (s.0 + 1.0).ln()).collect();
         let mean = logs.iter().sum::<f64>() / logs.len() as f64;
         let sd = (logs.iter().map(|l| (l - mean).powi(2)).sum::<f64>() / (logs.len() - 1) as f64).sqrt().max(1e-6);
         *fit = Some((mean, sd));
-        for (&i, l) in idx.iter().zip(&logs) {
-            months[i].0.spi3 = Some((l - mean) / sd);
-        }
     }
-    let read: Vec<f64> = months.iter().filter_map(|m| m.0.spi3).collect();
+    let d = Droughts { fits, first, ..blank };
+    let months = d.read(days);
+    let read: Vec<f64> = months.iter().filter_map(|m| m.spi3).collect();
     let share = |lim: f64| if read.is_empty() { 0.0 } else { read.iter().filter(|&&s| s <= lim).count() as f64 / read.len() as f64 };
     let (mut longest, mut run) = (0, 0);
     for m in &months {
-        run = if m.0.spi3.is_some_and(|s| s <= MODERATE_SPI) { run + 1 } else { 0 };
+        run = if m.spi3.is_some_and(|s| s <= MODERATE_SPI) { run + 1 } else { 0 };
         longest = longest.max(run);
     }
-    let growing: Vec<&(Month, f64, f64)> = months.iter().filter(|m| m.1 >= 5.0).collect();
-    let dry_soil_share = (!growing.is_empty()).then(|| growing.iter().filter(|m| m.0.soil < 0.25).count() as f64 / growing.len() as f64);
-    Droughts {
-        years,
-        moderate_share: share(MODERATE_SPI),
-        severe_share: share(SEVERE_SPI),
-        longest_months: longest,
-        dry_soil_share,
-        months: months.into_iter().map(|m| m.0).collect(),
-        first,
-        fits,
-        month_days,
-    }
+    let growing: Vec<(&Month, f64)> = months.iter().zip(&totals).filter(|(_, t)| t.2 >= 5.0).map(|(m, t)| (m, t.2)).collect();
+    let dry_soil_share = (!growing.is_empty()).then(|| growing.iter().filter(|(m, _)| m.soil < 0.25).count() as f64 / growing.len() as f64);
+    Droughts { moderate_share: share(MODERATE_SPI), severe_share: share(SEVERE_SPI), longest_months: longest, dry_soil_share, months, ..d }
 }
 
 /// The droughts at (`lat`, `lon`) over `years` years ending with the month of Earth day
@@ -282,13 +244,14 @@ pub fn record(climate: &Climate, wet: &Wetness, season: impl Fn(f64) -> f64, yea
 /// If the climate is not generated yet.
 pub fn droughts(world: &World, lat: f64, lon: f64, now: f64, years: usize) -> Result<Droughts> {
     let body = world.load_body()?;
-    let grid = world.manifest.grid.build()?;
-    let p = world.load_products()?;
-    let (climate, c) = crate::weather::climate_at(&p, &grid, &body, lat, lon)?;
-    let year = Calendar::new(&body, &[]).year_days;
-    let season = crate::weather::season_of(world.load_system()?, world.manifest.focus, &body, year);
-    let wet = Wetness::of(world, lat, lon, &climate, year);
-    Ok(record(&climate, &wet, season, year, now, years, world.manifest.root_seed.child(b"drought record").child_u64(b"cell", c as u64)))
+    let calendar = Calendar::new(&body, &[]);
+    let step = calendar.solar_day_h.map_or(1.0, |h| h / 24.0);
+    let span = years as f64 * calendar.year_days;
+    // A month more at the start, so the first whole month is whole.
+    let from = now - span - calendar.year_days / 12.0;
+    let f = crate::weather::forecast(world, lat, lon, from, ((now - from) / step).ceil() as usize + 1)?;
+    let days: Vec<(f64, f64, f64)> = f.days.iter().map(|d| (d.day + 0.5 * step, d.precipitation_mm, d.mean_c)).collect();
+    Ok(record(&days, calendar.year_days / 12.0, years))
 }
 
 /// Day length and sunrise at latitude `lat` with the star at declination `dec` (degrees), on
@@ -339,22 +302,29 @@ mod tests {
         assert!(corr(&near) > 0.9 && corr(&far).abs() < 0.4, "near {:.2}, far {:.2}", corr(&near), corr(&far));
     }
 
+    /// `years` of calm daily weather (no storms) ending at day 0, under the slow factor.
+    fn days(c: &Climate, w: &Wetness, years: usize, seed: u64) -> Vec<(f64, f64, f64)> {
+        let n = (years as f64 * 365.25 + 31.0) as usize;
+        crate::weather::simulate(c, earth_season, 365.25, 1.0, -(n as f64), n, Seed(seed), &|_| crate::storms::Effect::default(), &crate::weather::Storminess::calm(), &[], &|t| w.factor(t))
+            .iter()
+            .map(|d| (d.day + 0.5, d.precipitation_mm, d.mean_c))
+            .collect()
+    }
+
     #[test]
     fn drought_index_reads_about_a_sixth_of_months_as_drought() {
         let c = climate(40.0, 700.0);
         let w = Wetness::new(Seed(7), 40.0, 10.0, 700.0, 365.25);
-        let d = record(&c, &w, earth_season, 365.25, 0.0, 60, Seed(8));
-        assert_eq!(d.months.len(), 720);
+        let d = record(&days(&c, &w, 40, 8), 365.25 / 12.0, 40);
+        assert!(d.months.len() >= 479, "{}", d.months.len());
         // A standardized index: about 16% of months at −1 or below, 7% at −1.5.
         assert!(d.moderate_share > 0.1 && d.moderate_share < 0.22, "{}", d.moderate_share);
         assert!(d.severe_share > 0.03 && d.severe_share < d.moderate_share, "{}", d.severe_share);
         assert!(d.longest_months >= 3);
         assert!(d.dry_soil_share.is_some());
-        // The same record every time.
-        assert_eq!(d, record(&c, &w, earth_season, 365.25, 0.0, 60, Seed(8)));
         // Days drawn later read against it: a dry year reads as drought, a wet one does not.
-        let days = |mm: f64| (0..400).map(|t| (f64::from(t), mm, 12.0)).collect::<Vec<_>>();
-        let (dry, wet) = (d.read(&days(0.2)), d.read(&days(4.0)));
+        let run = |mm: f64| (0..400).map(|t| (f64::from(t), mm, 12.0)).collect::<Vec<_>>();
+        let (dry, wet) = (d.read(&run(0.2)), d.read(&run(4.0)));
         assert_eq!((dry.len(), dry.iter().filter(|m| m.spi3.is_some()).count()), (13, 11));
         assert!(dry.iter().filter_map(|m| m.spi3).all(|s| s < -2.0) && wet.iter().filter_map(|m| m.spi3).all(|s| s > 0.5));
         assert!(dry.last().unwrap().soil < wet.last().unwrap().soil);
@@ -364,7 +334,7 @@ mod tests {
     fn a_desert_is_too_dry_to_read() {
         let c = Climate { mean_c: 25.0, precipitation_mm: 5.0, ..climate(22.0, 5.0) };
         let w = Wetness::new(Seed(7), 22.0, 10.0, 5.0, 365.25);
-        let d = record(&c, &w, earth_season, 365.25, 0.0, 30, Seed(8));
+        let d = record(&days(&c, &w, 20, 8), 365.25 / 12.0, 20);
         assert!(d.months.iter().all(|m| m.spi3.is_none()));
         assert!(d.dry_soil_share.is_some_and(|s| s > 0.9));
     }

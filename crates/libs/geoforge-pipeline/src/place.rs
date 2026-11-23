@@ -49,7 +49,7 @@ pub struct PlaceReport {
     pub quake_7: f64,
     pub quake_8: f64,
     pub largest_quake: f64,
-    /// Droughts at the centre over the 30 years up to the window's start, and the drought
+    /// Droughts at the centre over the 20 years up to the window's start, and the drought
     /// index then; `None` at sea.
     pub droughts: Option<DroughtsHere>,
 }

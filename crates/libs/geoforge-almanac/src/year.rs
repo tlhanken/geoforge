@@ -10,7 +10,7 @@ use geoforge_store::World;
 use serde::Serialize;
 
 /// Years of record the drought index of an almanac is read against.
-pub const DROUGHT_YEARS: usize = 30;
+pub const DROUGHT_YEARS: usize = 20;
 
 /// One local day of an almanac.
 #[derive(Debug, Clone, PartialEq, Serialize)]

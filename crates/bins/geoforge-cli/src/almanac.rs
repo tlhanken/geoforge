@@ -54,7 +54,7 @@ pub fn almanac(dir: &Path, lat: f64, lon: f64, year: i64, json: bool) -> R<()> {
         }
         println!("  {:>6.0} {rise:>5} {set:>5} {:>6.1} {:>6.1} {precip:>8}  {lit}{sky}", (w.local_day + 1e-6).floor(), w.low_c, w.high_c);
     }
-    println!("the year's months: rain, drought index (SPI-3, against the 30 years before), soil water");
+    println!("the year's months: rain, drought index (SPI-3, against the {} years before), soil water", a.droughts.years);
     for m in &a.months {
         let spi = m.spi3.map_or("  too dry".to_string(), |s| format!("{s:>+9.2}"));
         println!(

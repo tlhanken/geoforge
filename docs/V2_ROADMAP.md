@@ -355,13 +355,17 @@ Done (November 2026): `geoforge almanac DIR --lat --lon [--year N]`
 (`almanac/src/year.rs`, `drought.rs`): each local day's sunrise and sunset (the star's
 declination from the season, 0.83° for the sun's radius and refraction; polar night and
 midnight sun), each moon's lit share, the weather and the day's events; then the year's
-months — rain summed from those days, SPI-3 read against the 30 years before, soil water
+months — rain summed from those days, SPI-3 read against the 20 years before, soil water
 — and the place's droughts. Rain now has slow wet and dry years: a factor whose logarithm
 is a regional AR(1) over months (0.6 a month, on a 15° lattice so neighbours share it)
 plus an ENSO-like cycle of two seeded periods of 2.5–7 years, felt in the tropics with a
 regional sign; spread 0.2 (wet) to 0.5 (desert). SPI-3 is a log-normal fit per calendar
-month; about 16% of months read moderate and 7–8% severe, as a standardised index should.
-`place` reports drought frequency and the index as its window starts.
+month over the place's own daily weather of the 20 years before, so it is set on the same
+storms as the days it reads (a monthly stand-in without the storms read real years at a
+mean SPI of −1.0 with a spread of 2.1; on the daily record six Thumi years read 0.2 and
+1.0); about 16% of months read moderate and 7–8% severe, as a standardised index should.
+`place` reports drought frequency and the index as its window starts (the record costs
+about 8 s on a 1024-wide Earth).
 
 Open: SPI-6 and -12, onset and end of each drought, eclipses and meteor showers in the
 almanac, a printable month page, and the ocean's say in the cycle (it is world-wide today,
