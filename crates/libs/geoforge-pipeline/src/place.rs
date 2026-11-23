@@ -49,6 +49,21 @@ pub struct PlaceReport {
     pub quake_7: f64,
     pub quake_8: f64,
     pub largest_quake: f64,
+    /// Droughts at the centre over the 30 years up to the window's start, and the drought
+    /// index then; `None` at sea.
+    pub droughts: Option<DroughtsHere>,
+}
+
+/// A place's droughts, without the month-by-month record.
+#[derive(Debug, Clone, Serialize)]
+pub struct DroughtsHere {
+    pub years: usize,
+    pub moderate_share: f64,
+    pub severe_share: f64,
+    pub longest_months: usize,
+    pub dry_soil_share: Option<f64>,
+    /// SPI-3 of the month the window starts in.
+    pub spi_now: Option<f64>,
 }
 
 /// Report on the area within `radius_km` of (`lat`, `lon`) over `days` Earth days from
@@ -103,5 +118,12 @@ pub fn report(world: &World, lat: f64, lon: f64, radius_km: f64, from_day: f64, 
         quake_7: near.quake_7,
         quake_8: near.quake_8,
         largest_quake: near.largest_quake,
+        droughts: if g.sea[c] {
+            None
+        } else {
+            let d = geoforge_almanac::drought::droughts(world, lat, lon, from_day, geoforge_almanac::year::DROUGHT_YEARS)?;
+            let spi_now = d.months.last().and_then(|m| m.spi3);
+            Some(DroughtsHere { years: d.years, moderate_share: d.moderate_share, severe_share: d.severe_share, longest_months: d.longest_months, dry_soil_share: d.dry_soil_share, spi_now })
+        },
     })
 }

@@ -227,6 +227,25 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// A place's year day by day: sunrise and sunset, the moons, the weather and the day's
+    /// events; then the year's months of rain, drought index (SPI-3) and soil water, and the
+    /// place's droughts over 30 years.
+    Almanac {
+        /// The world directory.
+        dir: PathBuf,
+        /// Latitude, degrees (south negative).
+        #[arg(long, allow_hyphen_values = true)]
+        lat: f64,
+        /// Longitude, degrees (west negative).
+        #[arg(long, allow_hyphen_values = true)]
+        lon: f64,
+        /// The local year (0 the present one).
+        #[arg(long, default_value_t = 0, allow_hyphen_values = true)]
+        year: i64,
+        /// Print JSON instead.
+        #[arg(long)]
+        json: bool,
+    },
     /// The weather map of a day: isobars, fronts, rain and storm centres.
     WeatherMap {
         /// The world directory.
@@ -358,6 +377,7 @@ fn run(cli: Cli) -> R<()> {
         Cmd::Sky { dir, day, to, width } => almanac::sky(&World::open(&dir)?, day, to.as_deref(), width),
         Cmd::Place { dir, lat, lon, radius_km, from_day, days, json } => almanac::place(&dir, lat, lon, radius_km, from_day, days, json),
         Cmd::Weather { dir, lat, lon, day, days, json } => almanac::weather(&dir, lat, lon, day, days, json),
+        Cmd::Almanac { dir, lat, lon, year, json } => almanac::almanac(&dir, lat, lon, year, json),
         Cmd::WeatherMap { dir, day, to, width } => almanac::weather_map(&dir, day, to, width),
         Cmd::Seed { dir, product, owner } => world::seed(&dir, &product, owner),
         Cmd::Stats { dir } => world::stats(&dir),

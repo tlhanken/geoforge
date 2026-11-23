@@ -109,10 +109,12 @@ Still needed:
   ERA +2 from the south). Arabia gets 732 mm at Riyadh on the model's winds (513 on observed
   winds, GPCP 124), and the Sahel 960 mm at 12–16°N (550 on observed winds, GPCP 550).
 
-## 6. An almanac for a place, with droughts [8d]
-- A year day by day at a place: weather, moons, sunrise and sunset, and the day's events.
-- Slow rain anomalies (AR(1) plus an ENSO-like cycle), SPI drought index and soil moisture;
-  drought frequency in `place`.
+## 6. An almanac for a place, with droughts [8d] — done
+- `geoforge almanac`: a year day by day at a place (sunrise and sunset, moons, weather,
+  events), its months' rain, SPI-3 and soil water; `place` reports drought frequency.
+- Slow rain anomalies (regional AR(1) plus an ENSO-like cycle) in all daily weather.
+- Still needed: SPI-6/12, drought onset and end, eclipses and meteor showers in the
+  almanac, a printable month page, and tying the cycle to an ocean basin.
 
 ## 7. Rain and temperature misses [8e, V2_REALISM]
 - London: no rain shadow.

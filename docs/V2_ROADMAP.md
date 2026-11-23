@@ -333,7 +333,7 @@ phonologies — consonant and vowel inventories, syllable shapes, stress, spelli
 in Artifexian's conlang videos — seeded per world, culture or region, so stars, planets,
 storms and places each get a consistent language.
 
-## 8d. An almanac for a place — todo
+## 8d. An almanac for a place — first version done
 
 A calendar for a whole year at a place, worked out day by day on its own calendar: the
 date (local day, month by its moons), sunrise and sunset and day length, the moons'
@@ -350,6 +350,22 @@ and the day's odds — then track a standardised precipitation index (SPI over 3
 months) and soil moisture (rain against evaporation from temperature), report drought
 onset, severity and length in the almanac, and summarise drought frequency in `place`
 for crop risk.
+
+Done (November 2026): `geoforge almanac DIR --lat --lon [--year N]`
+(`almanac/src/year.rs`, `drought.rs`): each local day's sunrise and sunset (the star's
+declination from the season, 0.83° for the sun's radius and refraction; polar night and
+midnight sun), each moon's lit share, the weather and the day's events; then the year's
+months — rain summed from those days, SPI-3 read against the 30 years before, soil water
+— and the place's droughts. Rain now has slow wet and dry years: a factor whose logarithm
+is a regional AR(1) over months (0.6 a month, on a 15° lattice so neighbours share it)
+plus an ENSO-like cycle of two seeded periods of 2.5–7 years, felt in the tropics with a
+regional sign; spread 0.2 (wet) to 0.5 (desert). SPI-3 is a log-normal fit per calendar
+month; about 16% of months read moderate and 7–8% severe, as a standardised index should.
+`place` reports drought frequency and the index as its window starts.
+
+Open: SPI-6 and -12, onset and end of each drought, eclipses and meteor showers in the
+almanac, a printable month page, and the ocean's say in the cycle (it is world-wide today,
+not tied to a basin).
 
 ## 8b. A system's local environment — next
 

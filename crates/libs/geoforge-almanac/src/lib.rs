@@ -11,11 +11,13 @@
 //! | [`weather`] | daily weather at a place, its phenomena, and the weather map |
 //! | [`exposure`] | hazards near a place: yearly rates, chances over a window, quakes |
 
+pub mod drought;
 pub mod ephemeris;
 pub mod exposure;
 pub mod sky;
 pub mod storms;
 pub mod weather;
+pub mod year;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

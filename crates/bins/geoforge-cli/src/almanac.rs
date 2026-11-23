@@ -1,4 +1,4 @@
-//! A place and a day: `place`, `weather`, `weather-map`, `sky`.
+//! A place and a day: `place`, `weather`, `almanac`, `weather-map`, `sky`.
 
 use crate::system::calendar_of;
 use crate::R;
@@ -26,6 +26,60 @@ pub fn weather(dir: &Path, lat: f64, lon: f64, day: f64, days: usize, json: bool
         print_weather(&f);
     }
     Ok(())
+}
+
+pub fn almanac(dir: &Path, lat: f64, lon: f64, year: i64, json: bool) -> R<()> {
+    let a = geoforge_almanac::year::year(&World::open(dir)?, lat, lon, year)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&a)?);
+        return Ok(());
+    }
+    let hm = |h: f64| format!("{:02}:{:02}", h.floor() as i64, ((h.fract()) * 60.0).floor() as i64);
+    println!("Almanac of {:.2}°, {:.2}°, year {}", a.lat, a.lon, a.year);
+    let moons: Vec<&str> = a.days.first().map_or_else(Vec::new, |d| d.moons.iter().map(|m| m.0.as_str()).collect());
+    println!("  {:>6} {:>5} {:>5} {:>6} {:>6} {:>8}  {}sky", "day", "rise", "set", "low", "high", "precip", moons.iter().map(|m| format!("{:>7} ", trim(m, 7))).collect::<String>());
+    for d in &a.days {
+        let w = &d.weather;
+        let (rise, set) = match (d.sun, a.day_h) {
+            (Some((r, s)), Some(h)) if s - r >= h - 1e-6 => ("sun".into(), "up".into()),
+            (Some((r, s)), _) => (hm(r), hm(s)),
+            (None, Some(_)) => ("—".into(), "—".into()),
+            (None, None) => (String::new(), String::new()),
+        };
+        let precip = if w.precipitation_mm > 0.0 { format!("{:.1}", w.precipitation_mm) } else { "—".into() };
+        let lit: String = d.moons.iter().map(|m| format!("{:>6.0}% ", 100.0 * m.1)).collect();
+        let mut sky = w.storm.as_ref().map_or_else(|| w.sky.to_string(), |name| format!("{} ({name})", w.sky));
+        for e in w.events.iter().filter(|e| e.kind != "thunderstorm" || w.sky != "thunderstorm") {
+            sky += &format!("; {}", e.what);
+        }
+        println!("  {:>6.0} {rise:>5} {set:>5} {:>6.1} {:>6.1} {precip:>8}  {lit}{sky}", (w.local_day + 1e-6).floor(), w.low_c, w.high_c);
+    }
+    println!("the year's months: rain, drought index (SPI-3, against the 30 years before), soil water");
+    for m in &a.months {
+        let spi = m.spi3.map_or("  too dry".to_string(), |s| format!("{s:>+9.2}"));
+        println!(
+            "  day {:>7.0} {:>7.0} mm {spi} {:>5.0}%{}",
+            m.day,
+            m.rain_mm,
+            100.0 * m.soil,
+            m.spi3.filter(|&s| s <= geoforge_almanac::drought::MODERATE_SPI).map_or("", |s| if s <= geoforge_almanac::drought::SEVERE_SPI { "  severe drought" } else { "  drought" })
+        );
+    }
+    print_droughts(&a.droughts.years, a.droughts.moderate_share, a.droughts.severe_share, a.droughts.longest_months, a.droughts.dry_soil_share);
+    Ok(())
+}
+
+fn trim(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
+
+fn print_droughts(years: &usize, moderate: f64, severe: f64, longest: usize, dry_soil: Option<f64>) {
+    println!(
+        "droughts over {years} years: {:.0}% of months moderate (SPI-3 ≤ −1), {:.0}% severe (≤ −1.5), longest {longest} months{}",
+        100.0 * moderate,
+        100.0 * severe,
+        dry_soil.map_or(String::new(), |s| format!("; soil under a quarter full in {:.0}% of growing-season months", 100.0 * s))
+    );
 }
 
 pub fn weather_map(dir: &Path, day: f64, to: Option<PathBuf>, width: u32) -> R<()> {
@@ -65,6 +119,12 @@ fn print_place(r: &pipe::place::PlaceReport) {
         println!("  {:<12} {:>9.3} {:>9.3} {:>5.1}%  ({})", h.hazard, h.per_year, h.expected, 100.0 * h.chance, h.event);
     }
     println!("  magnitude 7+: {:.2}%, 8+: {:.3}%; largest likely {:.1}", 100.0 * r.quake_7, 100.0 * r.quake_8, r.largest_quake);
+    if let Some(d) = &r.droughts {
+        print_droughts(&d.years, d.moderate_share, d.severe_share, d.longest_months, d.dry_soil_share);
+        if let Some(spi) = d.spi_now {
+            println!("  drought index (SPI-3) as the window starts: {spi:+.2}");
+        }
+    }
 }
 
 fn print_weather(f: &geoforge_almanac::weather::Forecast) {

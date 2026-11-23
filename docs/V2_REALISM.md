@@ -202,7 +202,7 @@ Each run writes its scorecard to `target/known-cases/<suite>.txt`.
 | Suite | Inputs | Checked against | Cases | Gaps |
 |---|---|---|---|---|
 | `known_earth_tectonics` | PB2002 plates and Euler poles over the hotspots, half-degree; crust from ETOPO1; then circulation, climate and erosion on the model's own heights | PB2002 boundary classes; crust ages; provinces at named places; ETOPO1 heights; earthquake rates and corner magnitudes | 58 | 7 |
-| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure; sea ice, reefs, productivity | 253 | 68 |
+| `known_earth_climate` | ETOPO1, one degree, as authored elevation | winds and currents; SST departures; 31 station normals; Köppen groups and full classes; closed basins and the Nile; biome shares and 20 places; the biome and Köppen classifiers fed station normals directly; cyclone tracks; sea-level pressure; sea ice, reefs, productivity | 253 | 67 |
 | `known_planets` | generated Mars and Moon, median of seeds 1–3 | MOLA, LOLA, InSight and the CO₂ frost point | 15 | 4 |
 
 Biggest open gaps, by layer:

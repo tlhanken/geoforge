@@ -46,6 +46,7 @@ and the derived views (Köppen climates, soils, deposits, hazards, sea ice, pres
 ```bash
 geoforge place worlds/demo --lat 45 --lon 10                 # climate, soil, deposits, hazards within 100 km
 geoforge weather worlds/demo --lat 45 --lon 10 --day 100     # two weeks of daily weather from day 100
+geoforge almanac worlds/demo --lat 45 --lon 10 --year 1      # a year day by day: sun, moons, weather, droughts
 geoforge weather-map worlds/demo --day 100                   # isobars, fronts, rain and storms that day
 geoforge sky worlds/demo --day 100 --to worlds/demo/renders  # the night sky, eclipses, a star chart
 geoforge positions worlds/demo --day 100                     # where every body is
