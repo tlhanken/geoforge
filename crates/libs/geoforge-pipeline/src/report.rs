@@ -1,4 +1,4 @@
-//! A report on a world, to take its pulse at a glance: its maps in themed groups, each with
+//! A report on a world, to take its pulse at a glance: its maps by layer in pipeline order, each with
 //! a key; its numbers against Earth's; three places with their weather; the weather map and
 //! the night sky with keys.
 //!
@@ -53,21 +53,28 @@ pub struct Report {
     pub images: Vec<(String, RgbImage)>,
 }
 
-/// The maps, by group: anchor, heading, and product or view names.
-const GROUPS: [(&str, &str, &[&str]); 5] = [
-    ("ground", "Rock and relief", &["elevation", "plates", "provinces", "lithology", "rock_age"]),
+/// The maps, by layer in the order the pipeline makes them, each derived view after the layer
+/// it is read from: anchor, heading, and product or view names.
+const GROUPS: [(&str, &str, &[&str]); 10] = [
+    ("tectonics", "Tectonics", &["plates", "earthquakes", "volcanoes", "tsunamis"]),
+    ("geology", "Geology", &["provinces", "lithology", "rock_age"]),
+    ("elevation", "Elevation", &["rough_elevation"]),
+    ("circulation", "Circulation", &["wind_jan", "wind_jul", "pressure_jan", "pressure_jul", "ocean_currents", "sst_anomaly"]),
     (
-        "air",
-        "Air and sea",
-        &["temperature", "temperature_range", "precipitation", "koppen", "wind_jan", "wind_jul", "ocean_currents", "sst_anomaly", "pressure_jan", "pressure_jul", "sea_ice", "reefs", "productivity"],
+        "climate",
+        "Climate",
+        &["temperature", "temperature_range", "precipitation", "koppen", "sea_ice", "reefs", "productivity", "cyclones", "tornadoes", "blizzards", "dust_storms", "fog", "lightning"],
     ),
-    ("life", "Water, life and land", &["biome", "rivers", "lakes", "soil", "fertility", "timber"]),
+    ("erosion", "Erosion", &["elevation"]),
+    ("hydrology", "Hydrology", &["rivers", "lakes", "floods"]),
+    ("biomes", "Biomes and soils", &["biome", "soil", "fertility", "timber", "wildfire"]),
     ("resources", "Resources", &["deposits", "iron", "copper", "gold", "coal", "salt"]),
-    ("hazards", "Hazards", &["earthquakes", "volcanoes", "tsunamis", "cyclones", "tornadoes", "floods", "wildfire", "blizzards", "dust_storms", "fog", "lightning", "auroras"]),
+    ("space", "Space weather", &["auroras"]),
 ];
 
 fn caption(name: &str) -> String {
     let c = match name {
+        "rough_elevation" => "Elevation from the plates, before erosion",
         "elevation" => "Elevation after erosion",
         "plates" => "Tectonic plates",
         "provinces" => "Geologic provinces",
