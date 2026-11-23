@@ -179,21 +179,42 @@ Still needed:
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.
 
-## 12. Sky and almanac refinements [6, 8b]
-- A system's local environment: clusters, nebulae, supernova remnants.
-- Constellations, tides by date, proper motions, the Moon's periodic terms.
+## 12. Galaxy sectors and the night sky — next (OpenSpec `galaxy-sectors`)
+- A galaxy of components (nucleus, bulge and bar, thin disk by age, arms, thick disk, halo,
+  dust) and morphologies (Sa–Sd barred or not, S0, E, dE/dSph, dIrr, starburst).
+- Stars that live in the galaxy: nested cubes sized by how far their stars are seen, each
+  cube generated from its seed, each star with an identity that seeds its system; young
+  stars in clusters and associations; dust clouds.
+- The sky read from them (neighbouring systems see each other; the Gould Belt); a system's
+  place in its galaxy (standalone or made at a star).
+- Edits: stars added, moved, changed, removed; clusters added; an observer's own
+  constellations; export and import of a sky's stars.
+
+## 12b. Later, above one galaxy
+- The universe zoom: universe, superclusters and galaxy rosters (the v2-architecture
+  layers), with galaxies placed by the same nested cubes, so a universe zooms down to a
+  planet and details are generated as they are looked at; a world holding more than one
+  system.
+- Other galaxies in the night sky: Andromeda-like neighbours, satellite galaxies like the
+  Magellanic Clouds, as patches in the glow (it is built as a sum of sources for this).
+- Automatic constellations from the brightest stars.
+
+## 12c. Sky and almanac refinements [6, 8b]
+- A system's local environment: nebulae and supernova remnants (clusters and associations
+  come with 12).
+- Tides by date, proper motions, the Moon's periodic terms.
 - A tidal range map for worlds with moons: the forcing of each moon and the star (mass and
   distance), the semidiurnal and diurnal parts, and the basins' response (resonance, wide
   shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
   range along every coast; then the water level by date in the almanac.
 
-## 13. Star systems [5]
+## 13. Star systems [5] (after 12: a system is built from its star)
 - Period ratios nearer Kepler's.
 - Hot Jupiters.
 - Obliquity stability with and without a big moon.
 - Trojans.
 
-## 14. Other worlds [Still open]
+## 14. Other worlds [Still open] (brown dwarfs come with 12's IMF below 0.08 M☉)
 - Ice-shell worlds (Europa).
 - Locked worlds carrying heat to the night side.
 - Asynchronous rotation.
