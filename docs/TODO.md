@@ -73,6 +73,9 @@ It fixes:
 - the frozen-sea effect on land, tried twice without it.
 
 ## 5. Monsoons and storm tracks [8e]
+- The summer monsoon winds over South America, Africa and Australia are rectangles of fast
+  wind with straight edges (January wind map, 10–30°S); they need a shape that follows the
+  heat low.
 - The winter storm track sits too far equatorward: Phoenix, Tehran and the Great Basin are
   drenched.
 - No Somali jet, and Tibet is not an elevated heat source, so Mumbai is dry, rain reaches
