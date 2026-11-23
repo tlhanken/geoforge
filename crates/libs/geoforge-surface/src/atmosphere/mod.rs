@@ -8,6 +8,7 @@
 //! | [`radiation`] | energy balance by latitude, seasons |
 
 pub mod cells;
+pub mod flow;
 pub mod grid;
 pub mod radiation;
 pub mod transport;

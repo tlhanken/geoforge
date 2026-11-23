@@ -219,9 +219,12 @@ def winds(w, ref):
             bands[f"{lo}..{hi}"] = {"u_model": round(float(u[m].mean()), 1), "u_era850": round(float(ou[m].mean()), 1), "v_model": round(float(v[m].mean()), 1), "v_era850": round(float(ov[m].mean()), 1)}
         ok = np.isfinite(ou)
         dir_agree = float(((u * ou + v * ov) > 0)[ok & ocean].mean())
+        # Over land below 1.5 km (850 hPa lies under higher ground), where ranges turn the air.
+        low_land = ~ocean & (w.field("elevation") < 1500)
+        dir_agree_land = float(((u * ou + v * ov) > 0)[ok & low_land].mean())
         # Monsoon: Arabian Sea and Bay of Bengal.
         m = ocean & (w.lat[:, None] >= 8) & (w.lat[:, None] <= 18) & (w.lon[None, :] >= 55) & (w.lon[None, :] <= 95)
-        out[prod] = {"bands": bands, "direction_agreement_ocean": round(dir_agree, 2), "north_indian_ocean_uv_model": [round(float(u[m].mean()), 1), round(float(v[m].mean()), 1)], "north_indian_ocean_uv_era850": [round(float(ou[m].mean()), 1), round(float(ov[m].mean()), 1)]}
+        out[prod] = {"bands": bands, "direction_agreement_ocean": round(dir_agree, 2), "direction_agreement_land": round(dir_agree_land, 2), "north_indian_ocean_uv_model": [round(float(u[m].mean()), 1), round(float(v[m].mean()), 1)], "north_indian_ocean_uv_era850": [round(float(ou[m].mean()), 1), round(float(ov[m].mean()), 1)]}
     return out
 
 
@@ -303,7 +306,7 @@ def summarize(report):
     lines.append(f"  desert and steppe subtypes: {k['b_subtypes_model_obs']}; cell agreement {k['agreement']}")
     for m in ("wind_jan", "wind_jul"):
         wd = report["winds"][m]
-        lines.append(f"{m}: direction agrees with ERA-Interim over {wd['direction_agreement_ocean']:.0%} of the ocean; northern Indian Ocean (u, v) model {wd['north_indian_ocean_uv_model']} vs {wd['north_indian_ocean_uv_era850']} m/s")
+        lines.append(f"{m}: direction agrees with ERA-Interim over {wd['direction_agreement_ocean']:.0%} of the ocean and {wd.get('direction_agreement_land', float('nan')):.0%} of land below 1.5 km; northern Indian Ocean (u, v) model {wd['north_indian_ocean_uv_model']} vs {wd['north_indian_ocean_uv_era850']} m/s")
     ss = report["sst"]
     lines.append(f"SST: bias {ss['bias_c']} °C, RMSE {ss['rmse_c']} °C; departure-from-zonal-mean correlation {ss['departure_corr_sst_anomaly']} (anomaly product), {ss['departure_corr_temperature']} (temperature)")
     for name, r in ss["regions"].items():

@@ -17,31 +17,43 @@ slower is fine. Speed is item 15.
   - the sky (a real star catalogue and the JPL ephemeris);
   - rivers drawn on the map against HydroSHEDS, not only discharge numbers.
 
-## 2. Winds that feel the terrain [8e]
-Only the monsoon part of the wind is blocked by high ground. The cells, westerlies and
-subtropical highs ignore it: on the Earth run, North America, Europe, Russia and Tibet show
-no deflection.
+## 2. Winds that feel the terrain [8e] — first step done
+Done: the surface winds are a layer of stable air up to 3.5 km above sea level, thinning
+over higher ground. A Helmholtz projection (`atmosphere/flow.rs`, `Keep::FlatLayer`) sends
+the air round ranges and through gaps, keeping the rising and sinking the cells and monsoons
+set over flat ground. The highs' rising and sinking in the moisture model is read from the
+flat-ground winds. On the real-Earth chain, January direction agreement with ERA-Interim
+went from 78% to 80% of the ocean and from 72% to 75% of land below 1.5 km.
 
-Needed:
+Cost on the climate suite (now gaps with causes): Mongolia gets no rain and runs 4 °C warm,
+the Pampas dry out, the Great Plains are drenched, the central Sahara gets rain (not yet
+traced).
+
+Still needed:
+- an East Asian summer monsoon in the winds: July winds over China are easterly, so the
+  turned westerlies dry the interior;
 - surface friction over land, which slows the wind and turns it toward low pressure;
-- flow steered around ranges and blocked by them (the Rockies, the Alps, the Tibetan
-  Plateau splitting the westerlies);
 - lee troughs and cold-air damming;
-- a check of wind direction by region against ERA-Interim.
+- wind direction checked by region in `geoforge compare` (item 1).
 
-## 3. Ocean currents that conserve mass [7]
-Currents are diagnostic sums: a Sverdrup streamfunction (divergence-free) plus wind drift,
-equatorial currents, coastal jets, overturning and the circumpolar flow (not
-divergence-free).
+## 3. Ocean currents that conserve mass [7] — done
+- The gyres are drawn from the Sverdrup streamfunction on the cells' corners, with ψ = 0 on
+  every corner touching land (`flow::from_streamfunction`): exactly divergence-free, nothing
+  through a coast, and their east–west legs back.
+- The jets (coastal, separating, overturning) are projected so none runs into a coast; only
+  the overturning's sinking stays.
+- The wind drift is the Ekman layer and keeps its divergence: water it piles against a coast
+  sinks there, water it draws off one wells up.
 
-On the Earth run, 13% of coastal sea cells push more than 0.1 m/s into land (water piling
-up).
+On the real-Earth chain the SST error fell from 2.55 to 2.47 °C, the Kuroshio runs north
+again (0.26 m/s), and the Labrador Sea is cold (−3 °C). Costs, now gaps: the Canary Current
+runs 6 °C cold, the Bering Sea stays open, the central Arctic opens in summer.
 
-Needed:
-- project the total onto a divergence-free field with no flow through coasts (solve for a
-  streamfunction on the sea);
-- a test that the net flux through every closed coastline and strait is about zero, and
-  that the flow through the Drake Passage and Indonesia is continuous.
+Still needed:
+- a test that the flow through the Drake Passage and Indonesia is continuous (ψ is 0 on every
+  coast, so no gyre transport passes between continents; the circumpolar current is drift);
+- the flip that stops the western boundary current past its separation breaks the gyre's
+  closure locally: draw it into ψ instead.
 
 ## 4. A seasonal climate [8e]
 One continentality serves both halves of the year. Needed: winter and summer computed apart,

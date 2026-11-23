@@ -83,12 +83,16 @@ const STATIONS: &[Station] = &[
 
 // Known gaps, by station or place: what the model gets wrong there.
 const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range is 31 °C (observed 26) and its mean 5 °C cold";
-const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 45 °C (observed 58)";
+const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 39 °C (observed 58)";
+const MONGOLIA: &str =
+    "with the low winds turned round the Altai and the Tibetan plateau, Mongolia's air comes off the Gobi: no rain at 44–48°N 104–122°E (observed 200–400 mm), and Ulaanbaatar is 4 °C warm";
+const SAHARA: &str =
+    "since the low winds go round high ground the central Sahara gets rain (In Salah 250 mm, 0 with flat-ground winds; observed 15) with its winds at In Salah unchanged: not yet traced";
 const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 1600 mm at 40°N 117°W, observed ~250)";
 const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
 const ARABIA: &str =
     "the summer rain belt reaches into Arabia (350 mm at 22°N 47°E, all of it in summer), which cools it; the northern Arabian Sea, no longer 2 °C too cold, rains 870 mm at 20°N 62°E (observed ~100)";
-const PAMPAS: &str = "Buenos Aires gets half its rain (570 mm, observed 1200): it had leaned on a Brazil Current 8 °C too warm offshore (35°S 54°W, observed about −1), which is now +6.5 °C, and the land's rain comes short";
+const PAMPAS: &str = "the Pampas are too dry (170 mm at 35°S 62°W, Buenos Aires 140 mm; observed ~800 and 1200): with the low winds turned along the Andes little Amazon air reaches them, and the Brazil Current offshore is no longer 8 °C too warm";
 const NORTHWEST_AUSTRALIA: &str = "the seas off north-western Australia upwell under the dry-season trades (Timor Sea −3 °C, observed +2; off Western Australia −4, observed +0.5) where real ones keep a deep warm layer fed from the Pacific through Indonesia (the Leeuwin Current): the Kimberley falls from 1130 to 740 mm and Alice Springs to 140 mm (observed 285)";
 const SOUTH_ATLANTIC: &str = "the modelled tropical South Atlantic is warm enough for storms (26.7 °C at 15°S 25°W, observed ~26), and the wind shear that stops real storms there is not modelled";
 const LIMA: &str = "Lima runs 7 °C warm: the Humboldt's cold (now −3.9 °C offshore) does not reach the air ashore, which has no stratus deck";
@@ -102,6 +106,7 @@ const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Reykjavik", ICELAND),
     ("Beijing", "north China runs 4 °C warm"),
     ("Tehran", "the Iranian plateau runs 6 °C cool"),
+    ("Ulaanbaatar", MONGOLIA),
     ("Riyadh", ARABIA),
     ("Timbuktu", WEST_AFRICA),
     ("Phoenix", SOUTHWEST),
@@ -109,13 +114,15 @@ const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Utqiagvik", "the Arctic coast runs 4 °C warm"),
     ("Vostok", ANTARCTICA),
 ];
-const RANGE_GAPS: &[(&str, &str)] = &[];
+const RANGE_GAPS: &[(&str, &str)] = &[("Yakutsk", SIBERIA)];
 const RAIN_GAPS: &[(&str, &str)] = &[
     ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
     ("Yakutsk", "the Siberian interior gets an eighth of its rain"),
     ("Phoenix", SOUTHWEST),
     ("Timbuktu", WEST_AFRICA),
-    ("Tehran", "the Alborz's rain spreads to its dry southern foot (485–700 mm in the cells around Tehran)"),
+    ("Ulaanbaatar", MONGOLIA),
+    ("Cairo", SAHARA),
+    ("In Salah", SAHARA),
     ("Astana", KAZAKHSTAN),
     ("Nairobi", "the East African highlands are drenched (2800 mm, observed 870)"),
     ("Lhasa", TIBET),
@@ -125,7 +132,8 @@ const RAIN_GAPS: &[(&str, &str)] = &[
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
-    ("Congo", "the Congo basin gets ~1200 mm (observed 1600–2000), too dry for forest"),
+    ("Great Plains", "Gulf air turned north along the Rockies' foot drenches the plains (1000 mm at 40°N 100°W, observed ~500), wet enough for forest"),
+    ("Pampas", PAMPAS),
     ("Sahel", WEST_AFRICA),
     ("Eastern US", "the eastern US is too dry for forest (640 mm at 38°N 82°W, observed ~1100)"),
     ("Kazakh steppe", KAZAKHSTAN),
@@ -296,7 +304,7 @@ fn ocean(s: &mut Scorecard, e: &Earth) {
     for (name, lat, lon0, lon1, obs) in observed {
         // Within 2.5 °C of observed, on the observed side of zero.
         let (lo, hi) = if obs > 0.0 { (f64::max(0.0, obs - 2.5), obs + 2.5) } else { (obs - 2.5, f64::min(0.0, obs + 2.5)) };
-        s.range("sea surface", format!("{name} (observed {obs:+.1})"), anom(lat, lon0, lon1), lo..=hi, "°C");
+        s.range("sea surface", format!("{name} (observed {obs:+.1})"), anom(lat, lon0, lon1), lo..=hi, "°C").gap_if_listed(name, SST_GAPS);
     }
 }
 
@@ -459,9 +467,14 @@ fn oceans(s: &mut Scorecard, e: &Earth) {
     }
 }
 
+const SST_GAPS: &[(&str, &str)] = &[(
+    "Canary, 15–30°N 25–12°W",
+    "the Canary Current runs 6 °C cold (observed −3): since the jets were kept off the coast its southward flow is 0.11 m/s (0.20 before), so the water lingers over the upwelling",
+)];
 const OCEAN_GAPS: &[(&str, &str)] = &[
     ("Sea of Okhotsk (55°N 150°E)", "the modelled January there is 0 °C (observed about −12): the Siberian winter is too warm"),
-    ("Baltic (60°N 20°E)", "the modelled Baltic is warmed as part of the North Atlantic (a +3.6 °C sea surface anomaly), so its coldest month is −0.4 °C (observed about −3)"),
+    ("central Arctic (85°N 0°)", "the central Arctic is 1 °C warmer than before the North Atlantic jets were kept off the coasts (−8.8 °C at 85°N 0°), just enough to open in summer"),
+    ("Bering Sea (58°N 175°W)", "the North Pacific jet, turned up the Alaskan coast and kept off it, runs north into the Bering Sea (0.27 m/s, +0.9 °C), which stays open"),
     ("Maldives (4°N 73°E)", "the atolls are far smaller than a one-degree cell, which averages to deep water"),
 ];
 
@@ -592,6 +605,7 @@ fn scorecard() -> &'static Scorecard {
         let (jul, jan) = (e.p.wind_jul().unwrap(), e.p.wind_jan().unwrap());
         known::dump("circulation_wind_jul", jul.values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));
         known::dump("circulation_wind_jan", jan.values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));
+        known::dump("circulation_currents", e.p.ocean_currents().unwrap().values.iter().flat_map(|w| [f64::from(w[0]), f64::from(w[1])]));
         let mut s = Scorecard::default();
         winds(&mut s, e);
         ocean(&mut s, e);

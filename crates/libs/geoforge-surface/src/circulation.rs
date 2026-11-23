@@ -26,6 +26,7 @@
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
 
+use crate::atmosphere::flow::{self, Keep};
 use crate::atmosphere::grid::is_sea;
 use crate::atmosphere::transport::semi_lagrangian;
 use crate::atmosphere::{winds, Atmo, AtmoGrid, Radiation, Season};
@@ -125,6 +126,13 @@ fn basins(a: &Atmo, radius_km: f64) -> Basins {
 /// Surface winds of one season on the atmosphere grid, in units of [`WIND_REF_M_S`].
 #[must_use]
 pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f64, f64)> {
+    feel_terrain(a, &season_winds_flat(a, season, p))
+}
+
+/// The season's winds as they would blow if the ground were flat: the cells, highs and
+/// monsoons alone. Their rising and sinking is what the large-scale pattern sets.
+#[must_use]
+pub fn season_winds_flat(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f64, f64)> {
     let g = &a.g;
     let cells = &season.cells;
     let mut w = winds(a, season, p.monsoon);
@@ -153,6 +161,16 @@ pub fn season_winds(a: &Atmo, season: &Season, p: &CirculationParams) -> Vec<(f6
         }
     }
     w
+}
+
+/// Winds near the ground going round high ranges rather than over them. The stable air near
+/// the ground is a layer up to ~3.5 km above sea level, thinning over ground higher than the
+/// lowlands; the rising and sinking the cells and monsoons set up over flat ground stay.
+#[must_use]
+pub fn feel_terrain(a: &Atmo, w: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let g = &a.g;
+    let depth: Vec<f64> = a.elev.iter().map(|&z| (AIR_LAYER_TOP_M - z).clamp(AIR_LAYER_MIN_SHARE * AIR_LAYER_M, AIR_LAYER_M)).collect();
+    flow::conserve(g, 6371.0, &vec![true; g.len()], &depth, w, Keep::FlatLayer(AIR_LAYER_M))
 }
 
 /// Ocean surface currents (m/s, east and north) on the atmosphere grid.
@@ -217,11 +235,13 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             s / w
         })
         .collect();
+    let fronts = gyre_fronts(g, &tau);
     // Sverdrup interior closed by a Stommel western boundary layer.
     let psi: Vec<f64> = (0..g.len())
         .map(|i| {
             let y = i / g.w;
-            if a.land[i] >= 0.5 || b.open_row[y] || g.lat(y).abs() < 8.0 {
+            let lat = g.lat(y);
+            if a.land[i] >= 0.5 || b.open_row[y] || lat.abs() < 8.0 {
                 return 0.0;
             }
             // Gyres span at most an ocean's width, and fade out next to a circumpolar band.
@@ -229,21 +249,11 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             -c[y] * east * (1.0 - (-b.west_km[i] / p.boundary_current_km).exp()) * (1.0 - open_band[y])
         })
         .collect();
-    // Meridional gyre flow v = ∂ψ/∂x: fast and narrow along western shores, slow and broad
-    // across the interior. (Zonal gyre flow is left to the wind drift below; differentiating
-    // ψ across rows with different coastlines gives spurious jets.)
-    let mut cur: Vec<(f64, f64)> = (0..g.len())
-        .map(|i| {
-            let (x, y) = (i % g.w, i / g.w);
-            if a.land[i] >= 0.5 {
-                return (0.0, 0.0);
-            }
-            let dx = g.res.to_radians() * radius_km * g.lat(y).to_radians().cos().max(0.02);
-            let (xe, xw) = ((x + 1) % g.w, (x + g.w - 1) % g.w);
-            (0.0, (psi[y * g.w + xe] - psi[y * g.w + xw]) / (2.0 * dx))
-        })
-        .collect();
-    let fronts = gyre_fronts(g, &tau);
+    let sea: Vec<bool> = a.land.iter().map(|&l| l < 0.5).collect();
+    // The gyres' flow follows ψ's streamlines: fast and narrow along western shores, slow and
+    // broad across the interior, and along a shore wherever one stands across its path, so
+    // whatever flows into a stretch of sea flows out and none crosses a coast.
+    let cur = flow::from_streamfunction(g, radius_km, &sea, &psi);
     let reach = overturning_reach(a, &b, fronts, radius_km);
     let mut overturning = vec![0.0; g.len()];
     // Scale so the strongest western boundary currents (meridional flow) reach the set speed.
@@ -251,9 +261,10 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
     speeds.sort_by(f64::total_cmp);
     let top = speeds.get(speeds.len().saturating_sub(1 + speeds.len() / 500)).copied().unwrap_or(0.0);
     let k = if top > 0.0 { p.boundary_current_m_s / top } else { 0.0 };
+    let mut cur: Vec<(f64, f64)> = cur.iter().map(|v| (v.0 * k, v.1 * k)).collect();
+    let mut drifts = vec![(0.0, 0.0); g.len()];
+    let mut jets = vec![(0.0, 0.0); g.len()];
     for (i, v) in cur.iter_mut().enumerate() {
-        v.0 *= k;
-        v.1 *= k;
         let y = i / g.w;
         if a.land[i] >= 0.5 {
             continue;
@@ -263,28 +274,31 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         let gyre = if hemi > 0.0 { fronts.0 } else { fronts.1 };
         // Poleward of where the western boundary current separates, the cold current coming
         // down from the subpolar gyre takes its place along the coast (the Labrador Current,
-        // Oyashio and Malvinas Current), slower than the warm current it meets.
+        // Oyashio and Malvinas Current), slower than the warm current it meets. (Where the
+        // warm current stops, its water has turned offshore into the jet below.)
         if let Some(f) = gyre {
             if v.1 * hemi > 0.0 && lat.abs() < f.front + 1.0 {
                 v.1 *= 1.0 - (1.0 + SUBPOLAR_COAST_SHARE) * smoothstep(f.separation, f.separation + 3.0, lat.abs());
             }
         }
         let drift = wind_drift(annual[i], lat);
-        v.0 += drift.0;
-        v.1 += drift.1;
+        let d = &mut drifts[i];
+        d.0 += drift.0;
+        d.1 += drift.1;
         // Equatorial currents are faster than drift alone; a countercurrent just north of the
         // equator.
         let eq = (-(lat / 7.0).powi(2)).exp();
         let counter = (-((lat - 6.0) / 2.5).powi(2)).exp();
-        v.0 += 0.3 * annual[i].0.min(0.0) * eq + 0.35 * counter;
+        d.0 += 0.3 * annual[i].0.min(0.0) * eq + 0.35 * counter;
+        let j = &mut jets[i];
         // An equatorward jet along shores where the winds upwell: the eastern legs that close
         // the subtropical gyres.
         if !b.open_row[y] {
-            v.1 -= lat.signum() * EASTERN_CURRENT_M_S * upwelling_drive([annual[i]; 2], lat, b.west_km[i] + b.east_km[i]) * (-b.east_km[i] / EASTERN_CURRENT_KM).exp();
+            j.1 -= lat.signum() * EASTERN_CURRENT_M_S * upwelling_drive([annual[i]; 2], lat, b.west_km[i] + b.east_km[i]) * (-b.east_km[i] / EASTERN_CURRENT_KM).exp();
         }
         // A circumpolar current where the ocean band has no shores (spread over the band).
         if open_band[y] > 0.0 {
-            v.0 += 0.6 * open_band[y] * annual[i].0.max(0.0);
+            d.0 += 0.6 * open_band[y] * annual[i].0.max(0.0);
         }
         // Where the subtropical and subpolar gyres meet (under the strongest westerlies) the
         // western boundary current leaves the coast and crosses the basin, turning poleward
@@ -304,7 +318,7 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             let path = separation + (front - separation) * smoothstep(0.0, JET_RISE_SHARE, x_rel);
             let rise_km = (front - separation) * smoothstep_slope(0.0, JET_RISE_SHARE, x_rel) / width.max(1.0) * radius_km.to_radians();
             let jet = (-((lat.abs() - path) / 5.0).powi(2)).exp();
-            v.1 += hemi * basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel) * rise_km.min(1.0);
+            j.1 += hemi * basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel) * rise_km.min(1.0);
             let beyond = ((lat.abs() - front) / 5.0).clamp(0.0, 1.0) * ((front + 28.0 - lat.abs()) / 6.0).clamp(0.0, 1.0);
             // An eastern shore the current can run up: a coast that also reaches ~5° toward
             // the equator (Norway, Alaska, southern Chile), not Antarctica's, which runs
@@ -313,18 +327,24 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             let y_eq = (y as i64 + (hemi * 5.0 / g.res).round() as i64).clamp(0, g.h as i64 - 1) as usize;
             let runs_equatorward = !b.open_row[y] && a.land[y_eq * g.w + (x + (b.east_km[i] / dx).round() as usize + 1) % g.w] >= 0.5;
             let shore = if runs_equatorward { (-b.east_km[i] / 700.0).exp() } else { 0.0 };
-            v.0 += basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
-            v.1 += basin * p.drift_m_s * hemi * (0.6 * crossing * jet * x_rel + 0.8 * beyond * shore);
+            j.0 += basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel);
+            j.1 += basin * p.drift_m_s * hemi * (0.6 * crossing * jet * x_rel + 0.8 * beyond * shore);
             // Where the subpolar sea opens wide onto a polar sea, water sinking there draws
             // warm water poleward along the basin's eastern side (the North Atlantic Current
             // into the Norwegian Sea).
             if reach[i] {
                 let band = smoothstep(front - 5.0, front + 2.0, lat.abs()) * (1.0 - smoothstep(front + 18.0, front + 25.0, lat.abs()));
                 overturning[i] = band * (-b.east_km[i] / OVERTURNING_EAST_KM).exp();
-                v.1 += hemi * OVERTURNING_M_S * overturning[i];
+                j.1 += hemi * OVERTURNING_M_S * overturning[i];
             }
         }
     }
+    // The jets are geostrophic currents like the gyres: none runs into a coast; what one
+    // pushes against a shore is turned along it, and only the overturning's sinking stays. The
+    // wind drift is the Ekman layer: water it piles against a coast sinks there and water it
+    // draws off one wells up, so its convergence and divergence stay.
+    let jets = flow::conserve(g, radius_km, &sea, &vec![1.0; g.len()], &jets, Keep::Interior);
+    let cur: Vec<(f64, f64)> = (0..g.len()).map(|i| (cur[i].0 + drifts[i].0 + jets[i].0, cur[i].1 + drifts[i].1 + jets[i].1)).collect();
     (cur, overturning)
 }
 
@@ -460,6 +480,12 @@ fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<GyreFront>, Option<GyreFron
     (best(true), best(false))
 }
 
+/// Depth of the air near the ground that high ranges block, m, and the least share of it
+/// left over the highest ground.
+const AIR_LAYER_M: f64 = 3000.0;
+/// Height of the top of that layer above sea level, m: ground up to ~500 m does not thin it.
+const AIR_LAYER_TOP_M: f64 = 3500.0;
+const AIR_LAYER_MIN_SHARE: f64 = 0.1;
 /// How far offshore coastal upwelling cools the sea, km (e-folding).
 const UPWELLING_KM: f64 = 400.0;
 /// Farthest a current carries water across the temperature gradient before it mixes with
@@ -649,7 +675,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 9;
+    const VERSION: u32 = 10;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -790,7 +816,8 @@ mod tests {
         assert!(at(-31.0, 41).1 < -0.8);
         let sst = sst_of(&a, &p, &annual, &ocean);
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
-        assert!(s(40.0, 43) > 1.0, "warm western boundary {}", s(40.0, 43));
+        // Warm along the western shore below where the current leaves it.
+        assert!(s(33.0, 43) > 1.0 && s(33.0, 43) > s(33.0, 80) + 1.0, "warm western boundary {}", s(33.0, 43));
         assert!(s(25.0, 119) < -0.5, "cool eastern boundary {}", s(25.0, 119));
     }
 

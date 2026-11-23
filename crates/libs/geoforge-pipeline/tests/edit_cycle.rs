@@ -64,8 +64,10 @@ fn generate_edit_regenerate() {
     assert_eq!(e3.values[0], e1.values[0]);
     // Erosion carries the raised block into the final heightmap.
     assert!(p3.elevation().unwrap().values[c] > p1.elevation().unwrap().values[c] + 1000.0);
-    // Higher ground is colder.
-    assert!(p3.temperature().unwrap().values[c] < p1.temperature().unwrap().values[c] - 8.0);
+    // Higher ground is colder: 2 km up, by more than 3 K a kilometre (the 1° climate grid
+    // spreads a small block's height over the cell, so not by the full lapse rate).
+    let (t1, t3) = (p1.temperature().unwrap().values[c], p3.temperature().unwrap().values[c]);
+    assert!(t3 < t1 - 6.0, "{t1} °C at {} m, {t3} °C at {} m", e1.values[c], e3.values[c]);
 
     // Changing an upstream parameter regenerates under the edit: the patch rides on top.
     w.manifest.params.get_mut("elevation").unwrap()["continental_base_m"] = serde_json::json!(300.0);

@@ -155,6 +155,10 @@ impl Climate {
             (Some(jul), Some(jan)) => vec![atmo.vectors_from_world(grid, &jul.values, crate::circulation::WIND_REF_M_S), atmo.vectors_from_world(grid, &jan.values, crate::circulation::WIND_REF_M_S)],
             _ => [1.0, -1.0].into_iter().map(|sign| crate::circulation::season_winds(&atmo, &Season::for_body(&atmo, body, sign, circulation.monsoon), &circulation)).collect(),
         };
+        // The highs' rising and sinking is read from the winds over flat ground: air turned
+        // round a range has not risen or sunk for it.
+        let flat_winds: Vec<Vec<(f64, f64)>> =
+            [1.0, -1.0].into_iter().map(|sign| crate::circulation::season_winds_flat(&atmo, &Season::for_body(&atmo, body, sign, circulation.monsoon), &circulation)).collect();
         let sst: Vec<f64> = match inputs.sst_anomaly() {
             Some(a) => atmo.sea_mean_from_world(grid, &a.values, elev),
             None => vec![0.0; g.len()],
@@ -226,7 +230,7 @@ impl Climate {
         // 5. Moisture, two solstice seasons; nothing to rain without surface water.
         let mut seasons = Vec::new();
         for (k, season) in seasons_def.iter().enumerate() {
-            seasons.push(if wet { moisture::moisture(&atmo, &season_winds[k], season, monsoon, &t_season[k], &t_mean_here, &sst_air, p.rainout, r) } else { vec![0.0; g.len()] });
+            seasons.push(if wet { moisture::moisture(&atmo, &season_winds[k], &flat_winds[k], season, monsoon, &t_season[k], &t_mean_here, &sst_air, p.rainout, r) } else { vec![0.0; g.len()] });
         }
         let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
         let precip_jan = seasons.pop().expect("two seasons");
@@ -238,7 +242,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 9;
+    const VERSION: u32 = 10;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {

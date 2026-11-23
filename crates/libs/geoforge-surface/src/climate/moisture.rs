@@ -19,7 +19,7 @@ pub fn w_sat(t: f64) -> f64 {
 /// - the northerlies on the poleward side of a summer heat low sink (the monsoon inflow on its
 ///   equatorward side is shallow and adds nothing);
 /// - the stable air over cold water or fresh from it.
-fn ascent(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: f64, sst_air: &[f64], radius_km: f64) -> Vec<f64> {
+fn ascent(a: &Atmo, wind: &[(f64, f64)], flat_wind: &[(f64, f64)], season: &Season, monsoon: f64, sst_air: &[f64], radius_km: f64) -> Vec<f64> {
     let g = &a.g;
     let m = monsoon_flow(a, season, monsoon);
     let subtropics = |lat: f64| ((lat.abs() - 8.0) / 6.0).clamp(0.0, 1.0) * ((50.0 - lat.abs()) / 10.0).clamp(0.0, 1.0);
@@ -28,7 +28,7 @@ fn ascent(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: f64, sst_air:
     for i in 0..g.len() {
         let (x, lat) = (i % g.w, g.lat(i / g.w));
         let k = 1.2 * subtropics(lat) * lat.signum();
-        highs[i] = k * (wind[i].1 - season.wind(x, lat).1 - m[i].1);
+        highs[i] = k * (flat_wind[i].1 - season.wind(x, lat).1 - m[i].1);
         heat_low[i] = (k * m[i].1).min(0.0);
     }
     let highs = carry(a, wind, 800.0, radius_km, &highs);
@@ -43,13 +43,24 @@ fn ascent(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: f64, sst_air:
 
 /// One season of the moisture model; returns raw precipitation (mm per step).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn moisture(a: &Atmo, wind: &[(f64, f64)], season: &Season, monsoon: f64, temp: &[f64], temp_mean: &[f64], sst_air: &[f64], rainout: f64, radius_km: f64) -> Vec<f64> {
+pub(super) fn moisture(
+    a: &Atmo,
+    wind: &[(f64, f64)],
+    flat_wind: &[(f64, f64)],
+    season: &Season,
+    monsoon: f64,
+    temp: &[f64],
+    temp_mean: &[f64],
+    sst_air: &[f64],
+    rainout: f64,
+    radius_km: f64,
+) -> Vec<f64> {
     let g = &a.g;
     let ws: Vec<f64> = temp.iter().map(|&t| w_sat(t)).collect();
     // Humidity for rain is judged against a slightly damped seasonal temperature (hot
     // continental summers still have convective rain where moist air reaches them).
     let s_rain: Vec<f64> = temp.iter().zip(temp_mean).map(|(&t, &m)| w_sat(m + 0.8 * (t - m))).collect();
-    let conv = ascent(a, wind, season, monsoon, sst_air, radius_km);
+    let conv = ascent(a, wind, flat_wind, season, monsoon, sst_air, radius_km);
     // Eddies carry vapour across the storm tracks, far into the continents.
     let eddies: Vec<f64> = (0..g.h).map(|y| 0.12 + 0.35 * season.cells.storminess(g.lat(y))).collect();
     let mut w: Vec<f64> = ws.iter().zip(&a.land).map(|(s, l)| s * (0.75 - 0.4 * l)).collect();

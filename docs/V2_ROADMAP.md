@@ -439,6 +439,24 @@ On the ETOPO-forced Earth, the SST departure boxes (observed in brackets) are:
 On the A/B chain, the western Pacific warm pool goes from +0.1 to +1.1 (+1.3) and the
 pattern correlation from 0.33 to 0.46.
 
+Mass conservation (November 2026). The gyres are drawn from ψ on the cells' corners with
+ψ = 0 on every corner touching land, so they are exactly divergence-free and cross no coast
+(`atmosphere/flow.rs`). The jets are projected off the coasts, keeping only the overturning's
+sinking; the wind drift keeps its Ekman divergence. Projecting the whole sum instead turned
+every current that met a shore into a radial outflow from it (the Kuroshio stopped:
+−0.02 m/s) and cost 8 climate cases. The Kuroshio now runs north at 0.26 m/s and the
+Labrador Sea is cold (−3 °C); on the A/B chain the SST error is 2.47 °C (2.55 before) and
+the anomaly correlation 0.49 (0.46).
+
+**Winds round ranges** (November 2026): the surface winds are a layer of stable air up to
+3.5 km above sea level, thinner over higher ground, projected (`Keep::FlatLayer`) so it goes
+round the Rockies, the Alps and Tibet and keeps the flat-ground pattern's rising and
+sinking, scaled by the layer that is left (unscaled, a plateau's thin layer had to draw in a
+whole column's air and the air off it reached 25 m/s). Direction agreement with ERA-Interim
+in January: 80% of the ocean (78%) and 75% of land below 1.5 km (72%). The climate suite
+lost Mongolia's rain, the Pampas and the Great Plains (gaps with causes); the base winds
+lack the East Asian summer monsoon, so the turned westerlies dry China's interior.
+
 Open:
 - The NE Atlantic — done: a basin that opens onto a polar sea through straits wider than
   ~100 km (not the Bering Strait), without crossing a circumpolar band, draws an
