@@ -14,7 +14,7 @@ daily weather) are worked out from the stored world. Everything is deterministic
 - Branch `v2-implementation`: the v2 workspace below; v1 has been removed.
 - Each layer is checked against real Earth (and Mars, the Moon) in the `known_earth_*` and
   `known_planets` tests; scorecards and open gaps are in `docs/V2_REALISM.md`.
-- What comes next: `docs/V2_ROADMAP.md`.
+- What comes next: `docs/TODO.md` (the ordered queue) and `docs/V2_ROADMAP.md` (the detail).
 
 ## Development Workflow
 

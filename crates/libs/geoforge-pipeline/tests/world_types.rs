@@ -151,3 +151,38 @@ fn flat_slabs_lift_block_ranges_inland() {
     }
     assert!(found > 0, "no flat-slab uplifts on six Earth-like seeds");
 }
+
+/// The same seed makes the same world at any resolution: a coarse grid's land and heights
+/// match a fine grid's averaged down to it.
+#[test]
+fn a_seed_is_the_same_world_at_any_resolution() {
+    let make = |w: u32| {
+        let dir = std::env::temp_dir().join(format!("geoforge-res-{w}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut world = pipe::create_world(
+            &dir,
+            &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(12345), grid: GridSpec::Equirect { width: w, height: w / 2 }, body: None, system: None, focus: None },
+        )
+        .unwrap();
+        let (p, _) = pipe::generate(&mut world, &GenerateOptions { until: Some(LayerId::Elevation), ..GenerateOptions::default() }, |_| {}).unwrap();
+        let e: Vec<f64> = p.rough_elevation().unwrap().values.iter().map(|&v| f64::from(v)).collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        e
+    };
+    let (coarse, fine) = (make(128), make(512));
+    // Average the fine grid's 4×4 blocks onto the coarse grid.
+    let (w, k) = (128usize, 4usize);
+    let down: Vec<f64> = (0..coarse.len())
+        .map(|i| {
+            let (x, y) = (i % w, i / w);
+            (0..k).flat_map(|dy| (0..k).map(move |dx| (y * k + dy) * w * k + x * k + dx)).map(|j| fine[j]).sum::<f64>() / (k * k) as f64
+        })
+        .collect();
+    let agree = coarse.iter().zip(&down).filter(|(a, b)| (**a >= 0.0) == (**b >= 0.0)).count() as f64 / coarse.len() as f64;
+    let n = coarse.len() as f64;
+    let (ma, mb) = (coarse.iter().sum::<f64>() / n, down.iter().sum::<f64>() / n);
+    let cov: f64 = coarse.iter().zip(&down).map(|(a, b)| (a - ma) * (b - mb)).sum();
+    let corr = cov / (coarse.iter().map(|a| (a - ma).powi(2)).sum::<f64>().sqrt() * down.iter().map(|b| (b - mb).powi(2)).sum::<f64>().sqrt());
+    assert!(agree > 0.9, "land and sea agree on {:.0}% of cells", 100.0 * agree);
+    assert!(corr > 0.85, "heights correlate {corr:.2}");
+}
