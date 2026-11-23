@@ -15,8 +15,10 @@ daily weather) are worked out from the stored world. Everything is deterministic
 - Each layer is checked against real Earth (and Mars, the Moon) in the `known_earth_*` and
   `known_planets` tests; scorecards and open gaps are in `docs/V2_REALISM.md`.
 - What comes next: `docs/TODO.md` (the ordered queue) and `docs/V2_ROADMAP.md` (the detail).
-- Adding a product, a view or an almanac feature: follow `docs/ADDING_A_LAYER.md`, so it
-  reaches the renders, the report, the Earth A/B page (`geoforge compare`) and the tests.
+- Specs and changes are in `openspec/` (agent-agnostic entry: `AGENTS.md`). Adding a
+  product, a view or an almanac feature: follow `docs/ADDING_A_LAYER.md` and the
+  `layer-integration` spec, so it reaches the renders, the report, the Earth A/B page
+  (`geoforge compare`) and the tests.
 
 ## Development Workflow
 

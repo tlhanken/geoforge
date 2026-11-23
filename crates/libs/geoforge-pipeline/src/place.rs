@@ -64,6 +64,13 @@ pub struct DroughtsHere {
     pub dry_soil_share: Option<f64>,
     /// SPI-3 of the month the window starts in.
     pub spi_now: Option<f64>,
+    /// The soil's water as the window starts, a share of the 150 mm it holds, and the snow
+    /// lying then, mm of water.
+    pub soil_now: f64,
+    pub snowpack_now_mm: f64,
+    /// The world's ENSO-like cycle as the place feels it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enso: Option<geoforge_almanac::weather::Enso>,
 }
 
 /// Report on the area within `radius_km` of (`lat`, `lon`) over `days` Earth days from
@@ -123,7 +130,17 @@ pub fn report(world: &World, lat: f64, lon: f64, radius_km: f64, from_day: f64, 
         } else {
             let d = geoforge_almanac::drought::droughts(world, lat, lon, from_day, geoforge_almanac::year::DROUGHT_YEARS)?;
             let spi_now = d.months.last().and_then(|m| m.spi3);
-            Some(DroughtsHere { years: d.years, moderate_share: d.moderate_share, severe_share: d.severe_share, longest_months: d.longest_months, dry_soil_share: d.dry_soil_share, spi_now })
+            Some(DroughtsHere {
+                years: d.years,
+                moderate_share: d.moderate_share,
+                severe_share: d.severe_share,
+                longest_months: d.longest_months,
+                dry_soil_share: d.dry_soil_share,
+                spi_now,
+                soil_now: d.soil_now,
+                snowpack_now_mm: d.snowpack_now_mm,
+                enso: d.enso,
+            })
         },
     })
 }

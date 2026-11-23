@@ -183,6 +183,17 @@ impl World {
         std::fs::write(self.body_dir().join("body.json"), serde_json::to_string_pretty(b)?)?;
         Ok(())
     }
+    /// The focus world's own calendar (`calendar.json` beside its `body.json`), if it has one.
+    ///
+    /// # Errors
+    /// On IO or parse errors (a missing file is `Ok(None)`).
+    pub fn load_calendar(&self) -> Result<Option<geoforge_core::time::CalendarDef>> {
+        let p = self.body_dir().join("calendar.json");
+        if !p.exists() {
+            return Ok(None);
+        }
+        Ok(Some(serde_json::from_str(&std::fs::read_to_string(p)?)?))
+    }
     /// # Errors
     /// On parse errors (a missing file is `Ok(None)`).
     pub fn load_system(&self) -> Result<Option<SolarSystem>> {

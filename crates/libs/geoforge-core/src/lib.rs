@@ -13,6 +13,7 @@ pub mod radiation;
 pub mod seed;
 pub mod shapes;
 pub mod surface;
+pub mod time;
 
 pub use body::{Archetype, BodyContext, BodyExterior, BodyInterior, Elements, SolarSystem, SystemRoot, TectonicRegime};
 pub use geom::{LatLon, UnitVec3, Vec3};

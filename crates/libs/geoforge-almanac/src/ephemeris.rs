@@ -19,6 +19,7 @@
 use geoforge_core::body::{NodeKind, SolarSystem};
 use geoforge_core::derived::orbital_period_days;
 use geoforge_core::key::Key;
+use geoforge_core::time::{Clock, Span};
 use geoforge_core::{BodyContext, Elements};
 use std::collections::BTreeMap;
 
@@ -410,11 +411,16 @@ impl Calendar {
     /// The calendar of `body`, with its moons' orbital periods (Earth days).
     #[must_use]
     pub fn new(body: &BodyContext, moons: &[(String, f64)]) -> Self {
-        let (spin_d, year) = (body.exterior.rotation_h.abs() / 24.0, body.irradiance.year_days);
-        let retrograde = body.exterior.obliquity_deg > 90.0;
-        let solar_day_h = (!body.is_tidally_locked()).then(|| 24.0 / (1.0 / spin_d + if retrograde { 1.0 } else { -1.0 } / year));
+        let clock = Clock::of_body(body);
+        let year = clock.year.earth_days();
         let months = moons.iter().map(|(n, p)| (n.clone(), 1.0 / (1.0 / p - 1.0 / year))).collect();
-        Self { solar_day_h, year_days: year, months }
+        Self { solar_day_h: clock.day.map(Span::hours), year_days: year, months }
+    }
+
+    /// The world's clock: its day and year as spans.
+    #[must_use]
+    pub fn clock(&self) -> Clock {
+        Clock::new(self.solar_day_h.map(Span::from_hours), Span::from_earth_days(self.year_days))
     }
 
     /// Local days in a year, if the world has days.

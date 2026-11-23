@@ -367,9 +367,19 @@ mean SPI of −1.0 with a spread of 2.1; on the daily record six Thumi years rea
 `place` reports drought frequency and the index as its window starts (the record costs
 about 8 s on a 1024-wide Earth).
 
+Then (November 2026): the cycle comes from the world's widest equatorial sea (periods
+scaled by its width over the Pacific's 18,000 km, the delayed oscillator's crossing time;
+weak under 12,000 km, gone under 4,000 or with no equatorial shore), its warm phase wetting
+the basin's east and drying its west and the lands beyond (Guayaquil wetter; Jakarta,
+Darwin, Manaus drier on real Earth). The soil bucket runs by day with a snowpack, so every
+day, `place` and the almanac give the soil's water and the snow lying. Time has types
+(`geoforge-core::time`: `Instant`, `Span`, a world's `Clock`, and calendars — twelfths,
+lunar, the world's own `calendar.json`; OpenSpec change `time-and-calendars`), and the
+almanac dates its days in any of them (`--calendar`).
+
 Open: SPI-6 and -12, onset and end of each drought, eclipses and meteor showers in the
-almanac, a printable month page, and the ocean's say in the cycle (it is world-wide today,
-not tied to a basin).
+almanac, a printable month page, the far teleconnections from the circulation, and the
+internals (weather, storms, sky) on `Instant`.
 
 ## 8b. A system's local environment — next
 

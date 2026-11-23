@@ -48,8 +48,11 @@ If it changes with the date, it is not a product.
 
 - Seed every draw from the world (`root_seed.child(b"…")`) and the step or month index,
   never from the query, so the same date gives the same answer however it is asked.
-- Time is Earth days from the present (the focus's northern spring equinox) until the time
-  types in `TODO.md` land; convert to local days and years only with `Calendar`.
+- Time is `geoforge_core::time` (`Instant`, `Span`, a world's `Clock`); the older APIs
+  still take Earth days from the present (the focus's northern spring equinox) until the
+  `time-and-calendars` change's tasks 3.x land. Show dates through a `Calendar`
+  (`geoforge_almanac::calendar::of_world`), and keep statistics over months that follow
+  the seasons on twelfths of the year (see the `time` spec).
 - Reach it from a command in `geoforge-cli/src/almanac.rs` and from `place` when it is a
   fact about a place.
 

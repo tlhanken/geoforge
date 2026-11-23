@@ -159,12 +159,13 @@ pub fn build(world: &World, opts: &Options) -> Result<Report> {
     let places = if opts.places.is_empty() { pick_places(&products, &grid, &source) } else { opts.places.clone() };
     let mut cards = String::new();
     let mut weather = String::new();
+    let dates = geoforge_almanac::calendar::of_world(world, &geoforge_almanac::calendar::Choice::World).ok();
     for p in &places {
         if let Ok(r) = place::report(world, p.lat, p.lon, 100.0, 0.0, calendar.year_days) {
             cards += &place_card(&p.name, &r);
         }
         if let Ok(f) = geoforge_almanac::weather::forecast(world, p.lat, p.lon, opts.day, opts.days) {
-            weather += &weather_table(&format!("{} from day {}", p.name, opts.day), &f, system.as_ref());
+            weather += &weather_table(&format!("{} from day {}", p.name, opts.day), &f, system.as_ref(), dates.as_deref());
         }
     }
     let wmap = geoforge_almanac::weather::weather_map_image(world, opts.day, opts.width).ok().map(|(img, storms)| {
@@ -401,19 +402,27 @@ fn place_card(name: &str, r: &place::PlaceReport) -> String {
     )
 }
 
-fn weather_table(title: &str, f: &geoforge_almanac::weather::Forecast, system: Option<&geoforge_core::body::SolarSystem>) -> String {
+fn weather_table(title: &str, f: &geoforge_almanac::weather::Forecast, system: Option<&geoforge_core::body::SolarSystem>, dates: Option<&dyn geoforge_core::time::Calendar>) -> String {
     let rows: String = f
         .days
         .iter()
         .map(|d| {
-            let date = system.and_then(|s| real_date(s, d.day)).map_or_else(|| format!("{:.0}", d.local_day.floor()), |s| s[..10].to_string());
+            let date = system.and_then(|s| real_date(s, d.day)).map_or_else(
+                || dates.map_or_else(|| format!("{:.0}", d.local_day.floor()), |c| c.format_date(geoforge_core::time::Instant::from_earth_days(d.day + 0.5 * f.step_days))),
+                |s| s[..10].to_string(),
+            );
+            let ground = match (f.at_sea, d.snowpack_mm >= 1.0) {
+                (true, _) => String::new(),
+                (false, true) => format!("{:.0}%, {:.0} mm snow", 100.0 * d.soil, d.snowpack_mm),
+                (false, false) => format!("{:.0}%", 100.0 * d.soil),
+            };
             let precip = if d.precipitation_mm > 0.0 { format!("{:.1} mm{}", d.precipitation_mm, if d.snow { " snow" } else { "" }) } else { "—".into() };
             let mut sky = d.storm.as_ref().map_or_else(|| d.sky.to_string(), |name| format!("{}, {name} passing", d.sky));
             for e in d.events.iter().filter(|e| e.kind != "thunderstorm" || d.sky != "thunderstorm") {
                 sky += &format!("; {}", e.what);
             }
             format!(
-                r#"<tr><td class="n">{date}</td><td class="n">{:.0}° / {:.0}°</td><td class="n">{precip}</td><td class="n">{:.0} m/s</td><td>{}</td></tr>"#,
+                r#"<tr><td class="n">{date}</td><td class="n">{:.0}° / {:.0}°</td><td class="n">{precip}</td><td class="n">{:.0} m/s</td><td class="n">{ground}</td><td>{}</td></tr>"#,
                 d.low_c,
                 d.high_c,
                 d.wind_m_s,
@@ -421,9 +430,9 @@ fn weather_table(title: &str, f: &geoforge_almanac::weather::Forecast, system: O
             )
         })
         .collect();
-    let day = if system.and_then(|s| s.root.present_jd_tt).is_some() { "Date" } else { "Local day" };
+    let day = if system.and_then(|s| s.root.present_jd_tt).is_some() || dates.is_some() { "Date" } else { "Local day" };
     format!(
-        r#"<h3>{}</h3><div class="scroll"><table class="wx"><thead><tr><th>{day}</th><th>Low / high</th><th>Rain</th><th>Wind</th><th>Sky</th></tr></thead><tbody>{rows}</tbody></table></div>"#,
+        r#"<h3>{}</h3><div class="scroll"><table class="wx"><thead><tr><th>{day}</th><th>Low / high</th><th>Rain</th><th>Wind</th><th>Soil water</th><th>Sky</th></tr></thead><tbody>{rows}</tbody></table></div>"#,
         esc(title)
     )
 }

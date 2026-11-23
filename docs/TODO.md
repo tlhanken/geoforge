@@ -116,35 +116,34 @@ Still needed:
 - Still needed: SPI-6/12, drought onset and end, eclipses and meteor showers in the
   almanac, a printable month page, and a faster drought record (20 years of daily weather
   take ~8 s on a 1024-wide Earth).
-- The ENSO-like cycle's periods are drawn from the world's seed (2.5–5 and 4–7 Earth
-  years), the same on every world whatever its oceans, and its regional sign is a seeded
-  pattern. It should come from the widest tropical ocean: none wide enough (~8000 km), no
-  cycle; its period from the time equatorial Kelvin and Rossby waves take to cross that
-  basin (the delayed oscillator), so a wider basin or a slower-turning world gives a
-  longer one; drought on the warm-pool side and rain on the cold-tongue side in its warm
-  phase.
-- Soil water now and day by day: `place` gives the drought index but not the soil's water,
-  and the bucket runs by month. Run it by day in the weather, so a day, `place` and the
-  almanac all give the soil water then.
+- The ENSO-like cycle comes from the widest equatorial sea, measured along the equator
+  (real Earth: the Pacific, 18,000 km from 118°E to 80°W): its two periods are Earth's
+  (2.5–5 and 4–7 years, drawn) scaled by that width, the delayed oscillator's basin-crossing
+  time; it weakens below 12,000 km and is gone under 4,000 km or with no shore on the
+  equator. Its warm phase wets the basin's east end and coast and dries its west end and
+  the lands beyond either end (on Earth: Guayaquil wetter; Jakarta, Darwin and Manaus
+  drier); elsewhere the sign stays a seeded pattern. Still to do: the far teleconnections
+  (southern Africa, India's monsoon, the Horn of Africa) from the circulation rather than
+  seeded, and the cycle's amplitude from the basin's thermocline tilt.
+- Soil water by day — done: a 150 mm bucket with a snowpack (3 mm/°C/day melt) runs in the
+  daily weather, started from two normal years; each day, the almanac, `weather`, `place`
+  (as the window starts) and the report's weather tables give it, and the drought months
+  read it. Finding: Moscow lies under 300 mm of snow water at the March equinox (580 in a
+  snowy year), where 35 cm of late-winter snow (Climate of Moscow) is about 100 mm; the
+  climate puts too much of Moscow's rain in winter (Jan–Mar 235 mm in that year, observed
+  136) and too little in summer.
 
-## 6b. Time types (decide first; the almanac and droughts build on it)
-Today time is a bare `f64` of Earth days from the present (the focus's northern spring
-equinox) in every API, with local days and years worked out by `Calendar`; durations are
-Earth days, hours (`rotation_h`) or Ma by name only. Proposal:
-- `Instant`: SI seconds from the epoch, `f64` (±10,000 years at better than a
-  millisecond). `Span`: SI seconds. Constructors for Earth units (`Span::earth_days`) and
-  no arithmetic on bare numbers.
-- `Calendar` maps an `Instant` both ways to Earth dates (UTC, Julian day) and to local
-  ones: local day (one solar day), local year (one orbit), and local months — synodic
-  months of the largest moon, or twelfths of the year where a world has no moon (or its
-  month is longer than its year).
-- Climate statistics (drought months, seasons) keep twelfths of the local year, since
-  seasons follow the orbit and not the moon; dates shown to people use the local months.
-- Deep time (rock and crust ages, plate motion) stays in Ma, its own type, since seconds
-  would lose nothing there but readability.
-- Commands take a date as local (`--year 3 --day 120`), Earth (`--earth-days 400`) or UTC
-  for Earth.
-
+## 6b. Time types — done
+- `geoforge-core::time`: `Instant` and `Span` in SI seconds; a world's `Clock` (its mean
+  solar day and its year, constants); a `Calendar` trait with `Twelfths`, `Lunar` (a moon's
+  lunations from the ephemeris's new moons) and `Custom` (a world's `calendar.json`: named
+  months of whole days, a week, an era). Dates are whole days from the epoch, each in the
+  year and month it begins in, so calendar years differ by a day (leap years) while the
+  clock's year stays one orbit. OpenSpec change `time-and-calendars`.
+- `geoforge almanac --calendar world|twelfths|lunar|lunar:<moon>`; the report dates
+  fictional worlds' weather in their own calendar. Drought statistics stay on twelfths.
+- Still to do (tasks 3.x of the change): weather, storms, sky and the ephemeris take
+  `Instant` instead of Earth days, and commands take dates in a calendar.
 
 ## 7. Rain and temperature misses [8e, V2_REALISM]
 - London: no rain shadow.

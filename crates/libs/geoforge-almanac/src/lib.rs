@@ -11,6 +11,7 @@
 //! | [`weather`] | daily weather at a place, its phenomena, and the weather map |
 //! | [`exposure`] | hazards near a place: yearly rates, chances over a window, quakes |
 
+pub mod calendar;
 pub mod drought;
 pub mod ephemeris;
 pub mod exposure;

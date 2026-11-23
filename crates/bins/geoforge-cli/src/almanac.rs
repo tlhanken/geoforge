@@ -28,17 +28,35 @@ pub fn weather(dir: &Path, lat: f64, lon: f64, day: f64, days: usize, json: bool
     Ok(())
 }
 
-pub fn almanac(dir: &Path, lat: f64, lon: f64, year: i64, json: bool) -> R<()> {
-    let a = geoforge_almanac::year::year(&World::open(dir)?, lat, lon, year)?;
+pub fn almanac(dir: &Path, lat: f64, lon: f64, year: i64, calendar: &geoforge_almanac::calendar::Choice, json: bool) -> R<()> {
+    let w = World::open(dir)?;
+    let calendar = geoforge_almanac::calendar::of_world(&w, calendar)?;
+    let a = geoforge_almanac::year::year(&w, lat, lon, year, calendar.as_ref())?;
     if json {
         println!("{}", serde_json::to_string_pretty(&a)?);
         return Ok(());
     }
     let hm = |h: f64| format!("{:02}:{:02}", h.floor() as i64, ((h.fract()) * 60.0).floor() as i64);
-    println!("Almanac of {:.2}°, {:.2}°, year {}", a.lat, a.lon, a.year);
+    println!("Almanac of {:.2}°, {:.2}°, {} ({}; dates at the prime meridian)", a.lat, a.lon, a.year_name, a.calendar);
     let moons: Vec<&str> = a.days.first().map_or_else(Vec::new, |d| d.moons.iter().map(|m| m.0.as_str()).collect());
-    println!("  {:>6} {:>5} {:>5} {:>6} {:>6} {:>8}  {}sky", "day", "rise", "set", "low", "high", "precip", moons.iter().map(|m| format!("{:>7} ", trim(m, 7))).collect::<String>());
+    let mut month = usize::MAX;
     for d in &a.days {
+        if d.date.month != month {
+            month = d.date.month;
+            println!("{}", a.calendar_months.get(month).map_or("", |m| m.name.as_str()));
+            println!(
+                "  {:>6} {:>5} {:>5} {:>6} {:>6} {:>8} {:>5} {:>5}  {}sky",
+                "day",
+                "rise",
+                "set",
+                "low",
+                "high",
+                "precip",
+                "soil",
+                "snow",
+                moons.iter().map(|m| format!("{:>7} ", trim(m, 7))).collect::<String>()
+            );
+        }
         let w = &d.weather;
         let (rise, set) = match (d.sun, a.day_h) {
             (Some((r, s)), Some(h)) if s - r >= h - 1e-6 => ("sun".into(), "up".into()),
@@ -52,9 +70,10 @@ pub fn almanac(dir: &Path, lat: f64, lon: f64, year: i64, json: bool) -> R<()> {
         for e in w.events.iter().filter(|e| e.kind != "thunderstorm" || w.sky != "thunderstorm") {
             sky += &format!("; {}", e.what);
         }
-        println!("  {:>6.0} {rise:>5} {set:>5} {:>6.1} {:>6.1} {precip:>8}  {lit}{sky}", (w.local_day + 1e-6).floor(), w.low_c, w.high_c);
+        let snow = if w.snowpack_mm >= 1.0 { format!("{:.0}", w.snowpack_mm) } else { "—".into() };
+        println!("  {:>6} {rise:>5} {set:>5} {:>6.1} {:>6.1} {precip:>8} {:>4.0}% {snow:>5}  {lit}{sky}", d.date.day + 1, w.low_c, w.high_c, 100.0 * w.soil);
     }
-    println!("the year's months: rain, drought index (SPI-3, against the {} years before), soil water", a.droughts.years);
+    println!("the year's twelfths: rain, drought index (SPI-3, against the {} years before), soil water", a.droughts.years);
     for m in &a.months {
         let spi = m.spi3.map_or("  too dry".to_string(), |s| format!("{s:>+9.2}"));
         println!(
@@ -121,6 +140,18 @@ fn print_place(r: &pipe::place::PlaceReport) {
     println!("  magnitude 7+: {:.2}%, 8+: {:.3}%; largest likely {:.1}", 100.0 * r.quake_7, 100.0 * r.quake_8, r.largest_quake);
     if let Some(d) = &r.droughts {
         print_droughts(&d.years, d.moderate_share, d.severe_share, d.longest_months, d.dry_soil_share);
+        let snow = if d.snowpack_now_mm >= 1.0 { format!(", {:.0} mm of water lying as snow", d.snowpack_now_mm) } else { String::new() };
+        println!("  soil water as the window starts: {:.0}% of the 150 mm it holds{snow}", 100.0 * d.soil_now);
+        if let Some(e) = &d.enso {
+            let felt = match e.share_here {
+                s if s.abs() < 0.05 => "barely felt here".to_string(),
+                s => format!("{:.0}% of the wet and dry years here, its warm phase {}", 100.0 * s.abs(), if s > 0.0 { "wetter" } else { "drier" }),
+            };
+            println!(
+                "  ENSO-like cycle: periods of {:.1} and {:.1} Earth years, from the {:.0} km equatorial sea ({:.0}° to {:.0}°); {felt}",
+                e.periods_years[0], e.periods_years[1], e.basin.width_km, e.basin.west_lon, e.basin.east_lon
+            );
+        }
         if let Some(spi) = d.spi_now {
             println!("  drought index (SPI-3) as the window starts: {spi:+.2}");
         }
@@ -130,11 +161,11 @@ fn print_place(r: &pipe::place::PlaceReport) {
 fn print_weather(f: &geoforge_almanac::weather::Forecast) {
     let step = if (f.step_days - 1.0).abs() < 1e-9 { "Earth day".to_string() } else { format!("local day of {:.1} h", 24.0 * f.step_days) };
     println!("Weather at {:.2}°, {:.2}°{}, one row per {step}", f.lat, f.lon, if f.at_sea { " (at sea)" } else { "" });
-    println!("  {:>9} {:>12} {:>6} {:>6} {:>6} {:>8} {:>10}  sky", "day", "date", "low", "mean", "high", "precip", "wind");
+    println!("  {:>9} {:>12} {:>6} {:>6} {:>6} {:>8} {:>10} {:>5} {:>5}  sky", "day", "date", "low", "mean", "high", "precip", "wind", "soil", "snow");
     for d in &f.days {
         let precip = if d.precipitation_mm > 0.0 { format!("{:.1} mm", d.precipitation_mm) } else { "—".into() };
         println!(
-            "  {:>9.2} {:>12} {:>6.1} {:>6.1} {:>6.1} {precip:>8} {:>4.0} m/s {:>3}  {}",
+            "  {:>9.2} {:>12} {:>6.1} {:>6.1} {:>6.1} {precip:>8} {:>4.0} m/s {:>3} {:>5} {:>5}  {}",
             d.day,
             format!("y{} d{:.0}", d.year, (d.local_day + 1e-6).floor()),
             d.low_c,
@@ -142,6 +173,8 @@ fn print_weather(f: &geoforge_almanac::weather::Forecast) {
             d.high_c,
             d.wind_m_s,
             compass(d.wind_from_deg),
+            if f.at_sea { String::new() } else { format!("{:.0}%", 100.0 * d.soil) },
+            if d.snowpack_mm >= 1.0 { format!("{:.0}", d.snowpack_mm) } else { "—".into() },
             {
                 let mut sky = d.storm.as_ref().map_or_else(|| d.sky.to_string(), |name| format!("{} ({name}, {:.0} hPa)", d.sky, d.pressure_hpa));
                 for e in d.events.iter().filter(|e| e.kind != "thunderstorm" || d.sky != "thunderstorm") {

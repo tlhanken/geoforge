@@ -46,7 +46,8 @@ and the derived views (Köppen climates, soils, deposits, hazards, sea ice, pres
 ```bash
 geoforge place worlds/demo --lat 45 --lon 10                 # climate, soil, deposits, hazards within 100 km
 geoforge weather worlds/demo --lat 45 --lon 10 --day 100     # two weeks of daily weather from day 100
-geoforge almanac worlds/demo --lat 45 --lon 10 --year 1      # a year day by day: sun, moons, weather, droughts
+geoforge almanac worlds/demo --lat 45 --lon 10 --year 1      # a year day by day: sun, moons, weather, soil, droughts
+geoforge almanac worlds/demo --lat 45 --lon 10 --calendar lunar   # the same days in its biggest moon's months
 geoforge weather-map worlds/demo --day 100                   # isobars, fronts, rain and storms that day
 geoforge sky worlds/demo --day 100 --to worlds/demo/renders  # the night sky, eclipses, a star chart
 geoforge positions worlds/demo --day 100                     # where every body is
@@ -55,6 +56,19 @@ geoforge positions worlds/demo --day 100                     # where every body 
 Days are Earth days from the present, which is the world's northern spring equinox; any day
 works, far in the future or the past, and gives the same answer every time. `--json` prints
 machine-readable output.
+
+The almanac dates its days in a calendar: `--calendar twelfths` (twelve equal months),
+`lunar` or `lunar:<moon>` (new moon to new moon), or `world` (the default): the world's own,
+if `bodies/<name>/calendar.json` gives one, for example
+
+```json
+{"name": "Telari reckoning", "present_year": 1042, "era": "AR",
+ "week": ["Moonday", "Tideday", "Ashday", "Starday", "Restday"],
+ "months": [{"name": "Thaw", "days": 30}, {"name": "Bloom", "days": 31}, {"name": "Frost"}]}
+```
+
+Months are whole local days; the last takes what the year leaves, so it gains a day in leap
+years. The day, the year and the second never change with the calendar.
 
 ## Take its pulse
 

@@ -69,6 +69,11 @@ pub struct Day {
     /// Rain or the water of snow, mm.
     pub precipitation_mm: f64,
     pub snow: bool,
+    /// The soil's water at the day's end, a share of the 150 mm it holds (over land; a bucket
+    /// filled by rain and snowmelt, emptied by evaporation).
+    pub soil: f64,
+    /// Snow lying at the day's end, mm of water.
+    pub snowpack_mm: f64,
     pub wind_m_s: f64,
     /// The bearing the wind blows from, degrees.
     pub wind_from_deg: f64,
@@ -137,6 +142,21 @@ pub struct Forecast {
     /// Earth days per step: the solar day, or one Earth day on a world without days.
     pub step_days: f64,
     pub days: Vec<Day>,
+    /// The world's ENSO-like cycle as the place feels it; `None` without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enso: Option<Enso>,
+}
+
+/// A world's ENSO-like cycle, and its share in a place's wet and dry years.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Enso {
+    /// The widest equatorial basin, which sets it.
+    pub basin: crate::drought::Basin,
+    /// Its two periods, Earth years.
+    pub periods_years: [f64; 2],
+    /// Share of the place's slow rain anomaly that is the cycle, signed: positive where the
+    /// warm phase wets.
+    pub share_here: f64,
 }
 
 /// A place's climate, as the weather is drawn from it.
@@ -181,12 +201,17 @@ pub fn forecast(world: &World, lat: f64, lon: f64, from_day: f64, count: usize) 
     let place = Storminess::of(&atm, lat, lon, year);
     let storms_at = |t: f64| storms::effect(&passing, lat, lon, t, atm.radius_km, atm.omega);
     let seed = world.manifest.root_seed.child(b"weather").child_u64(b"cell", c as u64);
-    let wet = crate::drought::Wetness::of(world, lat, lon, &climate, year);
+    let basin = p
+        .elevation()
+        .filter(|_| body.interior.has_surface_liquid_water())
+        .and_then(|e| crate::drought::equatorial_basin(|la, lo| e.values[grid.locate(UnitVec3::from_lat_lon(la, lo)) as usize] < 0.0, body.exterior.radius_km));
+    let wet = crate::drought::Wetness::of(world, lat, lon, &climate, year, basin);
+    let enso = basin.filter(|_| wet.cycle_share() != 0.0).map(|basin| Enso { basin, periods_years: wet.periods_years(), share_here: wet.cycle_share() });
     let mut days = simulate(&climate, season_of(system, world.manifest.focus, &body, year), year, step_days, from_day, count, seed, &storms_at, &place, &rates, &|t| wet.factor(t));
     for d in &mut days {
         (d.year, d.local_day) = calendar.date(d.day);
     }
-    Ok(Forecast { lat, lon, at_sea, step_days, days })
+    Ok(Forecast { lat, lon, at_sea, step_days, days, enso })
 }
 
 /// The climate of the cell holding (`lat`, `lon`), and the cell.
@@ -415,6 +440,14 @@ pub fn simulate(
     let mean_likelihood: Vec<f64> = rates.iter().map(|(p, _)| place.samples.iter().map(|(t, e)| p.likelihood(e, normal(*t).0)).sum::<f64>() / place.samples.len() as f64).collect();
     let first = (from_day / step_days).floor() as i64;
     let (mut anomaly, mut wet) = (0.0, false);
+    // The soil and snow at the spin-up's start, from two normal years of half-months before.
+    let (mut soil, mut pack) = (0.5 * crate::drought::SOIL_MM, 0.0);
+    let begin = (first - SPIN_UP) as f64 * step_days;
+    for i in (1..=48).rev() {
+        let t = begin - f64::from(i) * year / 24.0;
+        let (c, r, _) = normal(t);
+        (soil, pack) = crate::drought::bucket(soil, pack, r * slow(t) * year / 24.0, c < 0.5, c, year / 24.0);
+    }
     let mut out = Vec::with_capacity(count);
     for n in first - SPIN_UP..first + count as i64 {
         let t = n as f64 * step_days;
@@ -438,10 +471,12 @@ pub fn simulate(
         wet = draw(b"wet") < p_wet;
         let mean_amount = rain / share.max(1e-9) * g.sqrt() * place.amount_factor(share);
         let amount = if wet { -mean_amount * draw(b"amount").max(1e-12).ln() } else { 0.0 };
+        let mean_c = normal_c + anomaly + spread * (e.warmth - place.warmth);
+        let snow = wet && mean_c < 0.5;
+        (soil, pack) = crate::drought::bucket(soil, pack, amount, snow, mean_c, step_days);
         if n < first {
             continue;
         }
-        let mean_c = normal_c + anomaly + spread * (e.warmth - place.warmth);
         let half = 0.5 * day_range * if wet { 0.7 } else { 1.0 };
         let mix = 0.5 * (1.0 + s * hemisphere.signum());
         let blowing = [0, 1].map(|k| climate.wind_jan[k] * (1.0 - mix) + climate.wind_jul[k] * mix + e.wind[k]);
@@ -450,7 +485,6 @@ pub fn simulate(
         let steady = blowing[0].hypot(blowing[1]);
         let wind = steady * (0.75 + 0.25 * rayleigh) + 2.0 * rayleigh;
         let from = ((-blowing[0]).atan2(-blowing[1]).to_degrees() + 40.0 / (1.0 + steady / 5.0) * gauss(b"bearing")).rem_euclid(360.0);
-        let snow = wet && mean_c < 0.5;
         let sky = match () {
             _ if e.kind == Some(StormKind::TropicalCyclone) && wind > 33.0 => "tropical cyclone",
             _ if wind > 17.0 && wet => "storm",
@@ -484,6 +518,8 @@ pub fn simulate(
             low_c: mean_c - half,
             precipitation_mm: amount,
             snow,
+            soil: soil / crate::drought::SOIL_MM,
+            snowpack_mm: pack,
             wind_m_s: wind,
             wind_from_deg: from,
             pressure_hpa: 1013.0 + e.pressure_hpa,
