@@ -339,6 +339,22 @@ impl Atmosphere {
         count.iter().map(|c| c / years).collect()
     }
 
+    /// A coarse field at (lat, lon), read between the cells' centres (bilinear), so a map
+    /// drawn from it has no blocks.
+    #[must_use]
+    pub fn sample(&self, field: &[f64], lat: f64, lon: f64) -> f64 {
+        let fy = ((90.0 - lat) / COARSE_DEG - 0.5).clamp(0.0, (self.rows - 1) as f64);
+        let fx = (wrap(lon) + 180.0) / COARSE_DEG - 0.5;
+        let (y0, x0) = (fy.floor(), fx.floor());
+        let (ty, tx) = (fy - y0, fx - x0);
+        let y0 = y0 as usize;
+        let y1 = (y0 + 1).min(self.rows - 1);
+        let col = |x: f64| (x as i64).rem_euclid(self.cols as i64) as usize;
+        let (x0, x1) = (col(x0), col(x0 + 1.0));
+        let row = |y: usize| field[y * self.cols + x0] * (1.0 - tx) + field[y * self.cols + x1] * tx;
+        row(y0) * (1.0 - ty) + row(y1) * ty
+    }
+
     /// The value of a coarse field at (lat, lon).
     #[must_use]
     pub fn at(&self, field: &[f64], lat: f64, lon: f64) -> f64 {
@@ -705,6 +721,21 @@ pub(crate) mod tests {
         assert_eq!(atm.at(&rates, 70.0, -60.0), 0.0);
         let tropics: f64 = (-170..170).step_by(10).map(|lon| atm.at(&rates, 18.0, f64::from(lon))).sum();
         assert!(tropics > 1.0, "{tropics}");
+    }
+
+    /// A coarse field read between its cells: exact at their centres, halfway between two
+    /// halfway in value, and across the date line too.
+    #[test]
+    fn coarse_fields_are_read_between_cells() {
+        let atm = earthlike(6);
+        let f: Vec<f64> = (0..atm.rows * atm.cols).map(|i| (i % atm.cols) as f64 + 100.0 * (i / atm.cols) as f64).collect();
+        let i = 20 * atm.cols + 7;
+        let (lat, lon) = atm.centre(i);
+        assert!((atm.sample(&f, lat, lon) - f[i]).abs() < 1e-9);
+        assert!((atm.sample(&f, lat, lon + COARSE_DEG / 2.0) - (f[i] + 0.5)).abs() < 1e-9);
+        assert!((atm.sample(&f, lat - COARSE_DEG / 2.0, lon) - (f[i] + 50.0)).abs() < 1e-9);
+        let edge = atm.sample(&f, lat, 180.0);
+        assert!((edge - (f[20 * atm.cols] + f[20 * atm.cols + atm.cols - 1]) / 2.0).abs() < 1e-9, "{edge}");
     }
 
     pub(crate) fn correlation(a: &[f64], b: &[f64]) -> f64 {

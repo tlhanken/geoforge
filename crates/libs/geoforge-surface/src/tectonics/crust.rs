@@ -182,12 +182,17 @@ impl PartialOrd for Front {
 /// Oldest oceanic crust on Earth is ~180 Ma; older crust has been subducted.
 pub const MAX_OCEANIC_AGE_MA: f64 = 180.0;
 
+/// Half-spreading rate given to ocean floor whose plate has no ridge of its own, km/Myr.
+const RIDGELESS_HALF_RATE: f64 = 20.0;
+
 /// Crust age in Ma.
 ///
 /// Oceanic crust ages away from divergent boundaries at the half-spreading rate (age =
-/// distance / half rate) within its own plate. Oceanic crust with no ridge on its plate
-/// ages from its plate's edges. Continental crust ages from ~400 Ma at plate edges to
-/// ~3000 Ma in plate cores.
+/// distance / half rate) within its own plate, up to [`MAX_OCEANIC_AGE_MA`]. A plate with no
+/// ridge of its own carries on the age of the ocean floor beside it, growing older inward
+/// (its ridge has been subducted), so the ages run on across its edge rather than jumping.
+/// Only an ocean with no aged floor around it at all ages from its plate's edges.
+/// Continental crust ages from ~400 Ma at plate edges to ~3000 Ma in plate cores.
 #[must_use]
 pub fn crust_age(grid: &dyn Grid, owner: &[u32], crust: &[CrustType], segments: &[BoundarySegment], radius_km: f64) -> (Vec<f32>, Vec<Option<usize>>) {
     let n = grid.len();
@@ -218,9 +223,42 @@ pub fn crust_age(grid: &dyn Grid, owner: &[u32], crust: &[CrustType], segments: 
                 continue;
             }
             let na = a + pc.angle_to(grid.center(nb)) * radius_km / half;
-            if na < age[nb as usize] && na <= MAX_OCEANIC_AGE_MA {
+            if na < age[nb as usize] {
                 age[nb as usize] = na;
                 src[nb as usize] = Some(si);
+                heap.push(Front(na, nb, half, si));
+            }
+        }
+    }
+
+    // Plates with no ridge: their floor goes on from the aged floor across their edge.
+    let ridged: std::collections::BTreeSet<u32> = (0..n).filter(|&i| age[i].is_finite()).map(|i| owner[i]).collect();
+    for c in grid.cells() {
+        let i = c as usize;
+        if crust[i] != CrustType::Oceanic || ridged.contains(&owner[i]) {
+            continue;
+        }
+        let beside = grid.neighbors(c).iter().filter(|&nb| owner[nb as usize] != owner[i] && age[nb as usize].is_finite()).min_by(|a, b| age[*a as usize].total_cmp(&age[*b as usize]));
+        if let Some(nb) = beside {
+            let si = src[nb as usize].unwrap_or(usize::MAX);
+            age[i] = age[nb as usize];
+            src[i] = src[nb as usize];
+            heap.push(Front(age[i], c, RIDGELESS_HALF_RATE, si));
+        }
+    }
+    while let Some(Front(a, c, half, si)) = heap.pop() {
+        if a > age[c as usize] {
+            continue;
+        }
+        let pc = grid.center(c);
+        for nb in grid.neighbors(c).iter() {
+            if owner[nb as usize] != owner[c as usize] || crust[nb as usize] != CrustType::Oceanic || ridged.contains(&owner[nb as usize]) {
+                continue;
+            }
+            let na = a + pc.angle_to(grid.center(nb)) * radius_km / half;
+            if na < age[nb as usize] {
+                age[nb as usize] = na;
+                src[nb as usize] = (si != usize::MAX).then_some(si);
                 heap.push(Front(na, nb, half, si));
             }
         }
@@ -245,7 +283,7 @@ pub fn crust_age(grid: &dyn Grid, owner: &[u32], crust: &[CrustType], segments: 
             match crust[i] {
                 CrustType::Oceanic => {
                     if age[i].is_finite() {
-                        age[i] as f32
+                        age[i].min(MAX_OCEANIC_AGE_MA) as f32
                     } else {
                         // No ridge on this plate: old ocean, oldest in the middle.
                         (30.0 + 90.0 * rel) as f32

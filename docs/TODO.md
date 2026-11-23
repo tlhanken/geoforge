@@ -99,6 +99,11 @@ Still needed:
   turned savanna, Alice Springs got 55 mm) and turning it 15° toward low pressure moved the
   directions off ERA's: the moisture transport is set on frictionless winds, so friction
   needs the moisture model retuned with it.
+- Raising the monsoon pull's ceiling from 1 to 2.5 strengthened the July winds over the
+  Arabian Sea (+5.8 m/s at 15°N 65°E) but not into westerlies at 8°N 55°E, overdid the Sahel
+  (+10 m/s) and lowered the rain correlation (0.59 → 0.57): the jet needs the
+  cross-equatorial flow turned east and held against the East African highlands, not a
+  stronger pull.
 - No Somali jet: in July ERA has 16–18 m/s westerlies over the Arabian Sea (8°N 55°E,
   15°N 65°E), the model 0.5–3; its July winds over southern China are easterly (−7.5 m/s,
   ERA +2 from the south). Arabia gets 732 mm at Riyadh on the model's winds (513 on observed
@@ -123,9 +128,13 @@ Still needed:
 - Upwelling that comes in one season (Somalia, Oman) cannot show in an annual anomaly.
 - Cyclones ignore wind shear, so the South Atlantic gets them.
 
-## 9. Bugs seen on Thumi
-- A straight-edged wedge in the ocean-floor age map.
-- Blocky cyclone patches on the hazard map.
+## 9. Bugs seen on Thumi — done
+- The straight-edged wedge in the ocean-floor age map was a plate with no ridge, aged from
+  its own edges and jumping against its neighbours; its floor now carries on from the aged
+  floor beside it (20 km/Myr half rate inward), and ages past 180 Ma are capped rather than
+  restarted. The edges left are plate boundaries, where real ages jump too.
+- The cyclone map's blocks were the 2° storm grid read cell by cell; it is now read between
+  cell centres.
 
 ## 10. Mountains [8e]
 - Arc height and width from slab age and dip, not noise.

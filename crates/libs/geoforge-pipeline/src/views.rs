@@ -229,7 +229,7 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
                     (0..g.len())
                         .map(|c| {
                             let ll = s.grid.center(c as geoforge_core::grid::Cell).to_lat_lon();
-                            atm.at(&rates, ll.lat_deg, ll.lon_deg)
+                            atm.sample(&rates, ll.lat_deg, ll.lon_deg)
                         })
                         .collect()
                 }

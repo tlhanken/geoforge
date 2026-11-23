@@ -114,7 +114,7 @@ pub struct Tectonics;
 impl Generator for Tectonics {
     type Params = TectonicsParams;
     const NAME: &'static str = "tectonics";
-    const VERSION: u32 = 2;
+    const VERSION: u32 = 3;
     const LAYER: LayerId = LayerId::Tectonics;
 
     fn needs() -> &'static [ProductId] {
