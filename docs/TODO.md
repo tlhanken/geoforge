@@ -114,8 +114,37 @@ Still needed:
   events), its months' rain, SPI-3 and soil water; `place` reports drought frequency.
 - Slow rain anomalies (regional AR(1) plus an ENSO-like cycle) in all daily weather.
 - Still needed: SPI-6/12, drought onset and end, eclipses and meteor showers in the
-  almanac, a printable month page, tying the cycle to an ocean basin, and a faster drought
-  record (20 years of daily weather take ~8 s on a 1024-wide Earth).
+  almanac, a printable month page, and a faster drought record (20 years of daily weather
+  take ~8 s on a 1024-wide Earth).
+- The ENSO-like cycle's periods are drawn from the world's seed (2.5–5 and 4–7 Earth
+  years), the same on every world whatever its oceans, and its regional sign is a seeded
+  pattern. It should come from the widest tropical ocean: none wide enough (~8000 km), no
+  cycle; its period from the time equatorial Kelvin and Rossby waves take to cross that
+  basin (the delayed oscillator), so a wider basin or a slower-turning world gives a
+  longer one; drought on the warm-pool side and rain on the cold-tongue side in its warm
+  phase.
+- Soil water now and day by day: `place` gives the drought index but not the soil's water,
+  and the bucket runs by month. Run it by day in the weather, so a day, `place` and the
+  almanac all give the soil water then.
+
+## 6b. Time types (decide first; the almanac and droughts build on it)
+Today time is a bare `f64` of Earth days from the present (the focus's northern spring
+equinox) in every API, with local days and years worked out by `Calendar`; durations are
+Earth days, hours (`rotation_h`) or Ma by name only. Proposal:
+- `Instant`: SI seconds from the epoch, `f64` (±10,000 years at better than a
+  millisecond). `Span`: SI seconds. Constructors for Earth units (`Span::earth_days`) and
+  no arithmetic on bare numbers.
+- `Calendar` maps an `Instant` both ways to Earth dates (UTC, Julian day) and to local
+  ones: local day (one solar day), local year (one orbit), and local months — synodic
+  months of the largest moon, or twelfths of the year where a world has no moon (or its
+  month is longer than its year).
+- Climate statistics (drought months, seasons) keep twelfths of the local year, since
+  seasons follow the orbit and not the moon; dates shown to people use the local months.
+- Deep time (rock and crust ages, plate motion) stays in Ma, its own type, since seconds
+  would lose nothing there but readability.
+- Commands take a date as local (`--year 3 --day 120`), Earth (`--earth-days 400`) or UTC
+  for Earth.
+
 
 ## 7. Rain and temperature misses [8e, V2_REALISM]
 - London: no rain shadow.
@@ -154,6 +183,10 @@ Still needed:
 ## 12. Sky and almanac refinements [6, 8b]
 - A system's local environment: clusters, nebulae, supernova remnants.
 - Constellations, tides by date, proper motions, the Moon's periodic terms.
+- A tidal range map for worlds with moons: the forcing of each moon and the star (mass and
+  distance), the semidiurnal and diurnal parts, and the basins' response (resonance, wide
+  shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
+  range along every coast; then the water level by date in the almanac.
 
 ## 13. Star systems [5]
 - Period ratios nearer Kepler's.
