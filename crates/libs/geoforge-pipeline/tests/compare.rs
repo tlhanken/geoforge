@@ -78,6 +78,6 @@ fn observed_products_are_compared_and_copied_inputs_are_not() {
     let (_, v) = &s.probes[0];
     assert!(v[1].unwrap() < v[0].unwrap());
     // Maps: observed and the model, with the observed key; the numbers in the page.
-    assert_eq!(c.images.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["real_temperature", "model_temperature"]);
+    assert_eq!(c.images.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["observed_temperature", "model_temperature"]);
     assert!(c.html.contains(r#"id="metrics""#) && c.html.contains("Annual mean temperature") && c.html.contains("a warmer copy"));
 }

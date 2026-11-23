@@ -248,8 +248,8 @@ pub fn build(reference: &World, models: &[Model], opts: &Options) -> Result<Comp
             // Maps: observed, then each compared model, with the observed map's key.
             let Some((img, key)) = real.render(name)? else { continue };
             let source = opts.sources.iter().find(|(p, _)| p == name).map_or(String::new(), |(_, s)| s.clone());
-            let mut figs = figure(&format!("real_{name}"), "Observed", &source);
-            images.push((format!("real_{name}"), fit(&img, opts.width)));
+            let mut figs = figure(&format!("observed_{name}"), "Observed", &source);
+            images.push((format!("observed_{name}"), fit(&img, opts.width)));
             for (i, _) in &results {
                 if let Some((img, _)) = sides[*i].render(name)? {
                     let id = format!("{}_{name}", slug(&models[*i].label));
