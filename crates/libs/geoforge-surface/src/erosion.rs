@@ -166,7 +166,8 @@ impl Generator for Erosion {
         &[ProductId::Precipitation, ProductId::Temperature, ProductId::Lithology, ProductId::Provinces]
     }
     fn applies(body: &BodyContext) -> Result<(), Precondition> {
-        crate::preconditions::rocky_surface(body)
+        // Ice shells too: without surface water the heightmap passes through unchanged.
+        crate::preconditions::solid_surface(body)
     }
 
     fn run(ctx: &RunContext<'_>, inputs: &Products, p: &ErosionParams) -> Result<Products, Error> {

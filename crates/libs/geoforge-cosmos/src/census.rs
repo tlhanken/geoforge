@@ -10,7 +10,7 @@ use geoforge_core::seed::Seed;
 use std::ops::Range;
 
 /// Kinds of primary star, in the order a census lists them.
-pub const KINDS: [&str; 13] = ["O", "B", "A", "F", "G", "K", "M", "subgiant", "giant", "supergiant", "white dwarf", "neutron star", "black hole"];
+pub const KINDS: [&str; 14] = ["O", "B", "A", "F", "G", "K", "M", "brown dwarf", "subgiant", "giant", "supergiant", "white dwarf", "neutron star", "black hole"];
 
 /// The census kind of a primary: its spectral letter on the main sequence, else its stage.
 #[must_use]
@@ -23,6 +23,7 @@ pub fn kind_of(star: &Star) -> &'static str {
         StellarStage::WhiteDwarf => "white dwarf",
         StellarStage::NeutronStar => "neutron star",
         StellarStage::BlackHole => "black hole",
+        StellarStage::BrownDwarf => "brown dwarf",
     }
 }
 

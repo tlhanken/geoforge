@@ -11,7 +11,7 @@ fn a_year_at_a_place_day_by_day() {
     let dir = std::env::temp_dir().join(format!("geoforge-almanac-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut w =
-        pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(3), grid: GridSpec::Equirect { width: 128, height: 64 }, body: None, system: None, focus: None })
+        pipe::create_world(&dir, &NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(7), grid: GridSpec::Equirect { width: 128, height: 64 }, body: None, system: None, focus: None })
             .unwrap();
     pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
     // A land cell at mid-latitude.
@@ -35,7 +35,7 @@ fn a_year_at_a_place_day_by_day() {
         let (x, y) = (p[0].date, p[1].date);
         assert!((y.month == x.month && y.day == x.day + 1) || (y.month == x.month + 1 && y.day == 0), "{x:?} then {y:?}");
     }
-    // Days lengthen and shorten through the year.
+    // Days lengthen and shorten through the year (seed 7: a world tilted 23°).
     let lengths: Vec<f64> = a.days.iter().filter_map(|d| d.sun.map(|(r, s)| s - r)).collect();
     let (short, long) = lengths.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &l| (lo.min(l), hi.max(l)));
     assert!(long - short > 0.1 * a.day_h.unwrap(), "{short} to {long} h");

@@ -84,23 +84,23 @@ exactly that layer and everything after it stale.
 
 ## Layers and generators
 
-| Layer | Plate-tectonic worlds | Rigid-lid worlds (stagnant, episodic, inactive) | Needs |
-|---|---|---|---|
-| tectonics | `tectonics` | `lid_tectonics` | rocky crust |
-| geology | `geology` | `lid_geology` | rocky crust |
-| elevation | `elevation` | `lid_elevation` | rocky crust |
-| circulation | `circulation` | `circulation` | solid surface, atmosphere |
-| climate | `climate` | `climate` | solid surface, atmosphere |
-| erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | rocky crust |
-| hydrology | `hydrology` | `hydrology` | liquid water on the surface |
-| biomes | `biomes` | `biomes` | liquid water on the surface |
-| resources | `giant_deposits` | `giant_deposits` | liquid water on the surface |
-| bands | — | — | no solid surface, an atmosphere: `giant_bands` |
+| Layer | Plate-tectonic worlds | Rigid-lid worlds (stagnant, episodic, inactive) | Ice shells over an ocean | Needs |
+|---|---|---|---|---|
+| tectonics | `tectonics` | `lid_tectonics` | `ice_shell_tectonics` | rocky crust, or an ice shell |
+| geology | `geology` | `lid_geology` | `ice_shell_geology` | rocky crust, or an ice shell |
+| elevation | `elevation` | `lid_elevation` | `ice_shell_elevation` | rocky crust, or an ice shell |
+| circulation | `circulation` | `circulation` | `circulation` | solid surface, atmosphere |
+| climate | `climate` | `climate` | `climate` | solid surface, atmosphere |
+| erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | `erosion` (copies it) | solid surface |
+| hydrology | `hydrology` | `hydrology` | — | liquid water on the surface |
+| biomes | `biomes` | `biomes` | — | liquid water on the surface |
+| resources | `giant_deposits` | `giant_deposits` | — | liquid water on the surface |
+| bands | — | — | — | no solid surface, an atmosphere: `giant_bands` |
 
 So Earth runs everything; Mars and Venus get a surface, winds and a climate but no rivers
-or biomes; the Moon, Mercury, frozen moons and asteroids get a surface only. Giants get
-only the `bands` layer. Ice-shell worlds (Europa) have no generator yet: every layer
-reports why. A generator for a
+or biomes; the Moon, Mercury, frozen moons and asteroids get a surface only; Europa gets an
+ice-shell surface, and Titan that and its winds and climate. Giants get only the `bands`
+layer. A generator for a
 new kind of body is a new `Generator` registered in `geoforge-pipeline/src/registry.rs`.
 
 ## Products

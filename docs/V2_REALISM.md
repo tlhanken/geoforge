@@ -419,13 +419,19 @@ Galaxy's census (`census` prints the same numbers for any galaxy and range of se
 
 | Check | Model | Milky Way |
 |---|---|---|
-| Red dwarfs among stars | 75% | ~75% of stars (61% of stars and brown dwarfs within 10 pc, Reylé et al. 2021) |
+| Brown dwarfs among systems | 20% | four stars to a brown dwarf (Kirkpatrick et al. 2024) |
+| Red dwarfs among stars | 83% | ~75–85% of stars (61% of stars and brown dwarfs within 10 pc, Reylé et al. 2021) |
 | White dwarfs | 6.1% | 4.8×10⁻³ pc⁻³ of ~0.08 stars pc⁻³ (Holberg et al. 2016) |
 | Neutron stars, black holes | 0.55%, 0.17% | 10⁸–10⁹ of each among 1–4×10¹¹ stars |
 | Multiples | 25% of red dwarfs, 46% of Sun-like stars | 23–27% (Winters et al. 2019), 46% (Raghavan et al. 2010) |
 | Metallicity near the Sun | mean −0.1, 0.2 dex wide | peak −0.15 to 0 (Gilmore 2007; Haywood 2001) |
 | Small planets per red dwarf within 200 days | 1.5–3.5 | 2.5 (Dressing & Charbonneau 2015) |
-| Sun-like stars with giant planets; hot Jupiters | 10–18%; 0.3–2% | ~14%; ~1% |
+| Sun-like stars with giant planets; hot Jupiters | 13.5%; 0.8% | ~14%; ~1% (Wright et al. 2012: 1.2%; Kepler 0.4–0.6%) |
+| Small planets within 200 days per Sun-like star; sub-Neptunes among them | 1.1; 27% | ~1 (Zhu et al. 2018: 30% of stars with ~3); about a third |
+| Neighbours' period ratio (small planets) | median 2.1, few under 1.2 | Kepler: peak ~1.6, long tail (Fabrycky et al. 2014) |
+| Giants' eccentricity, 0.1–5 AU | median 0.17, 23% over 0.4 | median 0.17, 18% over 0.4 (Kipping 2013) |
+| Hot Jupiters with a neighbour inside 1 AU; warm Jupiters | 7%; 33% | rare; common (Huang et al. 2016) |
+| Trojans | Jupiter and Neptune, not Saturn or Uranus | the same (Nesvorný & Dones 2002) |
 | Pulsars with planets | 0.5% | under 0.5% (Nițu et al. 2022) |
 | Neighbouring planets, mutual Hill radii | at least 8 | Jupiter–Saturn ~8; long-lived multi-planet systems 8–10 (Chambers et al. 1996) |
 | Asteroid and Kuiper belts | the first giant's 4:1–2:1; the outermost giant's 3:2–2:1 | Jupiter's 2.06–3.28 AU; Neptune's 39.4–47.8 AU |
@@ -436,10 +442,12 @@ Their gaps:
   ∝ L^−0.85), then helium burns in the core (the red clump: 50 L☉, 4800 K for Sun-like
   stars) for a fifth of the main sequence, at most 120 Myr. No asymptotic giant branch,
   blue loops or horizontal-branch colours.
-- No brown dwarfs, and no binary evolution: mass transfer, mergers and X-ray binaries are
-  missing, and a supernova that blows off half a pair's mass always unbinds it (in fact
-  ~8% of black holes keep a companion).
-- Only the primary (or a close pair) has planets; companions' own planets are not made.
+- No binary evolution: mass transfer, mergers and X-ray binaries are missing, and a
+  supernova that blows off half a pair's mass always unbinds it (in fact ~8% of black holes
+  keep a companion). Brown dwarfs cool by Burrows & Liebert's fits, which start at 10 Myr.
+- A wide companion's planets feel only their own star's light.
+- Tilts wander or hold by a simple rule (a moon's pull against the star's); the chaotic
+  zones themselves are not computed. Thermal tides are worked out for air near a bar only.
 - A giant's light turns its rocky planets into Venuses, but icy moons do not thaw: icy
   interiors ignore starlight.
 - Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping

@@ -164,10 +164,26 @@ impl Cells {
             };
             return (u, -0.45 * s * side);
         }
-        if self.jets != 1 {
-            let (westerly, x, _) = self.band(lat);
-            let s = (PI * x).sin();
-            return if westerly { (1.0 * s, 0.3 * s * hemi) } else { (-0.6 * s, -0.35 * s * hemi) };
+        if self.jets > 1 {
+            // Where a westerly band's poleward drift meets the next easterly band's equatorward
+            // one the flows converge on a line, and rain fell along it in one row. Eddies spread
+            // that front over a storm track's width: the wind is averaged over a tenth of a
+            // westerly–easterly pair either side.
+            let pair = (90.0 - self.edge(lat).abs()).max(1.0) / f64::from(self.jets);
+            let reach = 0.1 * pair;
+            let weights = [1.0, 2.0, 3.0, 2.0, 1.0];
+            let (mut u, mut v) = (0.0, 0.0);
+            for (k, wt) in weights.iter().enumerate() {
+                let l = lat + reach * (k as f64 - 2.0) / 2.0;
+                // Stay on this side of the Hadley cell: its own branch handles the edge.
+                let l = if (l - self.itcz).signum() == (lat - self.itcz).signum() && (l - self.itcz).abs() >= (self.edge(lat) - self.itcz).abs() { l } else { lat };
+                let (bu, bv) = self.band_wind(l);
+                (u, v) = (u + wt * bu, v + wt * bv);
+            }
+            return (u / 9.0, v / 9.0);
+        }
+        if self.jets == 0 {
+            return self.band_wind(lat);
         }
         let edge = self.edge(lat);
         let front = self.polar_front(lat);
@@ -180,6 +196,18 @@ impl Cells {
         let x3 = ((lat.abs() - front) / (90.0 - front).max(1.0)).clamp(0.0, 1.0);
         let s = (PI * x3).sin();
         (-0.6 * s, -0.35 * s * hemi)
+    }
+
+    /// Wind of the jet bands at `lat`, poleward of the Hadley cell, unsmoothed.
+    fn band_wind(&self, lat: f64) -> (f64, f64) {
+        let hemi = if lat >= 0.0 { 1.0 } else { -1.0 };
+        let (westerly, x, _) = self.band(lat);
+        let s = (PI * x).sin();
+        if westerly {
+            (1.0 * s, 0.3 * s * hemi)
+        } else {
+            (-0.6 * s, -0.35 * s * hemi)
+        }
     }
 
     /// Rain-out multiplier from large-scale vertical motion over open sea, zonal pattern.

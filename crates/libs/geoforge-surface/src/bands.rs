@@ -16,6 +16,13 @@
 //! have one great storm as wide as its zone (Jupiter's Great Red Spot; Saturn has none that
 //! lasts; on ice giants, a dark spot like Neptune's, which come and go).
 //!
+//! **Poles.** Each pole of a gas giant holds either a ring of cyclones round one at the pole
+//! (Jupiter: eight in the north and five in the south, ~4000 km across, at 83–84°; Adriani et
+//! al. 2018) or a single polar vortex, which a jet may ring in a polygon (Saturn's hexagon at
+//! 78°N; Godfrey 1988; round at its south pole). Which, and how many sides, are drawn: what
+//! sets them is still argued (Gavriel & Kaspi 2021). Ice giants keep one polar vortex
+//! (Uranus's, Sromovsky et al. 2015).
+//!
 //! Products: `zonal_wind` (m/s, eastward) and `cloud_bands` (cloud-top brightness, 0 for the
 //! darkest belt to 1 for the brightest zone or oval).
 
@@ -187,12 +194,73 @@ fn storms(d: &mut Draws, profile: &Profile, p: &BandsParams) -> Vec<Oval> {
     out
 }
 
+/// What covers one pole.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Pole {
+    /// Cyclones on a ring at `ring_deg` from the pole, and one at the pole.
+    Cyclones { count: u32, ring_deg: f64, radius_deg: f64, phase: f64 },
+    /// One polar vortex inside a jet `jet_deg` from the pole, bent into a polygon of `sides`
+    /// (0: round).
+    Vortex { sides: u32, jet_deg: f64, phase: f64 },
+}
+
+fn poles(d: &mut Draws, profile: &Profile, radius_km: f64) -> [Pole; 2] {
+    [(); 2].map(|()| {
+        if !profile.ice && d.u() < 0.5 {
+            // Jupiter's cyclones: ~4300 km across on a ring ~7° from the pole.
+            let count = 5 + (d.u() * 4.0) as u32;
+            Pole::Cyclones { count, ring_deg: d.range(6.0, 8.0), radius_deg: (2150.0 / radius_km).to_degrees().min(3.0), phase: d.range(0.0, 360.0) }
+        } else {
+            let sides = if profile.ice || d.u() < 0.4 { 0 } else { 5 + (d.u() * 3.0) as u32 };
+            Pole::Vortex { sides, jet_deg: d.range(10.0, 14.0), phase: d.range(0.0, 360.0) }
+        }
+    })
+}
+
+impl Pole {
+    /// Cloud-top brightness at `colat` degrees from this pole and longitude `lon`, over the
+    /// bands' `b`.
+    fn paint(&self, colat: f64, lon: f64, b: f64, ice: bool) -> f64 {
+        let dark = if ice { 0.1 } else { 0.25 };
+        match *self {
+            Pole::Cyclones { count, ring_deg, radius_deg, phase } => {
+                let centres = std::iter::once((0.0, 0.0)).chain((0..count).map(|k| (ring_deg, phase + 360.0 * f64::from(k) / f64::from(count))));
+                centres.fold(b, |b, (rho, l)| {
+                    // Distance on the small polar cap, as on a flat map round the pole.
+                    let (x0, y0) = (rho * l.to_radians().cos(), rho * l.to_radians().sin());
+                    let (x, y) = (colat * lon.to_radians().cos(), colat * lon.to_radians().sin());
+                    let r = (x - x0).hypot(y - y0) / radius_deg;
+                    if r < 1.0 {
+                        b + (dark - b) * (0.5 + 0.5 * (1.0 - r * r).sqrt())
+                    } else {
+                        b
+                    }
+                })
+            }
+            Pole::Vortex { sides, jet_deg, phase } => {
+                // The jet's distance from the pole: a polygon's edge, or a circle.
+                let edge = if sides == 0 {
+                    jet_deg
+                } else {
+                    let wedge = 360.0 / f64::from(sides);
+                    let local = (lon - phase).rem_euclid(wedge) - wedge / 2.0;
+                    jet_deg * (PI / f64::from(sides)).cos() / local.to_radians().cos()
+                };
+                let inside = 0.5 - 0.5 * ((colat - edge) / 0.6).tanh();
+                let rim = (-((colat - edge) / 0.8).powi(2)).exp();
+                let core = (-(colat / 2.0).powi(2)).exp();
+                b + (dark + 0.15 - b) * 0.6 * inside + 0.15 * rim + (dark - b) * core
+            }
+        }
+    }
+}
+
 pub struct GiantBands;
 
 impl Generator for GiantBands {
     type Params = BandsParams;
     const NAME: &'static str = "giant_bands";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const LAYER: LayerId = LayerId::Bands;
 
     fn needs() -> &'static [ProductId] {
@@ -210,6 +278,7 @@ impl Generator for GiantBands {
         let profile = Profile::for_body(ctx.body, p);
         let mut d = Draws { seed: ctx.seed(ProductId::CloudBands), n: 0 };
         let ovals = storms(&mut d, &profile, p);
+        let polar = poles(&mut Draws { seed: ctx.seed(ProductId::CloudBands).child(b"poles"), n: 0 }, &profile, ctx.radius_km());
         // Waves along the band edges: a few zonal wavenumbers, stronger at mid-latitudes.
         let waves: Vec<(f64, f64, f64)> = (0..6).map(|k| (f64::from(3 + 4 * k) + d.range(0.0, 3.0), d.range(0.0, 2.0 * PI), d.range(0.0, 2.0 * PI))).collect();
         // Band edges wander by up to a fifth of a band (a couple of degrees on Jupiter).
@@ -232,6 +301,10 @@ impl Generator for GiantBands {
                         let core = (1.0 - r2).sqrt();
                         b += (o.value - b) * (0.4 + 0.6 * core);
                     }
+                }
+                let colat = 90.0 - lat.abs();
+                if colat < 20.0 {
+                    b = polar[usize::from(lat < 0.0)].paint(colat, lon, b, profile.ice);
                 }
                 (u as f32, b.clamp(0.0, 1.0) as f32)
             })
@@ -279,6 +352,34 @@ mod tests {
         let p = BandsParams::default();
         let great = (0..200).filter(|&k| storms(&mut Draws { seed: Seed(k), n: 0 }, &profile, &p).iter().any(|o| o.value < 0.5)).count();
         assert!((60..140).contains(&great), "{great} of 200 with a great storm");
+    }
+
+    #[test]
+    fn poles_hold_cyclone_rings_or_polygons() {
+        let gas = Profile { jets: 6, speed: 60.0, ice: false };
+        let (mut rings, mut polygons, mut round) = (0, 0, 0);
+        for k in 0..200 {
+            for pole in poles(&mut Draws { seed: Seed(k), n: 0 }, &gas, 69_911.0) {
+                match pole {
+                    Pole::Cyclones { count, radius_deg, .. } => {
+                        assert!((5..=8).contains(&count) && (1.5..2.0).contains(&radius_deg), "Jupiter's: {count}, {radius_deg}°");
+                        rings += 1;
+                    }
+                    Pole::Vortex { sides: 0, .. } => round += 1,
+                    Pole::Vortex { sides, .. } => {
+                        assert!((5..=7).contains(&sides));
+                        polygons += 1;
+                    }
+                }
+            }
+        }
+        assert!(rings > 150 && polygons > 80 && round > 40, "{rings} rings, {polygons} polygons, {round} round");
+        // A hexagon's corners stand farther from the pole than its sides' middles.
+        let hex = Pole::Vortex { sides: 6, jet_deg: 12.0, phase: 0.0 };
+        let at = |colat: f64, lon: f64| hex.paint(colat, lon, 0.6, false);
+        assert!(at(11.0, 0.0) < at(11.0, 30.0) - 0.05, "inside at a corner, outside mid-side");
+        let ice = Profile { jets: 1, speed: 250.0, ice: true };
+        assert!(poles(&mut Draws { seed: Seed(1), n: 0 }, &ice, 25_000.0).iter().all(|p| matches!(p, Pole::Vortex { sides: 0, .. })));
     }
 
     #[test]

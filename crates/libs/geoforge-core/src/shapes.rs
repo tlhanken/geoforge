@@ -210,6 +210,8 @@ pub enum EventKind {
     GlobalResurfacing,
     ImpactBasin,
     VolcanicRise,
+    /// Part of an ice shell renewed from the ocean below: chaos, bands, grooved terrain.
+    ShellRenewal,
 }
 
 /// Where an event happened.

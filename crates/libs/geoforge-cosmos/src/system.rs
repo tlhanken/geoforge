@@ -1,9 +1,13 @@
 //! The orbital tree: a star, its planets on a geometric ladder through the habitable zone,
-//! belts in the gaps, and moons.
+//! belts in the gaps, and moons. Siblings close to the star are tidally locked (or held off by
+//! their air's thermal tide), rocky worlds' tilts wander unless a big moon steadies them, and
+//! giants keep their Trojans ([`crate::spin`], [`crate::dynamics`]).
 
 use crate::draw::Draw;
 use crate::dynamics::{self, HasOrbit};
+use crate::galactic::{tidal_lock_au, trojans};
 use crate::planets::Formed;
+use crate::spin::{self, set_body};
 use crate::stars::spectral_class;
 use geoforge_core::body::{
     BodyClass, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, AU_KM, EARTH_MASS_KG, EARTH_RADIUS_KM,
@@ -117,12 +121,19 @@ pub fn generate_system(seed: Seed) -> Generated {
 
     let mut focus = Key(0);
     let mut planets = Vec::new();
+    let mut locked = Vec::new();
     for (i, draft) in drafts.iter().enumerate() {
         let key = keys.fresh();
         let nm = format!("{sys_name} {}", ROMAN.get(i).copied().unwrap_or("+"));
         let el = Elements { a_au: draft.orbit.a_au, e: draft.orbit.e, ..draft.el };
-        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(draft.ext), elements: Some(el), precession: None });
-        planets.push((key, nm, draft.ext, draft.orbit.a_au));
+        let mut ext = draft.ext;
+        if ext.class == BodyClass::Terrestrial && draft.orbit.a_au < tidal_lock_au(m, age) {
+            ext.rotation_h = spin::locked_rotation_h(orbital_period_days(draft.orbit.a_au, m * SOLAR_MASS_KG) * 24.0, draft.orbit.e);
+            ext.obliquity_deg /= 35.0;
+            locked.push((key, m));
+        }
+        nodes.push(OrbitalNode { key, name: nm.clone(), parent: Some(star_key), node: NodeKind::Body(ext), elements: Some(el), precession: None });
+        planets.push((key, nm, ext, draft.orbit.a_au));
         if (draft.orbit.a_au - focus_a).abs() < 1e-12 {
             focus = key;
         }
@@ -193,8 +204,29 @@ pub fn generate_system(seed: Seed) -> Generated {
         nodes.extend(moons.into_iter().filter(|n| n.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
+    // Tilts: a rocky world's wanders unless a big moon steadies it.
+    let mut spin_draw = Draw::new(seed.child(b"spin"));
+    for (key, _, ext, a_au) in planets.iter().filter(|p| p.2.class == BodyClass::Terrestrial && !locked.iter().any(|l| l.0 == p.0)) {
+        let steadied = nodes.iter().filter(|n| n.parent == Some(*key)).any(|n| match (&n.node, n.elements) {
+            (NodeKind::Body(b), Some(e)) => spin::moon_steadies(b.mass_kg, e.a_au * AU_KM, m * SOLAR_MASS_KG, a_au * AU_KM),
+            _ => false,
+        });
+        if !steadied {
+            let tilt = spin::wandered_tilt(&mut spin_draw, ext.obliquity_deg);
+            set_body(&mut nodes, *key, |b| b.obliquity_deg = tilt);
+        }
+    }
+    // Trojans at the giants that keep them.
+    let formed: Vec<Formed> = drafts.iter().map(|p| p.orbit).collect();
+    let mut trojan_draw = Draw::new(seed.child(b"trojans"));
+    for (i, belt) in dynamics::trojans(&formed, m) {
+        nodes.push(trojans(&mut trojan_draw, keys.fresh(), star_key, &planets[i].1, belt));
+    }
+
     let root = SystemRoot { key: root_key, seed, name: sys_name, epoch: Epoch { system_age_gyr: age }, placement: None, site: Some(sunlike_site(seed)), present_jd_tt: None };
-    Generated { system: SolarSystem { root, nodes }, focus }
+    let mut system = SolarSystem { root, nodes };
+    spin::thermal_tides(&mut system, &locked);
+    Generated { system, focus }
 }
 
 /// A place in the Milky Way like the Sun's: within a kiloparsec or so of its radius, at any

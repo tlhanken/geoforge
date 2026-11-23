@@ -78,20 +78,31 @@ impl LidGeologyParams {
 pub struct LidGeology;
 
 /// Provinces being painted, later ones over earlier ones.
-struct Painter<'a> {
-    grid: &'a dyn Grid,
-    radius_km: f64,
-    owner: Vec<u32>,
-    table: Table<Province>,
-    events: Table<Event>,
+pub(crate) struct Painter<'a> {
+    pub grid: &'a dyn Grid,
+    pub radius_km: f64,
+    pub owner: Vec<u32>,
+    pub table: Table<Province>,
+    pub events: Table<Event>,
 }
 
-impl Painter<'_> {
-    fn province(kind: G, width_km: f64, intensity: f64, age_ma: f64, anchor: Option<UnitVec3>) -> Province {
+impl<'a> Painter<'a> {
+    pub(crate) fn new(grid: &'a dyn Grid, radius_km: f64) -> Self {
+        Self { grid, radius_km, owner: vec![0; grid.len()], table: Table::new(), events: Table::new() }
+    }
+
+    /// The painted provinces, emptied of rows that lost every cell.
+    pub(crate) fn finish(self) -> (Partition<Province>, Timeline) {
+        let mut pv = Partition { owner: Field::from_values(self.grid.spec(), self.owner), table: self.table };
+        pv.prune();
+        (pv, Timeline { events: self.events })
+    }
+
+    pub(crate) fn province(kind: G, width_km: f64, intensity: f64, age_ma: f64, anchor: Option<UnitVec3>) -> Province {
         Province { kind, elevation_intensity: 0.0, roughness: 0.0, width_km, intensity, convergence_rate_cm_yr: 0.0, boundary: None, age_ma, anchor }
     }
 
-    fn add(&mut self, prov: Province, cells: &[Cell], event: Option<EventKind>) -> Key {
+    pub(crate) fn add(&mut self, prov: Province, cells: &[Cell], event: Option<EventKind>) -> Key {
         let key = Key(self.table.rows.len() as u64 + 1);
         for &c in cells {
             self.owner[c as usize] = key.0 as u32;
@@ -107,20 +118,20 @@ impl Painter<'_> {
     }
 
     /// Cells within `radius_km` of `at`.
-    fn disk(&self, at: UnitVec3, radius_km: f64) -> Vec<Cell> {
+    pub(crate) fn disk(&self, at: UnitVec3, radius_km: f64) -> Vec<Cell> {
         let r = (radius_km / self.radius_km).max(self.grid.spacing_rad() * 0.5);
         cells_within(self.grid, &[self.grid.locate(at)], r, |_| true)
     }
 
     /// A circular feature.
-    fn circle(&mut self, kind: G, at: UnitVec3, radius_km: f64, intensity: f64, age_ma: f64, event: Option<EventKind>) {
+    pub(crate) fn circle(&mut self, kind: G, at: UnitVec3, radius_km: f64, intensity: f64, age_ma: f64, event: Option<EventKind>) {
         let cells = self.disk(at, radius_km);
         self.add(Self::province(kind, 2.0 * radius_km, intensity, age_ma, Some(at)), &cells, event);
     }
 }
 
 /// A random point at least `min_sep_rad` from every point in `taken` (best of a few tries).
-fn spaced_point(rng: &mut StdRng, taken: &[(UnitVec3, f64)], radius_rad: f64) -> UnitVec3 {
+pub(crate) fn spaced_point(rng: &mut StdRng, taken: &[(UnitVec3, f64)], radius_rad: f64) -> UnitVec3 {
     let mut best = (UnitVec3::from_lat_lon(0.0, 0.0), f64::NEG_INFINITY);
     for _ in 0..40 {
         let p = UnitVec3::from_lat_lon(rng.gen::<f64>().mul_add(2.0, -1.0).asin().to_degrees(), rng.gen_range(-180.0..180.0));
@@ -188,7 +199,7 @@ fn build(ctx: &RunContext<'_>, crust: &[CrustType], age: &[f32], p: &LidGeologyP
     let icy = body.interior.surface_shell().is_some_and(|s| s.composition.fraction(Species::Ice) > 0.5);
     let counts = p.counts(body);
     let mut rng = StdRng::seed_from_u64(ctx.seed(ProductId::Provinces).value());
-    let mut paint = Painter { grid, radius_km: r, owner: vec![0; grid.len()], table: Table::new(), events: Table::new() };
+    let mut paint = Painter::new(grid, r);
     let mean_age = |cells: &[Cell]| cells.iter().map(|&c| f64::from(age[c as usize])).sum::<f64>() / cells.len().max(1) as f64;
 
     // 1. The crust's own regions.
@@ -266,9 +277,7 @@ fn build(ctx: &RunContext<'_>, crust: &[CrustType], age: &[f32], p: &LidGeologyP
         paint.circle(G::ShieldVolcano, at, radius_km, rng.gen_range(0.4..1.0), a, None);
     }
 
-    let mut pv = Partition { owner: Field::from_values(grid.spec(), paint.owner), table: paint.table };
-    pv.prune();
-    (pv, Timeline { events: paint.events })
+    paint.finish()
 }
 
 #[cfg(test)]

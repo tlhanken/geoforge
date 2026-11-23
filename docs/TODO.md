@@ -216,19 +216,23 @@ Still needed:
   shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
   range along every coast; then the water level by date in the almanac.
 
-## 13. Star systems [5] (next: a system is built from its star now)
-- Period ratios nearer Kepler's.
-- Hot Jupiters.
-- Obliquity stability with and without a big moon.
-- Trojans.
+## 13. Star systems [5] — done (OpenSpec `systems-and-worlds`)
+- Kepler-like compact chains (period ratios log-normal about 1.8, peas in a pod); packed
+  giants that scatter by Petrovich's criterion, merging close in and ejecting far out
+  (Safronov number); hot Jupiters by high-eccentricity migration, lonely.
+- A rocky world's tilt wanders unless a big moon steadies it.
+- Trojans where no heavier giant clears them.
 
-## 14. Other worlds [Still open] (and brown dwarfs: the IMF below 0.08 M☉, their cooling)
-- Ice-shell worlds (Europa).
-- Locked worlds carrying heat to the night side.
-- Asynchronous rotation.
-- Brown dwarfs; planets of companion stars.
-- Giant storms.
-- Streaks on fast rotators.
+## 14. Other worlds — mostly done (OpenSpec `systems-and-worlds`)
+Done: brown dwarfs (a fifth of systems, cooling, M/L/T/Y); planets of wide companions;
+thermal-tide rotation of locked worlds with 0.5–5 bar; ice shells (Europa-like and
+Ganymede-like generators); locked oceans that superrotate and carry heat to the night side;
+fast spinners without an ice cliff or rain lines at their fronts; giants' polar cyclones and
+hexagons. Open:
+- Storms that drift by date (a dated view of the bands).
+- Several gyres per basin on fast spinners.
+- Thermal tides of thick (Venus-like) air; binary evolution; a companion's light on the
+  other star's planets; Titan's dunes and methane lakes.
 
 ## 15. Speed: a lite generator
 Once the accurate model is settled, any of:

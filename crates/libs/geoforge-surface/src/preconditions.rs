@@ -32,6 +32,17 @@ pub fn rigid_lid(body: &BodyContext) -> Check {
     require(matches!(body.interior.regime, TectonicRegime::StagnantLid | TectonicRegime::Episodic | TectonicRegime::Inactive), "needs a rigid lid (stagnant, episodic or inactive)")
 }
 
+/// A floating shell of ice over an ocean (Europa, Ganymede, Titan).
+pub fn ice_shell(body: &BodyContext) -> Check {
+    require(body.interior.has_solid_surface() && body.interior.surface_shell().is_some_and(|s| s.kind == geoforge_core::body::ShellKind::IceShell), "needs an ice shell")?;
+    require(body.interior.regime == TectonicRegime::IceShell, "needs an ice shell over an ocean")
+}
+
+/// Any solid ground, rock or ice.
+pub fn solid_surface(body: &BodyContext) -> Check {
+    require(body.interior.has_solid_surface(), "needs a solid surface")
+}
+
 /// Ground under air.
 pub fn surface_air(body: &BodyContext) -> Check {
     require(body.interior.has_solid_surface(), "needs a solid surface")?;
@@ -66,6 +77,11 @@ mod tests {
         assert!(ok(Archetype::Earth, plate_tectonics));
         assert!(ok(Archetype::Mars, rigid_lid) && ok(Archetype::Venus, rigid_lid) && ok(Archetype::Moon, rigid_lid));
         assert!(!ok(Archetype::Europa, rigid_lid) && !ok(Archetype::GasGiant, rigid_lid));
+        assert!(ok(Archetype::Europa, ice_shell) && ok(Archetype::Titan, ice_shell) && !ok(Archetype::Mars, ice_shell) && !ok(Archetype::Earth, ice_shell));
+        for a in Archetype::ALL {
+            let b = a.context(Key(1), a.slug());
+            assert!(u8::from(plate_tectonics(&b).is_ok()) + u8::from(rigid_lid(&b).is_ok()) + u8::from(ice_shell(&b).is_ok()) <= 1, "{a}: one tectonic model at most");
+        }
         assert!(ok(Archetype::Earth, surface_water) && !ok(Archetype::Mars, surface_water));
         assert!(ok(Archetype::Titan, surface_air) && !ok(Archetype::Moon, surface_air));
     }

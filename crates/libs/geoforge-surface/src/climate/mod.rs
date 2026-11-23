@@ -203,6 +203,7 @@ impl Climate {
         let locked = Substellar::for_body(body);
         let (tz, tmean) = if locked.is_some() { radiation.substellar_temperature(&lats) } else { radiation.zonal_temperature(&lats) };
         let swing_z: Vec<f64> = lats.iter().map(|&l| if locked.is_some() { 0.0 } else { radiation.seasonal_range(l) }).collect();
+        let base = Baseline::new(&g, &lats, &tz, locked.as_ref());
 
         // 2–4. Current-warmed air from annual-mean winds; continentality from each season's.
         let wind_annual: Vec<(f64, f64)> = season_winds[0].iter().zip(&season_winds[1]).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
@@ -215,7 +216,7 @@ impl Climate {
             .iter()
             .enumerate()
             .map(|(i, &a)| {
-                let t0 = tz[i / g.w];
+                let t0 = base.t[i];
                 let open = (a / OPEN_SEA_ANOMALY_C).clamp(0.0, 1.0);
                 a + (SEA_FREEZE_C - t0).max(0.0) * open * (1.0 - atmo.land[i])
             })
@@ -229,7 +230,7 @@ impl Climate {
                     let lat = g.lat(i / g.w);
                     let winter = (k == 1) == (lat >= 0.0);
                     let half = 0.5 * swing_z[i / g.w].abs() * 0.13;
-                    let t_sea = tz[i / g.w] + sst[i] + if winter { -half } else { half };
+                    let t_sea = base.t[i] + sst[i] + if winter { -half } else { half };
                     if t_sea < SEA_FREEZE_C {
                         FROZEN_SEA_WARMTH
                     } else {
@@ -268,11 +269,7 @@ impl Climate {
             let is_land = atmo.land[i] >= 0.5;
             let coast = if is_land { 400.0 } else { 0.0 };
             let (cont_s, cont_w) = (continentality(is_land, mar_summer[i], coast), continentality(is_land, mar_winter[i], coast));
-            let t0 = match &locked {
-                Some(s) => interpolate(&lats, &tz, 90.0 - s.zenith(lat, g.lon(i % g.w))),
-                None => tz[y],
-            };
-            let t = t0 + sst_air[i];
+            let t = base.t[i] + sst_air[i];
             t_sl[i] = t;
             swing[i] = swing_z[y];
             let (summer, winter) = summer_winter(t, swing[i], lat, atmo.land[i], cont_s, cont_w, locked.is_none());
@@ -306,7 +303,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 12;
+    const VERSION: u32 = 13;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
@@ -436,6 +433,35 @@ pub fn on_ground(temperature: &[f32], rough: Option<&[f32]>, elevation: &[f32], 
     let Some(rough) = rough else { return temperature.to_vec() };
     let lapse = ClimateParams::default().lapse_rate(body) / 1000.0;
     temperature.iter().zip(rough.iter().zip(elevation)).map(|(&t, (&r, &e))| if e >= 0.0 && r >= 0.0 { t + (lapse * f64::from(r - e)) as f32 } else { t }).collect()
+}
+
+/// The sea-level temperature before currents and the band each cell belongs to: by latitude,
+/// or on a tidally locked world by angle from the point under its star ("substellar latitude",
+/// Koll & Abbot 2015), whose rings play the latitude circles' part.
+pub(crate) struct Baseline {
+    /// °C, per atmosphere cell.
+    pub t: Vec<f64>,
+    /// The cell's band, as a row index: its own row, or the row at its substellar latitude.
+    pub band: Vec<usize>,
+}
+
+impl Baseline {
+    /// From the energy balance's profile `tz` at `lats` (by substellar latitude when `locked`).
+    pub(crate) fn new(g: &AtmoGrid, lats: &[f64], tz: &[f64], locked: Option<&Substellar>) -> Self {
+        let (t, band) = (0..g.len())
+            .map(|i| {
+                let y = i / g.w;
+                match locked {
+                    Some(s) => {
+                        let sub = 90.0 - s.zenith(g.lat(y), g.lon(i % g.w));
+                        (interpolate(lats, tz, sub), (((90.0 - sub) / g.res - 0.5).round().max(0.0) as usize).min(g.h - 1))
+                    }
+                    None => (tz[y], y),
+                }
+            })
+            .unzip();
+        Self { t, band }
+    }
 }
 
 /// `f` at `x` by linear interpolation between samples `f[k]` at `xs[k]` (any order).

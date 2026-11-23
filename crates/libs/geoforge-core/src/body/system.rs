@@ -146,6 +146,8 @@ pub enum StellarStage {
     NeutronStar,
     /// Left by the collapse of a star over ~20 M☉.
     BlackHole,
+    /// Too light to burn hydrogen (under ~0.08 M☉): glowing from its birth heat, cooling.
+    BrownDwarf,
 }
 
 impl StellarStage {
@@ -168,6 +170,7 @@ impl StellarStage {
             Self::WhiteDwarf => "white dwarf",
             Self::NeutronStar => "neutron star",
             Self::BlackHole => "black hole",
+            Self::BrownDwarf => "brown dwarf",
         }
     }
 }

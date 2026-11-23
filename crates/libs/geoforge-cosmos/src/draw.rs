@@ -26,6 +26,11 @@ impl Draw {
         mean + sd * (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
     }
 
+    /// A Rayleigh deviate with scale `sigma` (its mode).
+    pub(crate) fn rayleigh(&mut self, sigma: f64) -> f64 {
+        sigma * (-2.0 * self.u().max(1e-12).ln()).sqrt()
+    }
+
     /// A Poisson count with mean `mean`.
     pub(crate) fn poisson(&mut self, mean: f64) -> usize {
         if mean <= 0.0 {

@@ -220,14 +220,16 @@ Done (`geoforge_cosmos::dynamics`):
   gravity) and tides from every moon and the star, in Earth's lunar tides, with spring
   and neap ranges.
 
-Open:
-
-- The ladder steps distance by 1.45–2.1 (period ratios 1.75–3.0); Kepler's multi-planet
-  systems peak at period ratios ~1.5–2. Tighten small planets toward that.
-- Scattering could also make hot or eccentric Jupiters by high-eccentricity migration.
-- Obliquity stability: a big moon steadies the tilt; without one, a wider tilt draw
-  (debated: Laskar 1993 vs Lissauer et al. 2012).
-- Trojans at the giants' L4/L5 points.
+Also done (OpenSpec `systems-and-worlds`): small planets in Kepler-like chains (period
+ratios log-normal about 1.8; masses alike within a system, Weiss et al. 2018); giants born
+packed between the 3:2 and 2:1 resonances, scattering when Petrovich's (2015) criterion
+fails, merging when the Safronov number is under 1 and ejecting otherwise (survivors'
+eccentricities Rayleigh 0.3, Jurić & Tremaine 2008); hot Jupiters from 7% of giant
+scatterings by tidal circularisation at twice a periastron of 1–3 Roche radii, clearing the
+inner system; tilts that wander (10–45° from birth) unless a moon's pull outweighs the
+star's; Trojans unless a heavier giant lies within 15 mutual Hill radii. Checked: giants'
+median e 0.17 (Kipping 2013), hot Jupiters 0.8% of Sun-like stars, 1.1 small planets within
+200 days per Sun-like star and 1.8 per red dwarf.
 
 Also done: the `positions` command and export (every star, planet and moon's place at a
 date, by Kepler orbits), and close binaries now share one orbit about their barycentre
@@ -609,17 +611,27 @@ and give resources their ages (coal basins, banded iron). Large; worth doing.
 
 ## Still open (from earlier work)
 
-- Ice-shell worlds (Europa) have no generator.
-- Tidally locked worlds: ocean currents do not carry heat to the night side; the
-  substellar point is always 0°E; land is assumed even for weathering (a continent under
-  the star would hold less CO₂).
-- Asynchronous rotation: planets with air around 0.5–0.7 M☉ stars may escape locking
-  (Leconte et al. 2015), though perhaps not around smaller stars (Salazar & Wordsworth
-  2024).
-- No brown dwarfs; companion stars get no planets; no binary evolution.
-- Fast rotators (5–7 cells) show thin row-by-row streaks in ocean rain; ocean gyres follow
-  one jet.
-- Giants: storms do not drift; no polar hexagon; colour by class only.
+Done (OpenSpec `systems-and-worlds`): ice shells (`geoforge_surface::shell`: ridged plains,
+chaos, bands and ridges on a thin shell, dark and grooved terrain on a thick one); locked
+oceans carry the day side's heat (an eastward oceanic superrotation, Zeng & Yang 2021, and
+the sea-surface anomaly on the substellar baseline); thermal-tide rotation of locked worlds
+with 0.5–5 bar (Leconte et al. 2015; Valente et al. 2024); brown dwarfs (Burrows & Liebert
+1993; a fifth of systems, Kirkpatrick et al. 2024) and planets of wide companions; giants'
+polar cyclone rings and polygonal jets; fast spinners' ice cliff (the balance lets frost in
+no faster than radiation and transport answer) and rain lines at their fronts.
+
+The substellar point of a locked world is 0°E by the IAU's convention for synchronous bodies
+(the mean sub-parent point); its continents fall anywhere relative to it, as the tectonics
+seed places them.
+
+Open:
+- Land is assumed even for a locked world's weathering (a continent under the star would
+  hold less CO₂): the air is decided before the surface exists.
+- Thermal tides of thick air (Venus); binary evolution; light from a companion on the other
+  star's planets.
+- Fast spinners' ocean gyres follow one jet.
+- Giants: storms do not drift by date; colour by class only.
+- Titan's surface processes (dunes, methane rain and lakes).
 
 ## Notes on the Artifexian summaries
 

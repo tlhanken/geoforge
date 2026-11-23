@@ -18,6 +18,9 @@ pub enum Implementation {
     LidGeology,
     Elevation,
     LidElevation,
+    IceShellTectonics,
+    IceShellGeology,
+    IceShellElevation,
     Circulation,
     Climate,
     Erosion,
@@ -55,6 +58,18 @@ macro_rules! dispatch {
                 type $g = surface::LidElevation;
                 $body
             }
+            Implementation::IceShellTectonics => {
+                type $g = surface::IceShellTectonics;
+                $body
+            }
+            Implementation::IceShellGeology => {
+                type $g = surface::IceShellGeology;
+                $body
+            }
+            Implementation::IceShellElevation => {
+                type $g = surface::IceShellElevation;
+                $body
+            }
             Implementation::Circulation => {
                 type $g = surface::Circulation;
                 $body
@@ -89,13 +104,16 @@ macro_rules! dispatch {
 
 impl Implementation {
     /// In order of preference within each layer.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 16] = [
         Self::Tectonics,
         Self::LidTectonics,
+        Self::IceShellTectonics,
         Self::Geology,
         Self::LidGeology,
+        Self::IceShellGeology,
         Self::Elevation,
         Self::LidElevation,
+        Self::IceShellElevation,
         Self::Circulation,
         Self::Climate,
         Self::Erosion,

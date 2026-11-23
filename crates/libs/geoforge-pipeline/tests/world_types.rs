@@ -30,7 +30,8 @@ fn regimes_pick_their_generators() {
         (Archetype::Mars, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
         (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
         (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None, None, None]),
-        (Archetype::Europa, vec![None; 10]),
+        (Archetype::Europa, vec![Some(IceShellTectonics), Some(IceShellGeology), Some(IceShellElevation), None, None, Some(Erosion), None, None, None, None]),
+        (Archetype::Titan, vec![Some(IceShellTectonics), Some(IceShellGeology), Some(IceShellElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
         (Archetype::GasGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
         (Archetype::IceGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
     ];
@@ -53,6 +54,19 @@ fn lid_worlds_generate_deterministically() {
         }
         // A dry world gets no rain.
         assert!(p1.precipitation().unwrap().values.iter().all(|&v| v == 0.0), "{a}");
+    }
+}
+
+#[test]
+fn ice_shells_generate_deterministically() {
+    let a = Archetype::Europa;
+    let mut w1 = world("europa-1", Some(a.context(Key(1), a.name())), None);
+    let mut w2 = world("europa-2", Some(a.context(Key(1), a.name())), None);
+    let (p1, _) = pipe::generate(&mut w1, &GenerateOptions::default(), |_| {}).unwrap();
+    let (p2, _) = pipe::generate(&mut w2, &GenerateOptions::default(), |_| {}).unwrap();
+    for p in [ProductId::Provinces, ProductId::Lithology, ProductId::Elevation] {
+        assert!(p1.get(p).is_some(), "{}", p.name());
+        assert_eq!(p1.get(p), p2.get(p), "{} differs", p.name());
     }
 }
 

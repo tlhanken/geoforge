@@ -28,6 +28,8 @@ const OCEAN_MODERATION: f64 = 0.42;
 const OCEAN_TRANSPORT_SHARE: f64 = 0.4;
 /// Extra albedo of frost-covered ground.
 const FROST_ALBEDO: f64 = 0.32;
+/// Mean temperature over which frost comes in, K (the tanh's scale).
+const FROST_WIDTH_K: f64 = 10.0;
 /// Annual mean temperature at which half the ground is frosted, °C.
 const WATER_FROST_C: f64 = -8.0;
 const CO2_FROST_C: f64 = -75.0;
@@ -98,7 +100,12 @@ impl Radiation {
     /// Bond albedo at surface temperature `t` (°C).
     #[must_use]
     pub fn albedo(&self, t: f64) -> f64 {
-        let frost = self.frost_c.map_or(0.0, |f| 0.5 * FROST_ALBEDO * (1.0 - ((t - f) / 10.0).tanh()));
+        self.albedo_over(t, FROST_WIDTH_K)
+    }
+
+    /// Bond albedo at `t` (°C) with frost coming in over `width` K.
+    fn albedo_over(&self, t: f64, width: f64) -> f64 {
+        let frost = self.frost_c.map_or(0.0, |f| 0.5 * FROST_ALBEDO * (1.0 - ((t - f) / width).tanh()));
         self.open_albedo + frost
     }
 
@@ -157,6 +164,19 @@ impl Radiation {
 
     /// Energy balance by band: sunlight `s`, extra albedo `clouds`.
     fn balance(&self, lats_deg: &[f64], s: &[f64], clouds: &[f64], c: f64, tolerance: f64) -> (Vec<f64>, f64) {
+        // Frost comes in over 10 K of mean temperature where transport is Earth's. Where spin
+        // weakens it the frost's feedback could outrun the damping, and the annual-mean balance
+        // would jump from open ground to ice between one band and the next (the small-ice-cap
+        // instability of such models); the seasons it leaves out smear a real ice edge over
+        // ~10° of latitude. So the transition widens as the square of how much the damping
+        // (radiation plus transport, at the frost point) has weakened against Earth's, which
+        // keeps a fast spinner's ice edge as far from running away as Earth's is.
+        let frost_width = |c: f64| {
+            self.frost_c.map_or(FROST_WIDTH_K, |f| {
+                let b = self.greenhouse.olr_slope(f).max(0.05);
+                FROST_WIDTH_K * ((b + self.transport) / (b + c)).max(1.0).powi(2)
+            })
+        };
         let w: Vec<f64> = lats_deg.iter().map(|l| l.to_radians().cos()).collect();
         let wsum: f64 = w.iter().sum();
         let mut t = vec![self.start_c; lats_deg.len()];
@@ -168,7 +188,8 @@ impl Radiation {
             for ((ti, &si), &ci) in t.iter_mut().zip(s).zip(clouds) {
                 // Deep convective cloud needs warm water under it: none below 0 °C, full by 30.
                 let deck = ci * (*ti / 30.0).clamp(0.0, 1.0);
-                let net = si * (1.0 - self.albedo(*ti) - deck) - self.olr(*ti) - c * (*ti - mean);
+                let width = frost_width(c);
+                let net = si * (1.0 - self.albedo_over(*ti, width) - deck) - self.olr(*ti) - c * (*ti - mean);
                 let step = 0.5 * net / (self.greenhouse.olr_slope(*ti).max(0.05) + c);
                 *ti += step;
                 worst = worst.max(step.abs());
@@ -228,6 +249,18 @@ pub fn seasonal_swing(flux: f64, lat_deg: f64, obliquity: f64, e: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    /// A world spinning three times faster than Earth carries less heat poleward; its ice edge
+    /// must still come in over latitudes, not jump from open ground to ice between two bands.
+    #[test]
+    fn a_fast_spinner_has_no_ice_cliff() {
+        let mut b = crate::body::Archetype::Earth.context(crate::key::Key(1), "e");
+        b.exterior.rotation_h = 8.0;
+        let lats: Vec<f64> = (0..180).map(|i| -89.5 + f64::from(i)).collect();
+        let (t, _) = super::Radiation::for_body(&b, super::EARTH_HEAT_TRANSPORT, 0.0).zonal_temperature(&lats);
+        let worst = t.windows(2).map(|w| (w[1] - w[0]).abs()).fold(0.0, f64::max);
+        assert!(worst < 4.0, "largest step between 1° bands {worst} K");
+    }
+
     use super::*;
     use crate::{Archetype, Key};
 

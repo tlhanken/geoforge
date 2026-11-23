@@ -15,8 +15,10 @@
 //! | [`sectors`] | a galaxy's stars generated where they are looked at, by nested cubes |
 //! | [`starfield`] | the stars with a world's edits over them |
 //! | [`population`] | a system's phenotype drawn from a galaxy (or taken from a star): site, age, metals, stars at birth |
-//! | [`stars`] | stellar evolution: main sequence, giants, white dwarfs, neutron stars, black holes |
+//! | [`stars`] | stellar evolution: brown dwarfs, main sequence, giants, white dwarfs, neutron stars, black holes |
 //! | `planets` | planets for any star at birth, and what survives the star's death |
+//! | `dynamics` | spacing, scattering, hot Jupiters, resonant belts, Trojans |
+//! | [`spin`] | tilts that hold or wander, rotation held off by thermal tides |
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
 //! | [`sky`] | the naked-eye stars around a system, dimmed by dust, and its galaxy's glow |
@@ -37,6 +39,7 @@ pub mod population;
 pub mod sectors;
 pub mod sky;
 pub mod sol;
+pub mod spin;
 pub mod starfield;
 pub mod stars;
 pub mod system;

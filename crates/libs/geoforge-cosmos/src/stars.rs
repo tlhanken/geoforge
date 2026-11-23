@@ -14,12 +14,17 @@
 //! clump); massive stars spend 10% as long again as supergiants. Remnants then cool: white dwarfs by
 //! Mestel's law, with masses from the initial–final mass relation of Cummings et al. (2018).
 //!
-//! Brown dwarfs (under 0.08 M☉) are not stars here, and binary evolution (mass transfer,
-//! mergers) is not modelled: every star of a multiple lives as if alone.
+//! Brown dwarfs (under 0.08 M☉) never burn hydrogen: they shine by their birth heat and fade,
+//! by Burrows & Liebert's (1993) fits, L ≈ 4×10⁻⁵ L☉·(t/Gyr)^−1.3·(M/0.05 M☉)^2.64 and
+//! T ≈ 1550 K·(t/Gyr)^−0.32·(M/0.05 M☉)^0.83, which put them about a Jupiter radius across,
+//! through the spectral types M, L (from 2400 K), T (1300 K) and Y (550 K). Binary evolution
+//! (mass transfer, mergers) is not modelled: every star of a multiple lives as if alone.
 
 use geoforge_core::body::{Star, StellarStage};
 use geoforge_core::derived::{effective_temperature_k, main_sequence_luminosity, main_sequence_radius};
 
+/// Below this mass (M☉) an object never burns hydrogen: a brown dwarf.
+pub const HYDROGEN_BURNING_LIMIT: f64 = 0.08;
 /// Stars born below this mass (M☉) end as white dwarfs.
 pub const WHITE_DWARF_LIMIT: f64 = 8.0;
 /// Stars born above this mass (M☉) end as black holes; between the limits, neutron stars.
@@ -76,6 +81,12 @@ fn brightening(f: f64) -> f64 {
 #[must_use]
 pub fn evolve(initial_mass: f64, age_gyr: f64, metallicity_dex: f64) -> Star {
     let m0 = initial_mass;
+    if m0 < HYDROGEN_BURNING_LIMIT {
+        let (l, t) = (brown_dwarf_luminosity(m0, age_gyr), brown_dwarf_temperature_k(m0, age_gyr));
+        let r = l.sqrt() * (5772.0 / t).powi(2);
+        let stage = StellarStage::BrownDwarf;
+        return Star { mass_solar: m0, luminosity_solar: l, radius_solar: r, temperature_k: t, age_gyr, metallicity_dex, spectral_class: classify(stage, t), stage, initial_mass_solar: Some(m0) };
+    }
     let t_ms = main_sequence_lifetime_gyr(m0);
     let f = age_gyr / t_ms;
     let l_ms = main_sequence_luminosity(m0);
@@ -167,6 +178,34 @@ pub fn white_dwarf_luminosity(mass: f64, cooling_gyr: f64) -> f64 {
     (8.8e-3 * mass.powf(5.0 / 7.0) / cooling_gyr.max(1e-4)).powf(1.4).min(100.0)
 }
 
+/// Brown dwarfs younger than this (Gyr) are taken at this age: the cooling fits start once
+/// deuterium burning is over.
+const BROWN_DWARF_YOUNGEST_GYR: f64 = 0.01;
+
+/// Luminosity (L☉) of a brown dwarf of `mass` (M☉) at `age_gyr` (Burrows & Liebert 1993).
+#[must_use]
+pub fn brown_dwarf_luminosity(mass: f64, age_gyr: f64) -> f64 {
+    4e-5 * age_gyr.max(BROWN_DWARF_YOUNGEST_GYR).powf(-1.3) * (mass / 0.05).powf(2.64)
+}
+
+/// Effective temperature (K) of a brown dwarf of `mass` (M☉) at `age_gyr` (Burrows & Liebert
+/// 1993).
+#[must_use]
+pub fn brown_dwarf_temperature_k(mass: f64, age_gyr: f64) -> f64 {
+    1550.0 * age_gyr.max(BROWN_DWARF_YOUNGEST_GYR).powf(-0.32) * (mass / 0.05).powf(0.83)
+}
+
+/// The light a disk around a star born with `mass` (M☉) feels while its planets form: the
+/// main-sequence luminosity, or for a brown dwarf its glow at 10 Myr, when disks clear.
+#[must_use]
+pub fn birth_luminosity(mass: f64) -> f64 {
+    if mass < HYDROGEN_BURNING_LIMIT {
+        brown_dwarf_luminosity(mass, BROWN_DWARF_YOUNGEST_GYR)
+    } else {
+        main_sequence_luminosity(mass)
+    }
+}
+
 /// White dwarf radius (R☉) from Nauenberg's mass–radius relation (0.6 M☉: 0.0125 R☉).
 #[must_use]
 pub fn white_dwarf_radius(mass: f64) -> f64 {
@@ -186,6 +225,15 @@ pub fn classify(stage: StellarStage, teff: f64) -> String {
         StellarStage::WhiteDwarf => return "DC".into(),
         StellarStage::NeutronStar => return "NS".into(),
         StellarStage::BlackHole => return "BH".into(),
+        StellarStage::BrownDwarf => {
+            let (letter, sub) = match teff {
+                t if t >= 2_400.0 => mk_letter(t),
+                t if t >= 1_300.0 => ("L", ((2_400.0 - t) / 110.0) as u32),
+                t if t >= 550.0 => ("T", ((1_300.0 - t) / 75.0) as u32),
+                t => ("Y", (((550.0 - t) / 100.0) as u32).min(4)),
+            };
+            return format!("{letter}{}", sub.min(9));
+        }
     };
     let (letter, sub) = mk_letter(teff);
     format!("{letter}{sub}{suffix}")

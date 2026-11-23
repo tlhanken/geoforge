@@ -14,6 +14,7 @@ pub mod lid;
 pub mod noise;
 pub mod preconditions;
 pub mod relief;
+pub mod shell;
 pub mod tectonics;
 
 pub use bands::GiantBands;
@@ -25,4 +26,5 @@ pub use erosion::Erosion;
 pub use geology::Geology;
 pub use hydrology::Hydrology;
 pub use lid::{LidElevation, LidGeology, LidTectonics};
+pub use shell::{IceShellElevation, IceShellGeology, IceShellTectonics};
 pub use tectonics::Tectonics;

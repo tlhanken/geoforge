@@ -124,6 +124,12 @@ category!(GeologicProvince {
     OrogenicPlateau = 28, "Orogenic Plateau", [205, 133, 63],
     ForelandBasin = 29, "Foreland Basin", [189, 183, 107],
     BasementUplift = 30, "Basement Uplift", [160, 82, 45],
+    // Ice shells over an ocean (Europa, Ganymede).
+    RidgedPlains = 31, "Ridged Plains", [190, 205, 215],
+    ChaosTerrain = 32, "Chaos Terrain", [170, 120, 95],
+    DilationalBand = 33, "Dilational Band", [150, 165, 190],
+    RidgeLinea = 34, "Ridge Linea", [120, 80, 70],
+    GroovedTerrain = 35, "Grooved Terrain", [225, 230, 235],
 });
 
 /// A geologic province: one painted region of the provinces partition.

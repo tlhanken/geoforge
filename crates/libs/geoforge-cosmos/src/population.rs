@@ -11,6 +11,12 @@
 //! Periods are log-normal: for Sun-like stars a peak at log P = 5.03 days with a spread of
 //! 2.28 dex (Raghavan et al. 2010), closer for red dwarfs and much closer for massive stars.
 //! Mass ratios are flat; orbits under 12 days are circular, wider ones evenly eccentric.
+//!
+//! One system in five is a brown dwarf's: four stars to every brown dwarf (Kirkpatrick et al.
+//! 2024, the 20 pc census), their masses from 0.01 to 0.08 M☉ by dN/dM ∝ M^−0.6 below
+//! 0.05 M☉ and M^−0.25 above (ibid.). A fifth of them are pairs (Burgasser et al. 2007), most
+//! of nearly equal mass a few AU apart. The galaxy's stars by sectors are stars only: brown
+//! dwarfs are too faint for any night sky.
 
 use crate::draw::Draw;
 use crate::galaxy::{power_integral, Galaxy, Imf};
@@ -61,7 +67,7 @@ pub fn draw(galaxy: &Galaxy, seed: Seed) -> Phenotype {
     let mut d = Draw::new(seed.child(b"phenotype"));
     let (c, age_gyr, position) = galaxy.draw_star(&mut d);
     let metallicity_dex = galaxy.metallicity(c, position, age_gyr, d.gauss());
-    let primary_mass = draw_mass(&mut d, &galaxy.imf);
+    let primary_mass = if d.u() < BROWN_DWARF_SHARE { draw_mass(&mut d, &brown_dwarf_mass_function()) } else { draw_mass(&mut d, &galaxy.imf) };
 
     let mut companions = Vec::new();
     if d.u() < multiple_fraction(primary_mass) {
@@ -108,6 +114,14 @@ pub(crate) fn site(galaxy: &Galaxy, position: [f64; 3], galaxy_seed: Seed, star:
 
 /// Share of multiples that are triples (Raghavan et al. 2010: 12% of 46%).
 const TRIPLE_SHARE: f64 = 0.27;
+
+/// Share of systems whose primary is a brown dwarf: one brown dwarf to four stars.
+pub const BROWN_DWARF_SHARE: f64 = 0.2;
+
+/// Brown dwarf masses (Kirkpatrick et al. 2024).
+fn brown_dwarf_mass_function() -> Imf {
+    Imf { breaks: vec![0.01, 0.05, 0.08], slopes: vec![0.6, 0.25] }
+}
 
 /// An initial mass from the IMF, by inverting its cumulative distribution segment by segment.
 fn draw_mass(d: &mut Draw, imf: &Imf) -> f64 {
@@ -163,7 +177,7 @@ fn by_log_mass(m: f64, table: &[(f64, f64)]) -> f64 {
 /// Share of stars of initial mass `m` with at least one companion.
 #[must_use]
 pub fn multiple_fraction(m: f64) -> f64 {
-    by_log_mass(m, &[(0.08, 0.20), (0.3, 0.25), (1.0, 0.46), (2.0, 0.55), (5.0, 0.65), (10.0, 0.80), (20.0, 0.90), (60.0, 0.95)])
+    by_log_mass(m, &[(0.03, 0.20), (0.08, 0.20), (0.3, 0.25), (1.0, 0.46), (2.0, 0.55), (5.0, 0.65), (10.0, 0.80), (20.0, 0.90), (60.0, 0.95)])
 }
 
 /// Log-normal period distribution (log₁₀ days): mean and spread by primary mass.
@@ -185,7 +199,9 @@ fn companion(d: &mut Draw, primary: f64, central: f64, inner_log_p: Option<f64>)
     if let Some(inner) = inner_log_p {
         log_p = log_p.max(inner + 0.9).min(8.5);
     }
-    let q_min = (0.08 / primary).clamp(0.1, 1.0);
+    // Stars rarely have brown dwarf companions (the brown dwarf desert); brown dwarfs pair
+    // with their like.
+    let q_min = if primary < 0.08 { 0.5 } else { (0.08 / primary).clamp(0.1, 1.0) };
     let initial_mass = primary * d.range(q_min, 1.0);
     let p_yr = 10f64.powf(log_p) / 365.25;
     let a_au = (p_yr * p_yr * (central + initial_mass)).cbrt();
@@ -208,7 +224,8 @@ mod tests {
         assert_eq!(draw(&g, Seed(9)), draw(&g, Seed(9)));
     }
 
-    /// The Milky Way near the Sun, star by star: three quarters or more are red dwarfs (61%
+    /// The Milky Way near the Sun, star by star: a fifth are brown dwarfs; of the stars, three
+    /// quarters or more are red dwarfs (61%
     /// of the 10 pc census's 540 stars, brown dwarfs and planets are M stars, ~85% of its
     /// stars; Reylé et al. 2021), 5–8%
     /// white dwarfs (4.8×10⁻³ pc⁻³ of ~0.08), giants and blue stars rare, neutron stars
@@ -216,8 +233,12 @@ mod tests {
     #[test]
     fn milky_way_census() {
         let near_sun = |p: &Phenotype| (6.5..10.0).contains(&p.site.radius_kpc) && p.site.position_pc.is_some_and(|q| q[2].abs() < 600.0);
-        let ph: Vec<Phenotype> = sample(&Galaxy::milky_way(), 100_000).into_iter().filter(near_sun).collect();
+        let ph: Vec<Phenotype> = sample(&Galaxy::milky_way(), 600_000).into_iter().filter(near_sun).collect();
         assert!(ph.len() > 8_000, "{} near the Sun", ph.len());
+        assert!(ph.iter().filter(|p| p.primary_mass < 0.08).all(|p| p.companions.iter().all(|c| (0.5 * p.primary_mass..=p.primary_mass).contains(&c.initial_mass))));
+        let brown = ph.iter().filter(|p| p.primary().stage == StellarStage::BrownDwarf).count() as f64 / ph.len() as f64;
+        assert!((0.17..0.23).contains(&brown), "brown dwarfs {brown}");
+        let ph: Vec<Phenotype> = ph.into_iter().filter(|p| p.primary().stage != StellarStage::BrownDwarf).collect();
         let n = ph.len() as f64;
         let share = |f: &dyn Fn(&Star) -> bool| ph.iter().filter(|p| f(&p.primary())).count() as f64 / n;
         let red_dwarfs = share(&|s| s.stage == StellarStage::MainSequence && s.initial_mass() < 0.6);

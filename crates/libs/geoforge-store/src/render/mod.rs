@@ -50,6 +50,20 @@ pub fn dry_elevation_color(e: f64) -> [u8; 3] {
     ramp(&DRY_ELEVATION, e)
 }
 
+/// How far the dry tint is shrunk to fit a world's own relief: not at all for relief like the
+/// Moon's or Mars's (10 km or more between the 1st and 99th percentiles), down to a tenth for
+/// an ice shell's few hundred metres, which would otherwise be one colour.
+#[must_use]
+pub fn dry_relief_scale(heights: &[f32]) -> f64 {
+    let mut v: Vec<f32> = heights.iter().step_by((heights.len() / 20_000).max(1)).copied().collect();
+    if v.len() < 2 {
+        return 1.0;
+    }
+    v.sort_by(f32::total_cmp);
+    let at = |q: f64| f64::from(v[((v.len() - 1) as f64 * q) as usize]);
+    ((at(0.99) - at(0.01)) / 10_000.0).clamp(0.1, 1.0)
+}
+
 const DRY_ELEVATION: [(f64, [u8; 3]); 8] = [
     (-9000.0, [30, 20, 90]),
     (-5000.0, [50, 90, 190]),
@@ -110,7 +124,10 @@ pub fn legend(p: ProductId, ctx: &Products, sea: bool) -> Option<Legend> {
     match ctx.get(p)? {
         // The sea's shallowest stop and the land's lowest meet at 0 m.
         ProductData::Elevation(_) | ProductData::RoughElevation(_) if sea => ramp_of(&[&ELEVATION_SEA[1..5], &ELEVATION_LAND[..]].concat(), "m"),
-        ProductData::Elevation(_) | ProductData::RoughElevation(_) => ramp_of(&DRY_ELEVATION, "m from the mean radius"),
+        ProductData::Elevation(f) | ProductData::RoughElevation(f) => {
+            let k = dry_relief_scale(&f.values);
+            ramp_of(&DRY_ELEVATION.map(|(v, c)| (v * k, c)), "m from the mean radius")
+        }
         ProductData::CrustAge(_) => ramp_of(&CRUST_AGE, "Ma (continents greyed)"),
         ProductData::Temperature(_) => ramp_of(&TEMPERATURE, "°C"),
         ProductData::TemperatureRange(_) => ramp_of(&TEMPERATURE_RANGE, "K, warmest to coldest month"),
@@ -225,7 +242,10 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
     let Some(data) = ctx.get(p) else { return Ok(None) };
     let mut img = match data {
         ProductData::Elevation(f) | ProductData::RoughElevation(f) if sea => image_of(spec, |i| lit(i, elevation_color(f64::from(f.values[i]))))?,
-        ProductData::Elevation(f) | ProductData::RoughElevation(f) => image_of(spec, |i| lit(i, dry_elevation_color(f64::from(f.values[i]))))?,
+        ProductData::Elevation(f) | ProductData::RoughElevation(f) => {
+            let k = dry_relief_scale(&f.values);
+            image_of(spec, |i| lit(i, dry_elevation_color(f64::from(f.values[i]) / k)))?
+        }
         ProductData::CrustAge(f) => {
             let ct = ctx.crust_type();
             image_of(spec, |i| {

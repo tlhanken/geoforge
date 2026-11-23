@@ -174,6 +174,9 @@ impl Earth {
             // Rigid-lid worlds: battered old crust, lava plains, volcanic constructs.
             (Some(G::CrateredHighlands), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.25), (L::Anorthosite, 0.15)],
             (Some(G::CrateredIce), _) => &[(L::WaterIce, 0.8), (L::ImpactBreccia, 0.2)],
+            // Ice shells: old plains keep a little impact debris; renewed ice is clean.
+            (Some(G::RidgedPlains | G::GroovedTerrain), _) => &[(L::WaterIce, 0.9), (L::ImpactBreccia, 0.1)],
+            (Some(G::ChaosTerrain | G::DilationalBand | G::RidgeLinea), _) => &[(L::WaterIce, 1.0)],
             (Some(G::VolcanicPlains | G::VolcanicRise), _) => &[(L::FloodBasalt, 0.85), (L::ImpactBreccia, 0.15)],
             (Some(G::ImpactBasin), _) => &[(L::ImpactBreccia, 0.6), (L::FloodBasalt, 0.3), (L::Anorthosite, 0.1)],
             (Some(G::ShieldVolcano), _) => &[(L::FloodBasalt, 1.0)],

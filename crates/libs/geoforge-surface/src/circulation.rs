@@ -30,7 +30,7 @@ use crate::atmosphere::flow::{self, Keep};
 use crate::atmosphere::grid::is_sea;
 use crate::atmosphere::transport::semi_lagrangian;
 use crate::atmosphere::{winds, Atmo, AtmoGrid, Radiation, Season};
-use crate::climate::ClimateParams;
+use crate::climate::{Baseline, ClimateParams};
 use geoforge_core::grid::Cell;
 use geoforge_core::product::{Generator, LayerId, Precondition, ProductData, ProductId, Products, RunContext};
 use geoforge_core::shapes::Field;
@@ -176,7 +176,38 @@ pub fn feel_terrain(a: &Atmo, w: &[(f64, f64)]) -> Vec<(f64, f64)> {
 /// Ocean surface currents (m/s, east and north) on the atmosphere grid.
 /// Surface currents (m/s, east and north) and the share of each cell's flow that is the
 /// overturning's warm poleward branch (0–1).
-fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams) -> (Vec<(f64, f64)>, Vec<f64>) {
+/// The ocean's own superrotation on a tidally locked world: an eastward current round the
+/// equator, O(1 m/s), kept up by the stationary Rossby–Kelvin waves the day side's heating
+/// raises even though the winds converge on the substellar point (Zeng & Yang 2021; the strong
+/// eastward equatorial currents of Hu & Yang 2014). It is as wide as the equatorial
+/// deformation radius, which grows as √(period): ±40° at a 30-day turn (an e-folding width
+/// of 25° here). Slow rotators (60 days or more) keep it on the day side but lose most of it
+/// on the night side.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OceanJet {
+    star: crate::atmosphere::Substellar,
+    width_deg: f64,
+    night_share: f64,
+}
+
+/// Speed of the ocean's superrotation, m/s.
+const OCEAN_JET_M_S: f64 = 1.0;
+
+impl OceanJet {
+    pub(crate) fn for_body(body: &BodyContext) -> Option<Self> {
+        let star = crate::atmosphere::Substellar::for_body(body)?;
+        let period_d = body.exterior.rotation_h / 24.0;
+        Some(Self { star, width_deg: (25.0 * (period_d / 30.0).sqrt()).clamp(8.0, 30.0), night_share: ((80.0 - period_d) / 30.0).clamp(0.2, 1.0) })
+    }
+
+    /// Eastward speed at a place, m/s.
+    fn east_m_s(&self, lat: f64, lon: f64) -> f64 {
+        let night = if self.star.zenith(lat, lon) > 90.0 { self.night_share } else { 1.0 };
+        OCEAN_JET_M_S * night * (-(lat / self.width_deg).powi(2)).exp()
+    }
+}
+
+fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams, jet: Option<&OceanJet>) -> (Vec<(f64, f64)>, Vec<f64>) {
     let g = &a.g;
     let b = basins(a, radius_km);
     // Zonal wind stress (quadratic drag) averaged over each row's sea.
@@ -343,6 +374,11 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
     // pushes against a shore is turned along it, and only the overturning's sinking stays. The
     // wind drift is the Ekman layer: water it piles against a coast sinks there and water it
     // draws off one wells up, so its convergence and divergence stay.
+    if let Some(j) = jet {
+        for (i, v) in jets.iter_mut().enumerate() {
+            v.0 += j.east_m_s(g.lat(i / g.w), g.lon(i % g.w));
+        }
+    }
     let jets = flow::conserve(g, radius_km, &sea, &vec![1.0; g.len()], &jets, Keep::Interior);
     let cur: Vec<(f64, f64)> = (0..g.len()).map(|i| (cur[i].0 + drifts[i].0 + jets[i].0, cur[i].1 + drifts[i].1 + jets[i].1)).collect();
     (cur, overturning)
@@ -542,45 +578,51 @@ const SEA_FREEZE_C: f64 = -1.8;
 const ZONAL_MEAN_SMOOTH_DEG: f64 = 10.0;
 
 /// Sea-surface temperature anomaly (°C) from currents crossing the temperature gradient,
-/// carried downstream, plus coastal upwelling.
-fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f64, f64)]; 2], tz: &[f64], radius_km: f64, p: &CirculationParams) -> Vec<f64> {
+/// carried downstream, plus coastal upwelling. The gradient is the baseline's: north–south on a
+/// world that turns, and on a locked world from the day side to the night side in every
+/// direction, so its currents carry the day side's heat onto the night side where they cross
+/// the terminator (the warm tongue east of the substellar point, Hu & Yang 2014).
+fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f64, f64)]; 2], base: &Baseline, radius_km: f64, p: &CirculationParams) -> Vec<f64> {
     let g = &a.g;
     let b = basins(a, radius_km);
     let dy_km = g.res.to_radians() * radius_km;
-    // The wind drift's part that is the same all round a latitude circle (the Ekman drift
-    // under the westerlies) moves heat the zonal temperature already carries: counting it
-    // painted warm and cold bands right round the globe. Only its departures from the
-    // latitude's mean, and the gyres, make anomalies.
-    let v_mean: Vec<f64> = (0..g.h)
-        .map(|y| {
-            let annual = |i: usize| (0.5 * (seasons[0][i].0 + seasons[1][i].0), 0.5 * (seasons[0][i].1 + seasons[1][i].1));
-            let sea: Vec<usize> = (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).collect();
-            if sea.is_empty() {
-                0.0
-            } else {
-                sea.iter().map(|&i| wind_drift(annual(i), g.lat(y)).1).sum::<f64>() / sea.len() as f64
-            }
-        })
-        .collect();
+    // The wind drift's part that is the same all round a band (the Ekman drift under the
+    // westerlies, round a latitude circle) moves heat the band's temperature already carries:
+    // counting it painted warm and cold bands right round the globe. Only its departures from
+    // the band's mean, and the gyres, make anomalies.
+    let annual = |i: usize| (0.5 * (seasons[0][i].0 + seasons[1][i].0), 0.5 * (seasons[0][i].1 + seasons[1][i].1));
+    let mut drift_sum = vec![(0.0, 0.0, 0.0); g.h];
+    for i in (0..g.len()).filter(|&i| a.land[i] < 0.5) {
+        let (u, v) = wind_drift(annual(i), g.lat(i / g.w));
+        let s = &mut drift_sum[base.band[i]];
+        *s = (s.0 + u, s.1 + v, s.2 + 1.0);
+    }
+    let drift_mean: Vec<(f64, f64)> = drift_sum.iter().map(|&(u, v, n)| if n > 0.0 { (u / n, v / n) } else { (0.0, 0.0) }).collect();
     // What the currents carry across the temperature gradient, and what the winds bring up.
     let (carried, upwelled): (Vec<f64>, Vec<f64>) = (0..g.len())
         .map(|i| {
             if a.land[i] >= 0.5 {
                 return (0.0, 0.0);
             }
-            let y = i / g.w;
+            let (y, x) = (i / g.w, i % g.w);
             let (yn, ys) = (y.saturating_sub(1), (y + 1).min(g.h - 1));
-            // The sea surface follows the zonal temperature down only to freezing: over the ice
-            // at high latitudes its gradient is the air's, not the water's.
-            let sst = |t: f64| t.max(SEA_FREEZE_C);
-            // °C per m northward.
-            let dtdy = (sst(tz[yn]) - sst(tz[ys])) / ((ys - yn).max(1) as f64 * dy_km * 1000.0);
+            let (xw, xe) = ((x + g.w - 1) % g.w, (x + 1) % g.w);
+            // The sea surface follows the baseline down only to freezing: over the ice at high
+            // latitudes (or on the night side) its gradient is the air's, not the water's.
+            let sst = |j: usize| base.t[j].max(SEA_FREEZE_C);
+            let lat = g.lat(y);
+            // °C per m northward and eastward.
+            let dtdy = (sst(yn * g.w + x) - sst(ys * g.w + x)) / ((ys - yn).max(1) as f64 * dy_km * 1000.0);
+            let dtdx = (sst(y * g.w + xe) - sst(y * g.w + xw)) / (2.0 * dy_km * lat.to_radians().cos().max(0.05) * 1000.0);
             // How far the water has come across the gradient: a current carries it for
             // `heat_memory_days`, but no further than a boundary current runs before eddies
             // mix it into the water beside it.
-            let reach_m = (cur[i].1 - v_mean[y]) * p.heat_memory_days * 86_400.0;
-            let reach_m = MAX_REACH_KM * 1000.0 * (reach_m / (MAX_REACH_KM * 1000.0)).tanh();
-            let lat = g.lat(y);
+            let reach = |v: f64| {
+                let m = v * p.heat_memory_days * 86_400.0;
+                MAX_REACH_KM * 1000.0 * (m / (MAX_REACH_KM * 1000.0)).tanh()
+            };
+            let mean = drift_mean[base.band[i]];
+            let across = reach(cur[i].0 - mean.0) * dtdx + reach(cur[i].1 - mean.1) * dtdy;
             // Upwelling: along an eastern shore where the winds blow equatorward, and along the
             // equator under the trades.
             let mut up = 0.0;
@@ -592,7 +634,7 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f
             }
             // The overturning's branch is deep warm water that keeps giving up heat as it goes
             // poleward, past where the zonal gradient flattens at the freezing point.
-            (-reach_m * dtdy + OVERTURNING_HEAT_C * overturning[i], -p.upwelling_c * up)
+            (-across + OVERTURNING_HEAT_C * overturning[i], -p.upwelling_c * up)
         })
         .unzip();
     // Carry the anomaly along the currents (one atmosphere cell per step at 0.5 m/s): water
@@ -601,10 +643,14 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f
     let source: Vec<f64> = carried.iter().zip(&upwelled).map(|(c, u)| c + u).collect();
     let mut anom = carry_along(g, &flow, &source, &a.land, 200, 0.97);
     diffuse_sea(g, &mut anom, &a.land, 0.3);
-    // A departure from the zonal temperature averages to zero round each latitude circle.
-    // The mean taken off is smoothed over ~10° of latitude so that it cannot itself draw
-    // bands where one row's mean differs from the next.
-    let rows: Vec<(f64, f64)> = (0..g.h).map(|y| (y * g.w..(y + 1) * g.w).filter(|&i| a.land[i] < 0.5).fold((0.0, 0.0), |(s, n), i| (s + anom[i], n + 1.0))).collect();
+    // A departure from the baseline averages to zero round each band. The mean taken off is
+    // smoothed over ~10° of latitude so that it cannot itself draw bands where one row's mean
+    // differs from the next.
+    let mut rows = vec![(0.0, 0.0); g.h];
+    for i in (0..g.len()).filter(|&i| a.land[i] < 0.5) {
+        let r = &mut rows[base.band[i]];
+        *r = (r.0 + anom[i], r.1 + 1.0);
+    }
     let half = (ZONAL_MEAN_SMOOTH_DEG / 2.0 / g.res).round() as i64;
     let mean: Vec<f64> = (0..g.h as i64)
         .map(|y| {
@@ -621,7 +667,7 @@ fn sst_anomaly(a: &Atmo, cur: &[(f64, f64)], overturning: &[f64], seasons: [&[(f
         .collect();
     for (i, v) in anom.iter_mut().enumerate() {
         if a.land[i] < 0.5 {
-            *v -= mean[i / g.w];
+            *v -= mean[base.band[i]];
         }
     }
     anom.iter().map(|v| v.clamp(-8.0, 8.0)).collect()
@@ -675,7 +721,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 11;
+    const VERSION: u32 = 12;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -701,14 +747,15 @@ impl Generator for Circulation {
         let jan = season_winds(&atmo, &Season::for_body(&atmo, body, -1.0, p.monsoon), p);
         let annual: Vec<(f64, f64)> = jul.iter().zip(&jan).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let has_sea = atmo.land.iter().any(|l| *l < 0.5);
-        let (cur, overturning) = if has_sea { currents(&atmo, &annual, r, p) } else { (vec![(0.0, 0.0); g.len()], vec![0.0; g.len()]) };
+        let jet = OceanJet::for_body(body);
+        let (cur, overturning) = if has_sea { currents(&atmo, &annual, r, p, jet.as_ref()) } else { (vec![(0.0, 0.0); g.len()], vec![0.0; g.len()]) };
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
-        let (tz, _) = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c).zonal_temperature(&lats);
-        // A locked world's currents carry heat to its night side; the zonal anomaly model does
-        // not describe that, so it is left out.
-        let locked = crate::atmosphere::Substellar::for_body(body).is_some();
-        let sst = if has_sea && !locked { sst_anomaly(&atmo, &cur, &overturning, [&jan, &jul], &tz, r, p) } else { vec![0.0; g.len()] };
+        let radiation = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c);
+        let locked = crate::atmosphere::Substellar::for_body(body);
+        let (tz, _) = if locked.is_some() { radiation.substellar_temperature(&lats) } else { radiation.zonal_temperature(&lats) };
+        let base = Baseline::new(&g, &lats, &tz, locked.as_ref());
+        let sst = if has_sea { sst_anomaly(&atmo, &cur, &overturning, [&jan, &jul], &base, r, p) } else { vec![0.0; g.len()] };
 
         // To the world grid.
         let n = grid.len();
@@ -788,7 +835,7 @@ mod tests {
         // The year's mean of July's and January's winds, as the generator takes it.
         let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::new(&a, 24.0, 6371.0, 23.0, sign, p.monsoon), &p));
         let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
-        let ocean = currents(&a, &annual, 6371.0, &p);
+        let ocean = currents(&a, &annual, 6371.0, &p, None);
         (a, p, annual, ocean)
     }
 
@@ -796,7 +843,40 @@ mod tests {
         let lats: Vec<f64> = (0..a.g.h).map(|y| a.g.lat(y)).collect();
         let earth = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
         let (tz, _) = Radiation::for_body(&earth, 3.2, 0.0).zonal_temperature(&lats);
-        sst_anomaly(a, cur, overturning, [annual, annual], &tz, 6371.0, p)
+        sst_anomaly(a, cur, overturning, [annual, annual], &Baseline::new(&a.g, &lats, &tz, None), 6371.0, p)
+    }
+
+    /// A locked ocean world turning once in ten days: its currents carry the day side's warmth
+    /// across the terminators onto the night side (Hu & Yang 2014), and what they carry
+    /// averages to nothing round each ring about the point under the star.
+    #[test]
+    fn a_locked_ocean_carries_heat_to_the_night_side() {
+        let mut body = geoforge_core::Archetype::Earth.context(geoforge_core::Key(1), "Earth");
+        (body.irradiance.year_days, body.exterior.rotation_h) = (10.0, 240.0);
+        let g = AtmoGrid::new(2.0);
+        let a = Atmo { g, wet: true, land: vec![0.0; g.len()], elev: vec![0.0; g.len()] };
+        let p = CirculationParams::default();
+        let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::for_body(&a, &body, sign, p.monsoon), &p));
+        let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
+        let (cur, overturning) = currents(&a, &annual, 6371.0, &p, OceanJet::for_body(&body).as_ref());
+        let star = crate::atmosphere::Substellar::for_body(&body).expect("locked");
+        let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
+        let (tz, _) = Radiation::for_body(&body, 3.2, 0.0).substellar_temperature(&lats);
+        let base = Baseline::new(&g, &lats, &tz, Some(&star));
+        let sst = sst_anomaly(&a, &cur, &overturning, [&annual, &annual], &base, 6371.0, &p);
+        let night_warmth = (0..g.len()).filter(|&i| star.zenith(g.lat(i / g.w), g.lon(i % g.w)) > 95.0).map(|i| sst[i]).fold(f64::MIN, f64::max);
+        let spread = sst.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        let (east, west) = (sst[g.index(0.0, 100.0)], sst[g.index(0.0, -100.0)]);
+        assert!(night_warmth > 1.0, "warm water on the night side: {night_warmth} °C");
+        // The jet runs east: past the evening terminator the water is warm, past the morning
+        // one it is not.
+        assert!(east > 1.0 && east > west + 1.0, "east of the terminator {east}, west {west}");
+        let mut rings = vec![(0.0, 0.0); g.h];
+        for i in 0..g.len() {
+            let r = &mut rings[base.band[i]];
+            *r = (r.0 + sst[i], r.1 + 1.0);
+        }
+        assert!(rings.iter().filter(|r| r.1 > 50.0).all(|r| (r.0 / r.1).abs() < 0.5 * spread), "rings {rings:?}");
     }
 
     /// A clockwise subtropical gyre in the north with a fast poleward western boundary
