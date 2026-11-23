@@ -9,7 +9,7 @@ slower is fine. Speed is item 15.
   Rust like `geoforge report`. Python stays only for the one-time step that turns observed
   data (ERA, GPCP, ERSST, ETOPO) into world layers.
 - Every section shows the real result beside the model, with all other layers set to real
-  Earth. Missing baselines today:
+  Earth. Missing baselines today (sources, licences and access in `REFERENCE_DATA.md`):
   - biomes (a WWF ecoregions map);
   - ocean currents (OSCAR or drifter climatology);
   - sea ice (NSIDC);
