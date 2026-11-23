@@ -56,8 +56,12 @@ sets it beside Earth's real result, so a miss belongs to that layer alone:
 | `air` | ETOPO1, ERA-Interim 850 hPa winds, ERSST departures (`inject_obs.py air`) | climate, against ERA-Interim 2 m temperature and GPCP |
 | `real` | all of the above plus real temperature and rain (`inject_obs.py climate`) | the Köppen classifier, rivers, biomes |
 
-It writes a `geoforge report` of each world and the A/B page, `OUT_DIR/page`
-(`ab_page.py`), whose maps are geoforge's renders of both the real and the model field. The
+It writes the A/B page, `OUT_DIR/page`, with `geoforge compare`: every product the `real`
+world holds as observed (authored) data, beside the same product in each model world, drawn
+by geoforge's renderer with one key, with bias, RMSE, pattern correlation, wind direction
+agreement or class agreement, and the values at named stations, ranges and boundary-current
+boxes. Python only turns the observed files into world layers (`inject*.py`); `check.py`
+still prints the river discharges, which have no observed layer yet. The
 extra observations come from NCAR GeoCAT's data files (raw.githubusercontent.com/NCAR/
 geocat-datafiles/main/netcdf_files/): `V22_GPCP.1979-2010.nc` and
 `T2M_ERAINT_rectilinear_grid_2D.nc`, in OBS_DIR.

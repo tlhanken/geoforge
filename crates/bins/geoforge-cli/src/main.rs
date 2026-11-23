@@ -256,6 +256,32 @@ enum Cmd {
         /// The world directory.
         dir: PathBuf,
     },
+    /// The A/B page: every product an observed world holds as authored data, beside the same
+    /// product in each model world, with one renderer and key and the numbers between them.
+    Compare {
+        /// The observed world (its authored products are the observations).
+        real: PathBuf,
+        /// The model worlds.
+        #[arg(required = true)]
+        models: Vec<PathBuf>,
+        /// A label for each model, in order; default its folder's name.
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// A place or box whose values are listed, "name:lat,lon" or
+        /// "name:lat0..lat1,lon0..lon1" (repeat for more).
+        #[arg(long = "probe")]
+        probes: Vec<String>,
+        /// Where an observed product came from, "product=text" (repeat for more), for its
+        /// caption.
+        #[arg(long = "source")]
+        sources: Vec<String>,
+        /// Folder to write (index.html and img/); default <real>/compare.
+        #[arg(long)]
+        to: Option<PathBuf>,
+        /// Width of the maps, px.
+        #[arg(long, default_value_t = 1200)]
+        width: u32,
+    },
     /// A report page to take the world's pulse: every map with its key, the numbers against
     /// Earth's, places and their weather, the weather map and the night sky.
     Report {
@@ -336,5 +362,6 @@ fn run(cli: Cli) -> R<()> {
         Cmd::Seed { dir, product, owner } => world::seed(&dir, &product, owner),
         Cmd::Stats { dir } => world::stats(&dir),
         Cmd::Report { dir, to, places, day, days, width } => world::report(&dir, to, &places, day, days, width),
+        Cmd::Compare { real, models, labels, probes, sources, to, width } => world::compare(&real, &models, &labels, &probes, &sources, to, width),
     }
 }

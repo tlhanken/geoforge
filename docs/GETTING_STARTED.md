@@ -68,6 +68,18 @@ name them) with their hazards and two weeks of weather, the weather map, and the
 with a key to star sizes, colours and planets. The folder opens in a browser or publishes
 as is.
 
+To set worlds against an observed one (authored products holding real data, like the
+real-Earth worlds of `scripts/real-earth/ab.sh`):
+
+```bash
+geoforge compare worlds/real worlds/model --probe "Lima:-12.05,-77.05" --probe "Alps:44..48,6..15" \
+  --source "temperature=ERA-Interim 2 m, 2005"                # worlds/real/compare/index.html
+```
+
+Each observed product gets the observed map beside each model's, with one key, and the
+numbers between them (bias, RMSE, pattern correlation; wind direction agreement; class
+agreement), plus the values at the probes.
+
 ## Edit a layer
 
 ```bash

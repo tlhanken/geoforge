@@ -12,6 +12,7 @@
 //!   generated, patched, and then fed back so the rest of their layer is consistent with
 //!   the edit. Downstream layers always see the edited version.
 
+pub mod compare;
 pub mod place;
 pub mod registry;
 pub mod report;

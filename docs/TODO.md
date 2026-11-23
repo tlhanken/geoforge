@@ -4,18 +4,24 @@ The working queue, highest payoff first. Detail and history live in `V2_ROADMAP.
 named in brackets) and the scorecards in `V2_REALISM.md`. Accuracy comes first for now:
 slower is fine. Speed is item 15.
 
-## 1. Earth A/B in Rust, every layer against a real baseline [8f]
-- `geoforge compare REAL MODEL`: paired maps with one key, metrics and the page, written by
-  Rust like `geoforge report`. Python stays only for the one-time step that turns observed
-  data (ERA, GPCP, ERSST, ETOPO) into world layers.
-- Every section shows the real result beside the model, with all other layers set to real
-  Earth. Missing baselines today (sources, licences and access in `REFERENCE_DATA.md`):
-  - biomes (a WWF ecoregions map);
-  - ocean currents (OSCAR or drifter climatology);
-  - sea ice (NSIDC);
-  - hazards (IBTrACS cyclones, USGS quakes, Smithsonian volcanoes);
-  - the sky (a real star catalogue and the JPL ephemeris);
-  - rivers drawn on the map against HydroSHEDS, not only discharge numbers.
+## 1. Earth A/B in Rust, every layer against a real baseline [8f] — command done
+Done: `geoforge compare REAL MODEL… --probe … --source …` writes the page. Every product
+the real world holds as observed (authored) data gets a section: the observed map, then each
+model's, one renderer and key; bias, RMSE and pattern correlation for quantities, direction
+agreement and speed ratio for winds and currents, class agreement and shares for biomes and
+Köppen (read from the observed climate); values at named stations, ranges and current boxes;
+the numbers embedded as JSON. A model's copy of an observed input is skipped. `ab.sh` calls
+it; `ab_page.py` is gone. Python stays only to turn observed files into world layers.
+
+Still needed, each an observed layer for the real world (sources in `REFERENCE_DATA.md`):
+- biomes (RESOLVE Ecoregions 2017), which the command already compares once imported;
+- ocean currents (OSCAR);
+- sea ice, as a product or view the real world can hold (NSIDC);
+- hazards (IBTrACS cyclones, USGS quakes, Smithsonian volcanoes);
+- the sky (HYG and the JPL ephemeris);
+- rivers drawn against Natural Earth or HydroRIVERS, and the discharges at the mouths, which
+  `check.py` still prints;
+- the observed Köppen map itself (Beck et al.), beside the one read from observed climate.
 
 ## 2. Winds that feel the terrain [8e] — first step done
 Done: the surface winds are a layer of stable air up to 3.5 km above sea level, thinning

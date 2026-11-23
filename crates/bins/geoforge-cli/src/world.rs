@@ -128,6 +128,49 @@ pub fn report(dir: &Path, to: Option<PathBuf>, places: &[String], day: f64, days
     Ok(())
 }
 
+pub fn compare(real: &Path, models: &[PathBuf], labels: &[String], probes: &[String], sources: &[String], to: Option<PathBuf>, width: u32) -> R<()> {
+    let reference = World::open(real)?;
+    let worlds = models.iter().map(|m| World::open(m)).collect::<Result<Vec<_>, _>>()?;
+    let models: Vec<pipe::compare::Model> = worlds
+        .iter()
+        .zip(models)
+        .enumerate()
+        .map(|(i, (w, dir))| pipe::compare::Model {
+            label: labels.get(i).cloned().unwrap_or_else(|| dir.file_name().map_or_else(|| dir.display().to_string(), |n| n.to_string_lossy().into_owned())),
+            world: w,
+        })
+        .collect();
+    let probes = probes.iter().map(|p| parse_probe(p)).collect::<R<Vec<_>>>()?;
+    let sources = sources
+        .iter()
+        .map(|s| s.split_once('=').map(|(p, t)| (p.trim().to_string(), t.trim().to_string())).ok_or_else(|| format!("source `{s}`: expected product=text")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let c = pipe::compare::build(&reference, &models, &pipe::compare::Options { width, probes, sources })?;
+    let to = to.unwrap_or_else(|| reference.root.join("compare"));
+    let files = geoforge_store::report::write(&to, &c.html, &c.images)?;
+    println!("{}: {} sections, {} files in {} (open index.html)", c.title, c.sections.len(), files.len(), to.display());
+    Ok(())
+}
+
+/// "Lima:-12.05,-77.05" or "Rockies:37..50,-115..-104".
+fn parse_probe(s: &str) -> R<pipe::compare::Probe> {
+    let (name, at) = s.rsplit_once(':').ok_or_else(|| format!("probe `{s}`: expected name:lat,lon or name:lat0..lat1,lon0..lon1"))?;
+    let (lat, lon) = at.split_once(',').ok_or_else(|| format!("probe `{s}`: expected lat,lon"))?;
+    let range = |t: &str| -> R<(f64, f64)> {
+        Ok(match t.split_once("..") {
+            Some((a, b)) => {
+                let (a, b): (f64, f64) = (a.trim().parse()?, b.trim().parse()?);
+                (a.min(b), a.max(b))
+            }
+            None => {
+                let v: f64 = t.trim().parse()?;
+                (v, v)
+            }
+        })
+    };
+    Ok(pipe::compare::Probe { name: name.to_string(), lat: range(lat)?, lon: range(lon)? })
+}
+
 /// "London:51.5,-0.1" (or "51.5,-0.1", named by its coordinates).
 fn parse_place(s: &str) -> R<pipe::report::Place> {
     let (name, at) = s.rsplit_once(':').map_or((None, s), |(n, a)| (Some(n), a));

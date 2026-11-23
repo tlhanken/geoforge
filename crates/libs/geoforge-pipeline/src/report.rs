@@ -55,7 +55,7 @@ pub struct Report {
 
 /// The maps, by layer in the order the pipeline makes them, each derived view after the layer
 /// it is read from: anchor, heading, and product or view names.
-const GROUPS: [(&str, &str, &[&str]); 10] = [
+pub(crate) const GROUPS: [(&str, &str, &[&str]); 10] = [
     ("tectonics", "Tectonics", &["plates", "earthquakes", "volcanoes", "tsunamis"]),
     ("geology", "Geology", &["provinces", "lithology", "rock_age"]),
     ("elevation", "Elevation", &["rough_elevation"]),
@@ -72,7 +72,7 @@ const GROUPS: [(&str, &str, &[&str]); 10] = [
     ("space", "Space weather", &["auroras"]),
 ];
 
-fn caption(name: &str) -> String {
+pub(crate) fn caption(name: &str) -> String {
     let c = match name {
         "rough_elevation" => "Elevation from the plates, before erosion",
         "elevation" => "Elevation after erosion",
@@ -259,7 +259,7 @@ pub fn build(world: &World, opts: &Options) -> Result<Report> {
 }
 
 /// A map by name (a product or a view) and its key; `None` if the world lacks it.
-fn map(name: &str, products: &Products, grid: &AnyGrid, body: &BodyContext, source: &views::Source, sea_cells: &[bool]) -> Result<Option<(RgbImage, Option<Legend>)>> {
+pub(crate) fn map(name: &str, products: &Products, grid: &AnyGrid, body: &BodyContext, source: &views::Source, sea_cells: &[bool]) -> Result<Option<(RgbImage, Option<Legend>)>> {
     let (radius, sea) = (body.exterior.radius_km, body.interior.has_surface_liquid_water());
     if let Some(p) = ProductId::from_name(name) {
         return Ok(render::render(p, products, grid, radius, sea, body.exterior.class)?.map(|img| (img, render::legend(p, products, sea))));
@@ -281,7 +281,7 @@ fn map(name: &str, products: &Products, grid: &AnyGrid, body: &BodyContext, sour
 }
 
 /// `img` scaled to `width` (half as tall).
-fn fit(img: &RgbImage, width: u32) -> RgbImage {
+pub(crate) fn fit(img: &RgbImage, width: u32) -> RgbImage {
     if img.width() == width {
         return img.clone();
     }
@@ -297,7 +297,7 @@ fn hex(c: [u8; 3]) -> String {
 }
 
 /// A key: named swatches, or a ramp's colours under their values.
-fn key_html(key: &Legend) -> String {
+pub(crate) fn key_html(key: &Legend) -> String {
     match key {
         Legend::Classes(items) => {
             let li: String = items.iter().map(|(n, c)| format!(r#"<li><i style="background:{}"></i>{}</li>"#, hex(*c), esc(n))).collect();
@@ -323,7 +323,7 @@ fn key_html(key: &Legend) -> String {
     }
 }
 
-fn num(x: f64) -> String {
+pub(crate) fn num(x: f64) -> String {
     if x.abs() >= 1000.0 {
         let s = format!("{:.0}", x.abs());
         let mut out = String::new();
@@ -534,7 +534,7 @@ fn pick_places(products: &Products, grid: &AnyGrid, source: &views::Source) -> V
     out
 }
 
-fn lat_lon(lat: f64, lon: f64) -> String {
+pub(crate) fn lat_lon(lat: f64, lon: f64) -> String {
     format!("{:.0}°{} {:.0}°{}", lat.abs(), if lat >= 0.0 { "N" } else { "S" }, lon.abs(), if lon >= 0.0 { "E" } else { "W" })
 }
 
@@ -543,12 +543,12 @@ fn upper_first(s: &str) -> String {
     c.next().map_or_else(String::new, |f| f.to_uppercase().collect::<String>() + c.as_str())
 }
 
-fn esc(s: &str) -> String {
+pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 /// The page's style: a field atlas, deep sea and chart paper with one coral signal.
-const CSS: &str = r#":root{color-scheme:light dark;--bg:light-dark(#f4f6f3,#0c1d22);--ink:light-dark(#10232a,#e4ece9);--soft:light-dark(#5a6b70,#9fb2b4);--line:light-dark(#d5ddda,#21383f);--card:light-dark(#ffffff,#112830);--sea:#0f2b33;--hot:#e0533a;--ok:light-dark(#2f7d5b,#5fc297)}
+pub(crate) const CSS: &str = r#":root{color-scheme:light dark;--bg:light-dark(#f4f6f3,#0c1d22);--ink:light-dark(#10232a,#e4ece9);--soft:light-dark(#5a6b70,#9fb2b4);--line:light-dark(#d5ddda,#21383f);--card:light-dark(#ffffff,#112830);--sea:#0f2b33;--hot:#e0533a;--ok:light-dark(#2f7d5b,#5fc297)}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
 h1,h2,h3{font-family:Spectral,Georgia,serif;font-weight:500;line-height:1.08;text-wrap:balance;margin:0 0 .4em}
@@ -588,5 +588,5 @@ pre{background:var(--card);border:1px solid var(--line);border-radius:6px;paddin
 @media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--soft)}.stack td:empty{display:none}}"#;
 
 /// Labels each cell of a stacked table with its column's heading, for narrow screens.
-const SCRIPT: &str =
+pub(crate) const SCRIPT: &str =
     "for(const c of document.querySelectorAll('.stack td')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}";

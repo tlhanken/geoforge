@@ -371,6 +371,11 @@ against Earth's; three places picked by Köppen class (or named) with hazards an
 the weather map; the sky chart with a key to magnitudes, spectral colours and planets.
 Open: a verdict section written by hand stays outside it.
 
+`geoforge compare REAL MODEL…` (November 2026) writes the Earth A/B page the same way: for
+each product the real world holds as authored observations, the observed map and each
+model's with one key, the numbers between them and the values at named probes
+(`pipeline/src/compare.rs`). It replaced `ab_page.py`.
+
 ## 8e. Mountains, gyres and the weak climates — todo
 
 From the Thumi pulse (November 2026). The Earth checks in brackets are what each item should
