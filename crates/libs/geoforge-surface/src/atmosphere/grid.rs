@@ -54,6 +54,14 @@ impl AtmoGrid {
         let b = f[y1 * self.w + x0] * (1.0 - tx) + f[y1 * self.w + x1] * tx;
         a * (1.0 - ty) + b * ty
     }
+    /// A smooth blur of about the spread of a box blur of `radius` cells: three box blurs,
+    /// close to a Gaussian, so the field's slopes have no straight edges.
+    #[must_use]
+    pub fn smooth(&self, f: &[f64], radius: usize) -> Vec<f64> {
+        // Three boxes of radius r spread as far as one of radius R when r(r + 1) = R(R + 1)/3.
+        let r = ((((radius * (radius + 1)) as f64 / 3.0 + 0.25).sqrt() - 0.5).round() as usize).max(1);
+        self.blur(&self.blur(&self.blur(f, r), r), r)
+    }
     /// Separable box blur, radius in cells (longitude radius widened toward the poles).
     #[must_use]
     pub fn blur(&self, f: &[f64], radius: usize) -> Vec<f64> {

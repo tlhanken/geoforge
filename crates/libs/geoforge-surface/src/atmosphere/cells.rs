@@ -402,10 +402,15 @@ pub fn winds(a: &Atmo, season: &Season, monsoon: f64) -> Vec<(f64, f64)> {
     cells.iter().zip(&m).map(|(c, m)| (c.0 + m.0, c.1 + m.1)).collect()
 }
 
+/// Half-width of the band about the equator where the summer inflow and the winter outflow
+/// blend, degrees.
+const MONSOON_SEAM_DEG: f64 = 5.0;
+
 /// The monsoon part of [`winds`].
 pub fn monsoon_flow(a: &Atmo, season: &Season, monsoon: f64) -> Vec<(f64, f64)> {
     let g = &a.g;
-    if monsoon <= 0.0 {
+    // No monsoon without a summer and a winter (an equinox, or a tidally locked world).
+    if monsoon <= 0.0 || season.sign == 0.0 {
         return vec![(0.0, 0.0); g.len()];
     }
     let rad = (12.0 / g.res).round().max(1.0) as usize;
@@ -418,29 +423,39 @@ pub fn monsoon_flow(a: &Atmo, season: &Season, monsoon: f64) -> Vec<(f64, f64)> 
             a.land[i] * (0.35 + 0.65 * (-((lat - 25.0) / 15.0).powi(2)).exp()) * lift
         })
         .collect();
-    let summer_low = g.blur(&heated, rad);
-    let winter_high = g.blur(&a.land, rad);
+    let summer_low = g.smooth(&heated, rad);
+    let winter_high = g.smooth(&a.land, rad);
+    // The flow down one field's slope at (x, y): into the summer low (`toward` 1) or out of
+    // the winter high (−0.4).
+    let pull = |ls: &[f64], toward: f64, x: usize, y: usize| -> (f64, f64) {
+        let lat = g.lat(y);
+        let c = lat.to_radians().cos().max(0.1);
+        let dx = (ls[y * g.w + (x + 1) % g.w] - ls[y * g.w + (x + g.w - 1) % g.w]) / (2.0 * g.res * c);
+        let (yn, ys) = (y.saturating_sub(1), (y + 1).min(g.h - 1));
+        let dy = (ls[yn * g.w + x] - ls[ys * g.w + x]) / ((ys - yn).max(1) as f64 * g.res);
+        let mag = (dx * dx + dy * dy).sqrt();
+        if mag <= 1e-9 {
+            return (0.0, 0.0);
+        }
+        let taper = 1.0 - ((lat.abs() - 25.0) / 20.0).clamp(0.0, 1.0);
+        // As strong as the pull, easing off as it saturates rather than at a hard cap.
+        let strength = monsoon * taper * (mag / 0.02).tanh() * toward;
+        let (u, v) = (strength * dx / mag, strength * dy / mag);
+        // High ranges stand in the way: the Andes keep Amazonian heat from pulling the
+        // Pacific ashore at Peru.
+        let ahead = blocked_by_terrain(a, lat, g.lon(x), u / strength.abs(), v / strength.abs());
+        (u * ahead, v * ahead)
+    };
     (0..g.len())
         .map(|i| {
             let (x, y) = (i % g.w, i / g.w);
             let lat = g.lat(y);
-            let summer = lat * season.sign > 0.0;
-            let ls = if summer { &summer_low } else { &winter_high };
-            let c = lat.to_radians().cos().max(0.1);
-            let dx = (ls[y * g.w + (x + 1) % g.w] - ls[y * g.w + (x + g.w - 1) % g.w]) / (2.0 * g.res * c);
-            let (yn, ys) = (y.saturating_sub(1), (y + 1).min(g.h - 1));
-            let dy = (ls[yn * g.w + x] - ls[ys * g.w + x]) / ((ys - yn).max(1) as f64 * g.res);
-            let mag = (dx * dx + dy * dy).sqrt();
-            if mag <= 1e-9 {
-                return (0.0, 0.0);
-            }
-            let taper = 1.0 - ((lat.abs() - 25.0) / 20.0).clamp(0.0, 1.0);
-            let strength = monsoon * taper * (mag / 0.02).min(1.0) * if summer { 1.0 } else { -0.4 };
-            let (u, v) = (strength * dx / mag, strength * dy / mag);
-            // High ranges stand in the way: the Andes keep Amazonian heat from pulling the
-            // Pacific ashore at Peru.
-            let ahead = blocked_by_terrain(a, lat, g.lon(x), u / strength.abs(), v / strength.abs());
-            let (u, v) = (u * ahead, v * ahead);
+            // The summer hemisphere's inflow and the winter one's outflow meet across the
+            // equator as one stream (the Somali jet's way), not at a seam.
+            let summer = crate::elevation::smoothstep(-MONSOON_SEAM_DEG, MONSOON_SEAM_DEG, lat * season.sign);
+            let (su, sv) = if summer > 0.0 { pull(&summer_low, 1.0, x, y) } else { (0.0, 0.0) };
+            let (wu, wv) = if summer < 1.0 { pull(&winter_high, -0.4, x, y) } else { (0.0, 0.0) };
+            let (u, v) = (summer * su + (1.0 - summer) * wu, summer * sv + (1.0 - summer) * wv);
             // Turned right of the pressure gradient in the north, left in the south, little
             // near the equator.
             let turn = -50f64.to_radians() * (lat / 15.0).clamp(-1.0, 1.0);

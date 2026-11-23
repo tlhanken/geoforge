@@ -116,10 +116,10 @@ const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Lima", LIMA),
     ("Vostok", ANTARCTICA),
 ];
-const RANGE_GAPS: &[(&str, &str)] = &[
-    ("Moscow", "the model's January winds bring little Atlantic air to Moscow (a maritime share of 0.2 in winter), so its range is 35 °C; on observed winds it is 30 °C, with the mean right (5.5 °C)"),
-    ("Manaus", "4.0 °C, at the line (3.6 on observed winds, observed 1.7)"),
-];
+const RANGE_GAPS: &[(&str, &str)] = &[(
+    "Moscow",
+    "the model's January winds bring little Atlantic air to Moscow (a maritime share of 0.2 in winter), so its range is 35 °C; on observed winds it is 30 °C, with the mean right (5.5 °C)",
+)];
 const RAIN_GAPS: &[(&str, &str)] = &[
     ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
     ("Yakutsk", "the Siberian interior gets an eighth of its rain"),

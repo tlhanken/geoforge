@@ -87,13 +87,22 @@ Still needed:
 - Greenland's top, whose range is 51 °C on observed winds (observed 27).
 
 ## 5. Monsoons and storm tracks [8e]
-- The summer monsoon winds over South America, Africa and Australia are rectangles of fast
-  wind with straight edges (January wind map, 10–30°S); they need a shape that follows the
-  heat low.
-- The winter storm track sits too far equatorward: Phoenix, Tehran and the Great Basin are
-  drenched.
-- No Somali jet, and Tibet is not an elevated heat source, so Mumbai is dry, rain reaches
-  Arabia and the West African monsoon goes too far north.
+- Done: the monsoon's pull follows a smooth heat low (three box blurs, close to a Gaussian,
+  and a pull that eases off instead of a hard cap), so its winds no longer come in rectangles
+  with straight edges; the summer inflow and winter outflow blend across the equator instead
+  of meeting at a seam; an equinox or a locked world has no monsoon.
+- The winter storm track: on observed winds the climate gives Phoenix 233 mm, the Great Basin
+  436 and Tehran 339 (GPCP 344, 314, 446); on the model's winds 468, 626 and 548. The
+  model's January winds over the dry subtropical land are 5 m/s westerlies where ERA has
+  1 m/s or calm, carrying Pacific and Mediterranean air inland.
+- Slowing the wind over land by 40% for friction cut rain over every interior (the Congo
+  turned savanna, Alice Springs got 55 mm) and turning it 15° toward low pressure moved the
+  directions off ERA's: the moisture transport is set on frictionless winds, so friction
+  needs the moisture model retuned with it.
+- No Somali jet: in July ERA has 16–18 m/s westerlies over the Arabian Sea (8°N 55°E,
+  15°N 65°E), the model 0.5–3; its July winds over southern China are easterly (−7.5 m/s,
+  ERA +2 from the south). Arabia gets 732 mm at Riyadh on the model's winds (513 on observed
+  winds, GPCP 124), and the Sahel 960 mm at 12–16°N (550 on observed winds, GPCP 550).
 
 ## 6. An almanac for a place, with droughts [8d]
 - A year day by day at a place: weather, moons, sunrise and sunset, and the day's events.

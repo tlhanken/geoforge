@@ -675,7 +675,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 10;
+    const VERSION: u32 = 11;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -769,7 +769,6 @@ fn sample2(g: &AtmoGrid, f: &[(f64, f64)], lat: f64, lon: f64) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atmosphere::Cells;
 
     /// East and north components on the atmosphere grid.
     type Vectors = Vec<(f64, f64)>;
@@ -786,7 +785,9 @@ mod tests {
         let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 || extra(i % g.w, i / g.w) { 1.0 } else { 0.0 }).collect();
         let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
         let p = CirculationParams::default();
-        let annual = season_winds(&a, &Season::zonal(Cells::for_body(24.0, 6371.0, 23.0, 0.0), 0.0, g.w), &p);
+        // The year's mean of July's and January's winds, as the generator takes it.
+        let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::new(&a, 24.0, 6371.0, 23.0, sign, p.monsoon), &p));
+        let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
         let ocean = currents(&a, &annual, 6371.0, &p);
         (a, p, annual, ocean)
     }
