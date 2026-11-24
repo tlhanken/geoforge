@@ -4,6 +4,89 @@ The working queue, highest payoff first. Detail and history live in `V2_ROADMAP.
 named in brackets) and the scorecards in `V2_REALISM.md`. Accuracy comes first for now:
 slower is fine. Speed is item 15.
 
+First, as of 24 November 2026: the viewer, names, the sky above one galaxy, mountains,
+rivers and other worlds; then the climate and speed items below them.
+
+## 17. A visualization tool
+An interactive viewer for a world:
+- pan and zoom the layers;
+- toggle keys and overlays;
+- inspect a cell's values through every layer;
+- step through the almanac's days.
+
+## 12c. One universe per seed, and the viewer — done (OpenSpec `universe-addresses`)
+- Done: addresses for every galaxy, star's system and body, generated from the seed and
+  address alone; galaxy models from generated galaxies; default body by rule; universe
+  directories (`new --seed/--at`, `focus`, `visit` in the universe); true colour for every
+  body (`appearance` view); `geoforge view`, zoom universe → galaxy → stars → system →
+  body, search, layers on a globe or map, make and generate from the page.
+- Next: clouds over the true colour; stars' and galaxies' names searched farther out (an
+  index of what has been looked at); the real Earth's true colour from its data; the
+  viewer's galaxy view at the stars' own scale (sectors drawn as they come into view).
+
+## 16. Names
+Languages and cultures in `geoforge-names`.
+
+## 12. Galaxy sectors and the night sky — done (OpenSpec `galaxy-sectors`)
+- A galaxy of components (nucleus, bulge and bar, thin disk by age, arms, thick disk, halo,
+  dust) and morphologies (Sa–Sd barred or not, S0, E, dSph, dIrr, starburst); the Milky Way
+  from Bland-Hawthorn & Gerhard (2016) and Vallée (2015).
+- Stars that live in the galaxy: nested cubes sized by how far their stars are seen, each
+  cube generated from its seed, each star with an identity that seeds its system; young
+  stars in clusters and associations of 100 M☉ and more; dust clouds where stars form.
+- The sky read from them: neighbouring systems see each other; the real Earth's band runs
+  through Sagittarius and Cygnus; the Sun's place holds 8,500–9,200 naked-eye stars (9,110
+  observed), 18–26 brighter than 1.5 (22) and 320–360 systems within 10 pc (339), with the
+  galaxy-integrated IMF (α = 2.6 above 1 M☉). Systems are drawn from every component by mass
+  (a quarter of the Milky Way's in its bulge), with a place, a frame and a galaxy seed.
+- Edits: `geoforge star add|move|change|remove|cluster`, `stars near|export|import`,
+  `constellation add|remove|list` (drawn on the chart), `visit` (a new world at a star).
+- Still open: a Gould-Belt-like local excess of young stars around the Sun (the real sky's
+  young B stars); proper motions; a faster sky in a crowded core (cut to a brighter limit
+  today); generated galaxy-recipe seeds now draw different systems than before (the
+  realism tables' s-worlds predate this).
+
+## 12b. Above one galaxy — first part done (OpenSpec `universe-and-figures`)
+- Done: a universe of halos and galaxies in nested cubes, clustered, each galaxy with an
+  identity; a world's galaxy placed in it (the Sun's is the real one); other galaxies in
+  the night sky and its glow, rated by surface brightness; automatic constellations;
+  `geoforge universe`, `geoforge constellation auto`.
+- Open: visiting another galaxy's stars (a galaxy model scaled to a generated galaxy and
+  its sectors, so the zoom runs universe → galaxy → star → planet); superclusters'
+  filaments and voids beyond the lognormal field; a world holding more than one system.
+
+## 12c. Sky and almanac refinements [6, 8b]
+- A system's local environment: nebulae and supernova remnants (clusters and associations
+  come with 12).
+- Tides by date, proper motions, the Moon's periodic terms.
+- A tidal range map for worlds with moons: the forcing of each moon and the star (mass and
+  distance), the semidiurnal and diurnal parts, and the basins' response (resonance, wide
+  shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
+  range along every coast; then the water level by date in the almanac.
+
+## 10. Mountains [8e]
+- Arc height and width from slab age and dip, not noise.
+- A volcanic gap over a flat slab.
+- Some sutures as sag basins rather than belts (the Amazon).
+- Island arcs maturing to 2–2.5 km.
+- Great escarpments (optional).
+
+## 11. Rivers and lakes
+- Breach the lowest pass instead of filling.
+- The wetland rule keys on discharge, so every big-river cell is wetland.
+- The Great Basin drains to the sea.
+
+## 14. Other worlds — mostly done (OpenSpec `systems-and-worlds`)
+Done: brown dwarfs (a fifth of systems, cooling, M/L/T/Y); planets of wide companions;
+thermal-tide rotation of locked worlds with 0.5–5 bar; ice shells (Europa-like and
+Ganymede-like generators); locked oceans that superrotate and carry heat to the night side;
+fast spinners without an ice cliff or rain lines at their fronts; giants' polar cyclones and
+hexagons. Open:
+- Storms that drift by date (a dated view of the bands).
+- Several gyres per basin on fast spinners.
+- Thermal tides of thick (Venus-like) air; binary evolution; a companion's light on the
+  other star's planets; Titan's dunes and methane lakes.
+
 ## 1. Earth A/B in Rust, every layer against a real baseline [8f] — command done
 Done: `geoforge compare REAL MODEL… --probe … --source …` writes the page. Every product
 the real world holds as observed (authored) data gets a section: the observed map, then each
@@ -167,82 +250,12 @@ Still needed:
 - The cyclone map's blocks were the 2° storm grid read cell by cell; it is now read between
   cell centres.
 
-## 10. Mountains [8e]
-- Arc height and width from slab age and dip, not noise.
-- A volcanic gap over a flat slab.
-- Some sutures as sag basins rather than belts (the Amazon).
-- Island arcs maturing to 2–2.5 km.
-- Great escarpments (optional).
-
-## 11. Rivers and lakes
-- Breach the lowest pass instead of filling.
-- The wetland rule keys on discharge, so every big-river cell is wetland.
-- The Great Basin drains to the sea.
-
-## 12. Galaxy sectors and the night sky — done (OpenSpec `galaxy-sectors`)
-- A galaxy of components (nucleus, bulge and bar, thin disk by age, arms, thick disk, halo,
-  dust) and morphologies (Sa–Sd barred or not, S0, E, dSph, dIrr, starburst); the Milky Way
-  from Bland-Hawthorn & Gerhard (2016) and Vallée (2015).
-- Stars that live in the galaxy: nested cubes sized by how far their stars are seen, each
-  cube generated from its seed, each star with an identity that seeds its system; young
-  stars in clusters and associations of 100 M☉ and more; dust clouds where stars form.
-- The sky read from them: neighbouring systems see each other; the real Earth's band runs
-  through Sagittarius and Cygnus; the Sun's place holds 8,500–9,200 naked-eye stars (9,110
-  observed), 18–26 brighter than 1.5 (22) and 320–360 systems within 10 pc (339), with the
-  galaxy-integrated IMF (α = 2.6 above 1 M☉). Systems are drawn from every component by mass
-  (a quarter of the Milky Way's in its bulge), with a place, a frame and a galaxy seed.
-- Edits: `geoforge star add|move|change|remove|cluster`, `stars near|export|import`,
-  `constellation add|remove|list` (drawn on the chart), `visit` (a new world at a star).
-- Still open: a Gould-Belt-like local excess of young stars around the Sun (the real sky's
-  young B stars); proper motions; a faster sky in a crowded core (cut to a brighter limit
-  today); generated galaxy-recipe seeds now draw different systems than before (the
-  realism tables' s-worlds predate this).
-
-## 12c. One universe per seed, and the viewer — done (OpenSpec `universe-addresses`)
-- Done: addresses for every galaxy, star's system and body, generated from the seed and
-  address alone; galaxy models from generated galaxies; default body by rule; universe
-  directories (`new --seed/--at`, `focus`, `visit` in the universe); true colour for every
-  body (`appearance` view); `geoforge view`, zoom universe → galaxy → stars → system →
-  body, search, layers on a globe or map, make and generate from the page.
-- Next: clouds over the true colour; stars' and galaxies' names searched farther out (an
-  index of what has been looked at); the real Earth's true colour from its data; the
-  viewer's galaxy view at the stars' own scale (sectors drawn as they come into view).
-
-## 12b. Above one galaxy — first part done (OpenSpec `universe-and-figures`)
-- Done: a universe of halos and galaxies in nested cubes, clustered, each galaxy with an
-  identity; a world's galaxy placed in it (the Sun's is the real one); other galaxies in
-  the night sky and its glow, rated by surface brightness; automatic constellations;
-  `geoforge universe`, `geoforge constellation auto`.
-- Open: visiting another galaxy's stars (a galaxy model scaled to a generated galaxy and
-  its sectors, so the zoom runs universe → galaxy → star → planet); superclusters'
-  filaments and voids beyond the lognormal field; a world holding more than one system.
-
-## 12c. Sky and almanac refinements [6, 8b]
-- A system's local environment: nebulae and supernova remnants (clusters and associations
-  come with 12).
-- Tides by date, proper motions, the Moon's periodic terms.
-- A tidal range map for worlds with moons: the forcing of each moon and the star (mass and
-  distance), the semidiurnal and diurnal parts, and the basins' response (resonance, wide
-  shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
-  range along every coast; then the water level by date in the almanac.
-
 ## 13. Star systems [5] — done (OpenSpec `systems-and-worlds`)
 - Kepler-like compact chains (period ratios log-normal about 1.8, peas in a pod); packed
   giants that scatter by Petrovich's criterion, merging close in and ejecting far out
   (Safronov number); hot Jupiters by high-eccentricity migration, lonely.
 - A rocky world's tilt wanders unless a big moon steadies it.
 - Trojans where no heavier giant clears them.
-
-## 14. Other worlds — mostly done (OpenSpec `systems-and-worlds`)
-Done: brown dwarfs (a fifth of systems, cooling, M/L/T/Y); planets of wide companions;
-thermal-tide rotation of locked worlds with 0.5–5 bar; ice shells (Europa-like and
-Ganymede-like generators); locked oceans that superrotate and carry heat to the night side;
-fast spinners without an ice cliff or rain lines at their fronts; giants' polar cyclones and
-hexagons. Open:
-- Storms that drift by date (a dated view of the bands).
-- Several gyres per basin on fast spinners.
-- Thermal tides of thick (Venus-like) air; binary evolution; a companion's light on the
-  other star's planets; Titan's dunes and methane lakes.
 
 ## 15. Speed: a lite generator
 Once the accurate model is settled, any of:
@@ -257,13 +270,3 @@ Also:
 
 Resolution consistency is tested (`a_seed_is_the_same_world_at_any_resolution`): on
 Thumi, land and sea at 256, 512 and 1024 agree with 2048 on 95%, 97% and 98% of cells.
-
-## 16. Names
-Languages and cultures in `geoforge-names`.
-
-## 17. A visualization tool
-An interactive viewer for a world:
-- pan and zoom the layers;
-- toggle keys and overlays;
-- inspect a cell's values through every layer;
-- step through the almanac's days.

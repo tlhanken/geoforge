@@ -335,16 +335,6 @@ enum Cmd {
         /// Folder to write (index.html and img/); default <dir>/report.
         #[arg(long)]
         to: Option<PathBuf>,
-        /// A place to report on, "name:lat,lon" (repeat for more); default a temperate, a
-        /// tropical and a dry one.
-        #[arg(long = "place")]
-        places: Vec<String>,
-        /// Day of the weather and sky, Earth days from the present.
-        #[arg(long, default_value_t = 30.0)]
-        day: f64,
-        /// Days of weather at each place.
-        #[arg(long, default_value_t = 14)]
-        days: usize,
         /// Width of the maps, px.
         #[arg(long, default_value_t = 1200)]
         width: u32,
@@ -599,7 +589,7 @@ fn run(cli: Cli) -> R<()> {
         Cmd::WeatherMap { dir, day, to, width } => almanac::weather_map(&dir, day, to, width),
         Cmd::Seed { dir, product, owner } => world::seed(&dir, &product, owner),
         Cmd::Stats { dir } => world::stats(&dir),
-        Cmd::Report { dir, to, places, day, days, width } => world::report(&dir, to, &places, day, days, width),
+        Cmd::Report { dir, to, width } => world::report(&dir, to, width),
         Cmd::Compare { real, models, labels, probes, sources, to, width } => world::compare(&real, &models, &labels, &probes, &sources, to, width),
     }
 }

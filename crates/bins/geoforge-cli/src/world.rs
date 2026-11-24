@@ -173,10 +173,9 @@ pub fn stats(dir: &Path) -> R<()> {
     Ok(())
 }
 
-pub fn report(dir: &Path, to: Option<PathBuf>, places: &[String], day: f64, days: usize, width: u32) -> R<()> {
+pub fn report(dir: &Path, to: Option<PathBuf>, width: u32) -> R<()> {
     let w = World::open(dir)?;
-    let places = places.iter().map(|p| parse_place(p)).collect::<R<Vec<_>>>()?;
-    let opts = pipe::report::Options { width, places, day, days, system_text: Some(crate::system::show_text(&w)?) };
+    let opts = pipe::report::Options { width, system_text: Some(crate::system::show_text(&w)?) };
     let r = pipe::report::build(&w, &opts)?;
     let to = to.unwrap_or_else(|| w.root.join("report"));
     let files = geoforge_store::report::write(&to, &r.html, &r.images)?;
@@ -225,14 +224,6 @@ fn parse_probe(s: &str) -> R<pipe::compare::Probe> {
         })
     };
     Ok(pipe::compare::Probe { name: name.to_string(), lat: range(lat)?, lon: range(lon)? })
-}
-
-/// "London:51.5,-0.1" (or "51.5,-0.1", named by its coordinates).
-fn parse_place(s: &str) -> R<pipe::report::Place> {
-    let (name, at) = s.rsplit_once(':').map_or((None, s), |(n, a)| (Some(n), a));
-    let (lat, lon) = at.split_once(',').ok_or_else(|| format!("place `{s}`: expected name:lat,lon"))?;
-    let (lat, lon): (f64, f64) = (lat.trim().parse()?, lon.trim().parse()?);
-    Ok(pipe::report::Place { name: name.map_or_else(|| format!("{lat:.1}°, {lon:.1}°"), str::to_string), lat, lon })
 }
 
 pub fn parse_galaxy(name: &str) -> Result<GalaxyPreset, String> {
