@@ -21,18 +21,25 @@ it first.
 ## Your first world
 
 ```bash
-geoforge new worlds/demo --seed 42           # a system drawn from the Milky Way and its most Earth-like body
+geoforge new worlds/demo --seed 42           # universe 42 and its default body: a Sun-like star's wet world
 geoforge generate worlds/demo --render       # every layer, with previews in worlds/demo/renders
 geoforge show worlds/demo                    # the star, planets, and the world: air, water, field, tides, calendar
 ```
 
 Or in one go: `just world 42` (makes `worlds/world-42`).
 
-- `--habitable` forces a Sun-like star with an Earth-like world; `--galaxy elliptical`
-  (or `dwarf`, `starburst`) draws from another kind of galaxy; `geoforge census` lists
-  seeds by what they give.
-- `--archetype earth` (or `mars`, `titan`, …) starts from a real body, in the real Solar
-  System at its last northern spring equinox (Earth's: 2026-03-20 14:46 UTC), so `sky`
+- `worlds/demo` is a universe directory: universe 42, and each body made in it at its
+  address (`7/h6:0,0,-1:17.0/f12:3,-4,0:5/4` reads universe / galaxy / star / body). The
+  default body is in the universe's galaxy most like the Milky Way: the nearest Sun-like
+  star with a wet world to a point on that galaxy's Sun-like circle.
+- `--at <address>` makes any other galaxy's, system's or body's (a galaxy is taken to its
+  default star, a system to its most Earth-like body) in the same directory, and makes it
+  the focus every command works on; `--focus <name>` picks another body of the system.
+  `geoforge focus worlds/demo` lists the bodies made and switches between them;
+  `geoforge visit worlds/demo <star>` goes to a star of the sky. `--at real` is the real
+  universe: the Earth, the Solar System, the Milky Way and the Local Group.
+- `--archetype earth` (or `mars`, `titan`, …) makes a world on its own from a real body,
+  in the real Solar System at its last northern spring equinox (Earth's: 2026-03-20 14:46 UTC), so `sky`
   shows the real planets and eclipses with dates; `--body my.toml` from your own
   description of one.
 - `--width 1024` makes a smaller, faster grid (the default is 2048 × 1024 cells).
@@ -84,8 +91,9 @@ report list those brighter than magnitude 8 and how they are seen:
 ```bash
 geoforge universe worlds/demo --radius-mpc 5     # the home galaxy, its satellites and neighbours
 ```
-`new --galaxy-file my-galaxy.json` makes a world in a galaxy of your own (components,
-arms, dust; see `geoforge_cosmos::galaxy`).
+A galaxy's model (components, arms, dust; see `geoforge_cosmos::galaxy`) can be edited:
+put it as `galaxies/<galaxy>/galaxy.json` in the universe directory, and every body made
+there after draws its stars from it.
 
 The almanac dates its days in a calendar: `--calendar twelfths` (twelve equal months),
 `lunar` or `lunar:<moon>` (new moon to new moon), or `world` (the default): the world's own,

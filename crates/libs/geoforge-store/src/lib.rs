@@ -1,14 +1,29 @@
-//! The world directory. Your sources and edits are kept; generated products are a cache
-//! that can always be rebuilt.
+//! The universe and world directories. Your sources and edits are kept; generated products
+//! are a cache that can always be rebuilt.
+//!
+//! A universe directory holds what of a universe has been looked at or edited; everything
+//! else regenerates from its seed. Each body made there is a world, at its address:
+//!
+//! ```text
+//! universe/
+//!   universe.json                    the universe (its seed, or real) and the focus body
+//!   galaxies/<galaxy>/
+//!     galaxy.json                    the galaxy's model, if edited (else generated)
+//!     stars.json                     edits over its generated stars
+//!   bodies/<galaxy>/<star>/<body>/   a world (below), one per body made
+//! ```
+//!
+//! A world (on its own, or a body of a universe):
 //!
 //! ```text
 //! world/
-//!   world.toml                       manifest: seed, grid, focus, sources, provenance
+//!   world.toml                       manifest: seed, grid, focus, address, sources, provenance
 //!   system.json                      the solar system (absent for a hand-written body)
 //!   bodies/<body>/
 //!     body.json                      BodyContext (the handoff to the surface pipeline)
 //!     products/<product>.json|.bin   canonical stored products
 //!     edits/<product>.*              authored data and patches (never auto-overwritten)
+//!   galaxy/                          a world on its own: its galaxy.json and stars.json
 //!   cache/baselines/                 last edit-view export of each product (for diffs)
 //! ```
 
@@ -20,6 +35,7 @@ pub mod raster;
 pub mod render;
 pub mod report;
 
+use geoforge_core::address::{Address, Level};
 use geoforge_core::body::{BodyContext, SolarSystem};
 use geoforge_core::grid::GridSpec;
 use geoforge_core::key::Key;
@@ -49,10 +65,11 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
-/// Where a world keeps its galaxy model, its star edits and its constellations.
-pub const GALAXY_MODEL: &str = "galaxy/galaxy.json";
-const STAR_EDITS: &str = "galaxy/stars.json";
+/// In a galaxy's directory: its model and the edits over its stars.
+const GALAXY_MODEL: &str = "galaxy.json";
+const STAR_EDITS: &str = "stars.json";
 const CONSTELLATIONS: &str = "constellations.json";
+const UNIVERSE: &str = "universe.json";
 
 /// `world.toml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,6 +93,9 @@ pub struct Manifest {
     /// Layers that do not apply to the focus body, with the reason.
     #[serde(default)]
     pub not_applicable: BTreeMap<String, String>,
+    /// Where the focus body is in its universe; `None` for a world on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<Address>,
 }
 
 impl Manifest {
@@ -90,6 +110,158 @@ impl Manifest {
 pub struct World {
     pub root: PathBuf,
     pub manifest: Manifest,
+    /// The universe directory it is a body of, if any.
+    pub universe: Option<PathBuf>,
+}
+
+/// `universe.json`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UniverseDoc {
+    /// The universe (an address at its level).
+    pub universe: Address,
+    /// The body commands work on when given the universe directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<Address>,
+}
+
+/// An open universe directory.
+#[derive(Debug, Clone)]
+pub struct UniverseDir {
+    pub root: PathBuf,
+    pub doc: UniverseDoc,
+}
+
+impl UniverseDir {
+    /// Start a universe directory for `universe` (any address in it: it is cut to the
+    /// universe).
+    ///
+    /// # Errors
+    /// If the directory already holds a universe or a world, or on IO errors.
+    pub fn create(root: &Path, universe: Address) -> Result<Self> {
+        if root.join(UNIVERSE).exists() || root.join("world.toml").exists() {
+            return Err(StoreError::Invalid(format!("{} already holds a universe or a world", root.display())));
+        }
+        std::fs::create_dir_all(root)?;
+        let u = Self { root: root.to_path_buf(), doc: UniverseDoc { universe: universe.up_to(Level::Universe), focus: None } };
+        u.save()?;
+        Ok(u)
+    }
+
+    /// # Errors
+    /// If there is no universe at `root`.
+    pub fn open(root: &Path) -> Result<Self> {
+        let text = std::fs::read_to_string(root.join(UNIVERSE)).map_err(|e| StoreError::Invalid(format!("no universe at {}: {e}", root.display())))?;
+        Ok(Self { root: root.to_path_buf(), doc: serde_json::from_str(&text)? })
+    }
+
+    /// Whether `root` holds a universe.
+    #[must_use]
+    pub fn is_at(root: &Path) -> bool {
+        root.join(UNIVERSE).exists()
+    }
+
+    fn save(&self) -> Result<()> {
+        std::fs::write(self.root.join(UNIVERSE), serde_json::to_string_pretty(&self.doc)?)?;
+        Ok(())
+    }
+
+    /// Make body `address` the one commands work on.
+    ///
+    /// # Errors
+    /// On IO errors.
+    pub fn set_focus(&mut self, address: Address) -> Result<()> {
+        self.doc.focus = Some(address);
+        self.save()
+    }
+
+    /// Where the world of body `address` is (whether or not it has been made).
+    #[must_use]
+    pub fn body_root(&self, address: &Address) -> PathBuf {
+        address.segments().iter().skip(1).fold(self.root.join("bodies"), |p, s| p.join(s))
+    }
+
+    /// Where the documents of `address`'s galaxy are.
+    #[must_use]
+    pub fn galaxy_dir(&self, address: &Address) -> PathBuf {
+        galaxy_dir_in(&self.root, address)
+    }
+
+    /// The edited model of `address`'s galaxy, if it has one.
+    ///
+    /// # Errors
+    /// On IO or parse errors.
+    pub fn galaxy_model<T: serde::de::DeserializeOwned>(&self, address: &Address) -> Result<Option<T>> {
+        read_json(&self.galaxy_dir(address).join(GALAXY_MODEL))
+    }
+
+    /// The edits over the stars of `address`'s galaxy.
+    ///
+    /// # Errors
+    /// On IO or parse errors.
+    pub fn star_edits(&self, address: &Address) -> Result<geoforge_core::galactic::StarEdits> {
+        Ok(read_json(&self.galaxy_dir(address).join(STAR_EDITS))?.unwrap_or_default())
+    }
+
+    /// The world of body `address`, if it has been made.
+    ///
+    /// # Errors
+    /// If its manifest is unreadable.
+    pub fn world(&self, address: &Address) -> Result<Option<World>> {
+        let root = self.body_root(address);
+        if root.join("world.toml").exists() {
+            World::open(&root).map(Some)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Every body made so far, by address.
+    ///
+    /// # Errors
+    /// On unreadable directories or manifests.
+    pub fn worlds(&self) -> Result<Vec<World>> {
+        fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+            if dir.join("world.toml").exists() {
+                out.push(dir.to_path_buf());
+                return Ok(());
+            }
+            if dir.is_dir() {
+                for e in std::fs::read_dir(dir)? {
+                    walk(&e?.path(), out)?;
+                }
+            }
+            Ok(())
+        }
+        let mut roots = Vec::new();
+        walk(&self.root.join("bodies"), &mut roots)?;
+        roots.sort();
+        roots.iter().map(|r| World::open(r)).collect()
+    }
+}
+
+fn galaxy_dir_in(universe: &Path, address: &Address) -> PathBuf {
+    universe.join("galaxies").join(address.segments().get(1).map_or("_", String::as_str))
+}
+
+fn read_json<T: serde::de::DeserializeOwned>(p: &Path) -> Result<Option<T>> {
+    if !p.exists() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_str(&std::fs::read_to_string(p)?)?))
+}
+
+fn write_json<T: Serialize>(p: &Path, doc: &T) -> Result<()> {
+    if let Some(dir) = p.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(p, serde_json::to_string_pretty(doc)?)?;
+    Ok(())
+}
+
+/// The universe directory holding the world at `root`: the nearest ancestor with a
+/// `universe.json`.
+fn universe_above(root: &Path) -> Option<PathBuf> {
+    root.ancestors().skip(1).find(|a| UniverseDir::is_at(a)).map(Path::to_path_buf)
 }
 
 /// Lower-case, filesystem-safe form of a name.
@@ -130,7 +302,8 @@ impl World {
             return Err(StoreError::Invalid(format!("{} already holds a world", root.display())));
         }
         std::fs::create_dir_all(root)?;
-        let w = Self { root: root.to_path_buf(), manifest };
+        let universe = manifest.address.and_then(|_| universe_above(root));
+        let w = Self { root: root.to_path_buf(), manifest, universe };
         if let Some(s) = system {
             std::fs::write(w.root.join("system.json"), serde_json::to_string_pretty(s)?)?;
         }
@@ -141,15 +314,23 @@ impl World {
         Ok(w)
     }
 
+    /// The world at `root`; at a universe directory, its focus body's.
+    ///
     /// # Errors
     /// If there is no world at `root` or its manifest is invalid.
     pub fn open(root: &Path) -> Result<Self> {
+        if !root.join("world.toml").exists() && UniverseDir::is_at(root) {
+            let u = UniverseDir::open(root)?;
+            let focus = u.doc.focus.ok_or_else(|| StoreError::Invalid(format!("the universe at {} has no body yet: geoforge new {} --at <address>", root.display(), root.display())))?;
+            return Self::open(&u.body_root(&focus));
+        }
         let text = std::fs::read_to_string(root.join("world.toml")).map_err(|e| StoreError::Invalid(format!("no world at {}: {e}", root.display())))?;
         let manifest: Manifest = toml::from_str(&text)?;
         if manifest.schema_version != geoforge_core::SCHEMA_VERSION {
             return Err(StoreError::Invalid(format!("world schema {} but this build reads {}", manifest.schema_version, geoforge_core::SCHEMA_VERSION)));
         }
-        Ok(Self { root: root.to_path_buf(), manifest })
+        let universe = manifest.address.and_then(|_| universe_above(root));
+        Ok(Self { root: root.to_path_buf(), manifest, universe })
     }
 
     /// # Errors
@@ -188,11 +369,29 @@ impl World {
         std::fs::write(self.body_dir().join("body.json"), serde_json::to_string_pretty(b)?)?;
         Ok(())
     }
-    /// The world's galaxy documents: the galaxy model (`galaxy.json`, if the world has its
-    /// own) and the edits over its stars (`stars.json`).
+    /// The world's galaxy documents: the galaxy model (`galaxy.json`, if edited or the world
+    /// has its own) and the edits over its stars (`stars.json`). A body of a universe shares
+    /// its galaxy's with every other body there.
     #[must_use]
     pub fn galaxy_dir(&self) -> PathBuf {
-        self.root.join("galaxy")
+        match (&self.universe, self.manifest.address) {
+            (Some(u), Some(a)) => galaxy_dir_in(u, &a),
+            _ => self.root.join("galaxy"),
+        }
+    }
+
+    /// The galaxy model the world keeps, if any (else its galaxy's is generated).
+    ///
+    /// # Errors
+    /// On IO or parse errors.
+    pub fn load_galaxy_model<T: serde::de::DeserializeOwned>(&self) -> Result<Option<T>> {
+        read_json(&self.galaxy_dir().join(GALAXY_MODEL))
+    }
+
+    /// # Errors
+    /// On IO errors.
+    pub fn save_galaxy_model<T: Serialize>(&self, model: &T) -> Result<()> {
+        write_json(&self.galaxy_dir().join(GALAXY_MODEL), model)
     }
 
     /// A JSON document at `rel` under the world, if it exists.
@@ -200,11 +399,7 @@ impl World {
     /// # Errors
     /// On IO or parse errors (a missing file is `Ok(None)`).
     pub fn load_doc<T: serde::de::DeserializeOwned>(&self, rel: &str) -> Result<Option<T>> {
-        let p = self.root.join(rel);
-        if !p.exists() {
-            return Ok(None);
-        }
-        Ok(Some(serde_json::from_str(&std::fs::read_to_string(p)?)?))
+        read_json(&self.root.join(rel))
     }
 
     /// Write `doc` as JSON at `rel` under the world.
@@ -212,12 +407,7 @@ impl World {
     /// # Errors
     /// On IO errors.
     pub fn save_doc<T: Serialize>(&self, rel: &str, doc: &T) -> Result<()> {
-        let p = self.root.join(rel);
-        if let Some(dir) = p.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        std::fs::write(p, serde_json::to_string_pretty(doc)?)?;
-        Ok(())
+        write_json(&self.root.join(rel), doc)
     }
 
     /// The edits over the galaxy's generated stars (none if the world has made none).
@@ -225,13 +415,13 @@ impl World {
     /// # Errors
     /// On IO or parse errors.
     pub fn load_star_edits(&self) -> Result<geoforge_core::galactic::StarEdits> {
-        Ok(self.load_doc(STAR_EDITS)?.unwrap_or_default())
+        Ok(read_json(&self.galaxy_dir().join(STAR_EDITS))?.unwrap_or_default())
     }
 
     /// # Errors
     /// On IO errors.
     pub fn save_star_edits(&self, edits: &geoforge_core::galactic::StarEdits) -> Result<()> {
-        self.save_doc(STAR_EDITS, edits)
+        write_json(&self.galaxy_dir().join(STAR_EDITS), edits)
     }
 
     /// The constellations the focus's sky is drawn with.

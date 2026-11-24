@@ -136,6 +136,36 @@ impl Galaxy {
     }
 }
 
+impl Galaxy {
+    /// The same galaxy `mass` times as massive and `length` times as large, as galaxies of
+    /// one type differ: every length scaled alike (heights too, so its shape keeps), its
+    /// metallicity shifted by the stellar mass–metallicity relation (0.35 dex per dex,
+    /// Gallazzi et al. 2005, within −0.6 to +0.15 dex) and its dust by its column, mass per
+    /// area (×¼ to ×4).
+    #[must_use]
+    pub fn scaled(&self, mass: f64, length: f64) -> Self {
+        let dex = (0.35 * mass.log10()).clamp(-0.6, 0.15);
+        let components = self
+            .components
+            .iter()
+            .map(|c| Component {
+                mass_msun: c.mass_msun * mass,
+                shape: c.shape.scaled(length),
+                metals: Metallicity { at_reference_dex: c.metals.at_reference_dex + dex, gradient_dex_per_kpc: c.metals.gradient_dex_per_kpc / length, ..c.metals },
+                ..c.clone()
+            })
+            .collect();
+        let dust = Dust {
+            mag_per_kpc: self.dust.mag_per_kpc * (mass / length.powi(3)).clamp(0.25, 4.0),
+            height_pc: self.dust.height_pc * length,
+            scale_length_kpc: self.dust.scale_length_kpc * length,
+            ..self.dust
+        };
+        let arms = self.arms.as_ref().map(|a| Arms { start_kpc: a.start_kpc * length, width_kpc: a.width_kpc * length, ..*a });
+        Self { components, arms, dust, reference_kpc: self.reference_kpc * length, edge_kpc: self.edge_kpc * length, ..self.clone() }
+    }
+}
+
 impl Default for Galaxy {
     fn default() -> Self {
         Self::milky_way()

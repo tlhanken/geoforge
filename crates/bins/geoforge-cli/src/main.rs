@@ -28,28 +28,25 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Create a world.
+    /// Create a world: a body of a universe, made from the universe's seed and its address.
     ///
-    /// A solar system drawn from a galaxy, with its most Earth-like body as the focus; or the
-    /// habitable recipe (--habitable), a real body (--archetype) or your own body file (--body).
+    /// By default the universe's default body: in its galaxy most like the Milky Way, the
+    /// wet world of a Sun-like star near that galaxy's reference circle. --at makes any other
+    /// galaxy's, system's or body's instead; in a directory that already holds the universe it
+    /// is added there and becomes the focus. A real body on its own (--archetype) or your own
+    /// body file (--body) make a world outside any universe.
     New {
-        /// The world directory.
+        /// The universe (or world) directory.
         dir: PathBuf,
-        /// The world's seed: the same seed makes the same world.
+        /// The universe's seed: the same seed makes the same universe.
         #[arg(long, default_value_t = 42)]
         seed: u64,
-        /// The galaxy to draw the system from: milky-way; sa, sb, sc, sd (spirals) or sba … sbd
-        /// (barred); lenticular, elliptical, dwarf-spheroidal, dwarf (irregular), starburst.
-        #[arg(long, default_value = "milky-way", value_parser = parse_galaxy)]
-        galaxy: GalaxyPreset,
-        /// A galaxy of your own (a JSON galaxy document, as `galaxy/galaxy.json` of any world
-        /// holds it) instead of a preset; the world keeps it.
-        #[arg(long, conflicts_with_all = ["archetype", "habitable"])]
-        galaxy_file: Option<PathBuf>,
-        /// Force a habitable system: a Sun-like star (F8–K5) with an Earth-like world in its
-        /// habitable zone, whatever the galaxy would draw.
+        /// Where in the universe: an address, e.g. `42/h6:0,0,-1:17.0/f12:3,-4,0:5/4`, or
+        /// `real` for the real universe (the Earth). A galaxy is taken to its default star, a
+        /// system to its most Earth-like body. In a universe's directory the universe part may
+        /// be left out.
         #[arg(long, conflicts_with_all = ["body", "archetype"])]
-        habitable: bool,
+        at: Option<String>,
         /// Grid width in cells (height is half).
         #[arg(long, default_value_t = 2048)]
         width: u32,
@@ -60,10 +57,17 @@ enum Cmd {
         /// moon, titan, europa, gas_giant, ice_giant.
         #[arg(long, conflicts_with = "body")]
         archetype: Option<geoforge_core::Archetype>,
-        /// Focus on another body of the generated system: its name (see `show`), or
-        /// "<belt name> #<n>" for a belt's n-th largest member.
+        /// Focus on another body of the system: its name (see `show`), or "<belt name> #<n>"
+        /// for a belt's n-th largest member.
         #[arg(long, conflicts_with_all = ["body", "archetype"])]
         focus: Option<String>,
+    },
+    /// The bodies made in a universe's directory, or make one of them its focus.
+    Focus {
+        /// The universe directory.
+        dir: PathBuf,
+        /// The body to work on: its address (the universe part may be left out).
+        at: Option<String>,
     },
     /// Build every layer that is missing or stale.
     Generate {
@@ -362,16 +366,17 @@ enum Cmd {
         #[arg(long, default_value_t = 12.0)]
         limit: f64,
     },
-    /// Make a new world at a star of this world's galaxy: the system born with that star, the
-    /// galaxy and its star edits carried over.
+    /// Go to a star of this world's sky: its system's most Earth-like body, made in the same
+    /// universe (and made its focus). A world on its own makes a new one in --to, its galaxy
+    /// and star edits carried over.
     Visit {
         /// The world whose sky holds the star.
         dir: PathBuf,
         /// The star: its identity or name.
         star: String,
-        /// The new world's directory.
+        /// For a world on its own: the new world's directory.
         #[arg(long)]
-        to: PathBuf,
+        to: Option<PathBuf>,
     },
     /// Draw many systems from a galaxy and count them.
     ///
@@ -534,7 +539,8 @@ type R<T> = Result<T, Box<dyn std::error::Error>>;
 fn run(cli: Cli) -> R<()> {
     use geoforge_store::World;
     match cli.cmd {
-        Cmd::New { dir, seed, galaxy, galaxy_file, habitable, width, body, archetype, focus } => world::new_world(&dir, seed, galaxy, galaxy_file.as_deref(), habitable, width, body, archetype, focus),
+        Cmd::New { dir, seed, at, width, body, archetype, focus } => world::new_world(&dir, seed, at.as_deref(), width, body, archetype, focus.as_deref()),
+        Cmd::Focus { dir, at } => world::focus(&dir, at.as_deref()),
         Cmd::Star { action } => match action {
             StarCmd::Add { dir, name, ra, dec, distance_ly, mass, age_gyr, feh, companion } => stars::add(&dir, &name, ra, dec, distance_ly, mass, age_gyr, feh, companion),
             StarCmd::Move { dir, star, ra, dec, distance_ly } => stars::move_star(&dir, &star, ra, dec, distance_ly),
@@ -554,7 +560,7 @@ fn run(cli: Cli) -> R<()> {
             ConstellationCmd::Auto { dir, replace } => stars::constellation_auto(&dir, replace),
         },
         Cmd::Universe { dir, radius_mpc, limit } => stars::universe(&dir, radius_mpc, limit),
-        Cmd::Visit { dir, star, to } => stars::visit(&dir, &star, &to),
+        Cmd::Visit { dir, star, to } => stars::visit(&dir, &star, to.as_deref()),
         Cmd::Generate { dir, force, until, from, render } => world::generate(&dir, force, until, from, render),
         Cmd::Plan { dir } => world::plan(&dir),
         Cmd::Status { dir } => world::status(&dir),

@@ -17,6 +17,7 @@ use crate::draw::Draw;
 use crate::galaxy::Galaxy;
 use crate::sky::Observer;
 use crate::sol::GALACTIC;
+use geoforge_core::address::Address;
 use geoforge_core::body::GalacticSite;
 use geoforge_core::galactic::GalaxyId;
 use geoforge_core::seed::Seed;
@@ -85,27 +86,27 @@ impl SkyGalaxy {
     }
 }
 
-/// The galaxies a system at `site` (its galaxy `home_model`, seen from `observer`) sees
-/// brighter than `v_limit` before dust, brightest first.
+/// The galaxies a system at `site` (at `placement` in its universe, its galaxy
+/// `home_model`, seen from `observer`) sees brighter than `v_limit` before dust, brightest
+/// first.
 #[must_use]
-pub fn seen(site: &GalacticSite, system_seed: Seed, home_model: &Galaxy, observer: &Observer, v_limit: f64) -> Vec<SkyGalaxy> {
+pub fn seen(site: &GalacticSite, placement: Option<&Address>, system_seed: Seed, home_model: &Galaxy, observer: &Observer, v_limit: f64) -> Vec<SkyGalaxy> {
     let mut out = match Universe::of_site(site, system_seed) {
         None => real(observer),
-        Some(u) => generated(&u, home_model, observer, v_limit),
+        Some(u) => generated(&u, &u.home_at(placement, home_model), observer, v_limit),
     };
     out.retain(|g| g.v <= v_limit);
     out.sort_by(|a, b| a.v.total_cmp(&b.v));
     out
 }
 
-fn generated(u: &Universe, home_model: &Galaxy, observer: &Observer, v_limit: f64) -> Vec<SkyGalaxy> {
-    let home = u.home(home_model);
+fn generated(u: &Universe, home: &UniverseGalaxy, observer: &Observer, v_limit: f64) -> Vec<SkyGalaxy> {
     // The home galaxy's frame in the universe's: its axis is the north pole.
     let z = home.axis;
     let mut d = Draw::new(home.seed.child(b"frame"));
     let x = unit(cross(z, d.direction()));
     let frame = [x, cross(z, x), z];
-    u.galaxies_seen(home.position_mpc, REACH_MPC, v_limit + 1.0).into_iter().filter(|g| g.id != home.id).filter_map(|g| place(&g, &home, &frame, observer)).collect()
+    u.galaxies_seen(home.position_mpc, REACH_MPC, v_limit + 1.0).into_iter().filter(|g| g.id != home.id).filter_map(|g| place(&g, home, &frame, observer)).collect()
 }
 
 fn place(g: &UniverseGalaxy, home: &UniverseGalaxy, frame: &[[f64; 3]; 3], observer: &Observer) -> Option<SkyGalaxy> {
@@ -239,7 +240,7 @@ mod tests {
     #[test]
     fn the_sun_sees_the_real_neighbours() {
         let (site, seed, observer) = sun();
-        let g = seen(&site, seed, &Galaxy::milky_way(), &observer, 6.5);
+        let g = seen(&site, None, seed, &Galaxy::milky_way(), &observer, 6.5);
         assert_eq!(g.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Large Magellanic Cloud", "Small Magellanic Cloud", "Andromeda Galaxy", "Triangulum Galaxy"]);
         let lb = |d: [f64; 3]| {
             let local = observer.axes().map(|ax| dot(ax, d));
@@ -268,7 +269,7 @@ mod tests {
         for k in 0..24 {
             let mut site = sun().0;
             site.universe = Some(geoforge_core::galactic::UniverseSite::Seeded(Seed(100 + k)));
-            let g = seen(&site, Seed(k), &Galaxy::milky_way(), &sun().2, 6.5);
+            let g = seen(&site, None, Seed(k), &Galaxy::milky_way(), &sun().2, 6.5);
             assert!(g.iter().all(|g| g.v <= 6.5 && g.distance_pc > 1e3));
             counts.push(g.len());
         }

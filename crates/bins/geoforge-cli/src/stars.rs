@@ -361,7 +361,7 @@ pub fn universe(dir: &Path, radius_mpc: f64, limit: f64) -> R<()> {
         println!("This world is in the real universe: its sky has the Local Group and the bright galaxies near it (`geoforge sky`).");
         return Ok(());
     };
-    let home = u.home(field.galaxy());
+    let home = u.home_at(system.root.placement.as_ref(), field.galaxy());
     println!(
         "Home: {} ({}, {}), {:.1e} M☉ of stars in a {:.1e} M☉ halo, at ({:.1}, {:.1}, {:.1}) Mpc in universe {}",
         field.galaxy().name,
@@ -403,9 +403,9 @@ pub fn universe(dir: &Path, radius_mpc: f64, limit: f64) -> R<()> {
     Ok(())
 }
 
-/// A new world at `star` of `dir`'s galaxy, in `to`: the system made at the star, the galaxy
-/// and its edits carried over.
-pub fn visit(dir: &Path, star: &str, to: &Path) -> R<()> {
+/// The system at `star` of `dir`'s galaxy: in `dir`'s universe, its focus body made there;
+/// for a world on its own, a new world in `to`, the galaxy and its edits carried over.
+pub fn visit(dir: &Path, star: &str, to: Option<&Path>) -> R<()> {
     let h = Here::open(dir)?;
     let id = h.find(star)?;
     let generated = geoforge_cosmos::galactic::system_at(&h.field, &id).ok_or("that star is gone")?.map_err(|b| format!("{b}: no world to stand on there"))?;
@@ -425,13 +425,21 @@ pub fn visit(dir: &Path, star: &str, to: &Path) -> R<()> {
             h.save(&edits)?;
         }
     }
-    let body = geoforge_cosmos::any_body(&generated.system, generated.focus).ok_or("the system's focus has no body")?;
     let grid = h.world.manifest.grid;
+    if let (Some(root), Some(here)) = (&h.world.universe, h.world.manifest.address) {
+        let mut u = geoforge_store::UniverseDir::open(root)?;
+        let w = geoforge_pipeline::create_at(&mut u, &here.up_to(geoforge_core::Level::Galaxy).star(geoforge_core::StarRef::Star(id)), None, grid)?;
+        crate::system::show(&w)?;
+        println!("\n{} at {} — now the focus of {}", w.manifest.focus_name, h.describe(&id), root.display());
+        return Ok(());
+    }
+    let to = to.ok_or("this world is on its own: give the new world's directory with --to")?;
+    let body = geoforge_cosmos::any_body(&generated.system, generated.focus).ok_or("the system's focus has no body")?;
     let seed = id.seed(h.field.galaxy_seed());
     let w =
         geoforge_pipeline::create_world(to, &geoforge_pipeline::NewWorld { seed, recipe: geoforge_cosmos::Recipe::default(), grid, body: Some(body), system: Some(generated.system), focus: None })?;
-    if let Some(g) = h.world.load_doc::<geoforge_cosmos::Galaxy>(geoforge_store::GALAXY_MODEL)? {
-        w.save_doc(geoforge_store::GALAXY_MODEL, &g)?;
+    if let Some(g) = h.world.load_galaxy_model::<geoforge_cosmos::Galaxy>()? {
+        w.save_galaxy_model(&g)?;
     }
     w.save_star_edits(&edits)?;
     crate::system::show(&w)?;

@@ -18,20 +18,21 @@ what it has (air, surface water) decide which generator fills it, or that it doe
 ```bash
 cargo build --release -p geoforge-cli          # binary: target/release/geoforge
 
-geoforge new worlds/demo --seed 42 --habitable   # a Sun-like star and its Earth-like world
+geoforge new worlds/demo --seed 42              # universe 42's default body: a Sun-like star's wet world
 geoforge generate worlds/demo --render      # ~40 s at 2048×1024; previews in worlds/demo/renders
 geoforge stats worlds/demo                  # summary numbers next to Earth's
 ```
 
 Other starting points:
 
-- `new --seed 42` without `--habitable` draws the system from the Milky Way's stellar
-  population: three in four are red dwarfs, one in sixteen a white dwarf, a few in a thousand
-  a giant, a blue star or a neutron star. The focus is the system's most Earth-like solid
-  body (often a tidally locked planet of a red dwarf); about one seed in six has nothing
-  solid (a lone black hole, say) and `new` says so. `--galaxy elliptical|dwarf|starburst`
-  draws from another population. `census` counts thousands of seeds and lists example
-  seeds of each kind of star.
+- `new --at <address>` makes any galaxy's, star's or body's of the universe instead (the
+  universe directory keeps every body made, at its address; `focus` switches between them).
+  A star's system is drawn from its galaxy's stellar population: three in four are red
+  dwarfs, one in sixteen a white dwarf, a few in a thousand a giant, a blue star or a
+  neutron star; the focus is the system's most Earth-like solid body (often a tidally
+  locked planet of a red dwarf), and a star with nothing solid (a lone black hole, say) is
+  refused. `census --galaxy elliptical|dwarf|starburst` counts thousands of systems of a
+  galaxy model and lists examples of each kind of star.
 
 - `new --archetype mars` starts from a real body instead of a generated system: `earth`,
   `mars`, `venus`, `mercury`, `moon`, `titan`, `europa`, `gas_giant`, `ice_giant` (real
@@ -46,7 +47,8 @@ Other starting points:
 
 | Command | What it does |
 |---|---|
-| `new <dir> --seed N [--habitable \| --galaxy NAME] [--width 2048] [--archetype NAME \| --focus BODY \| --body file]` | Create a world |
+| `new <dir> [--seed N] [--at ADDRESS] [--focus BODY] [--width 2048] [--archetype NAME \| --body file]` | Create a universe's body (or a world on its own) |
+| `focus <dir> [ADDRESS]` | List a universe directory's bodies, or switch its focus |
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
 | `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |

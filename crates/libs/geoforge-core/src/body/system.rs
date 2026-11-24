@@ -2,7 +2,8 @@
 
 use super::matter::Composition;
 use super::SOLAR_MASS_KG;
-use crate::key::{Address, Key};
+use crate::address::Address;
+use crate::key::Key;
 use crate::seed::Seed;
 use serde::{Deserialize, Serialize};
 
@@ -20,7 +21,8 @@ pub struct SystemRoot {
     pub seed: Seed,
     pub name: String,
     pub epoch: Epoch,
-    /// Filled when the system is attached to a galaxy sector. Never affects seeds.
+    /// Where the system is in its universe (its address, to the system's level); `None` for
+    /// systems made before addresses and hand-made ones. Never affects seeds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub placement: Option<Address>,
     /// The stellar population the system was drawn from, when it was drawn from a galaxy.

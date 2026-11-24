@@ -25,7 +25,8 @@
 
 use super::halos::{Halo, LIGHTEST};
 use crate::draw::Draw;
-use crate::galaxy::presets::{Morphology, SpiralStage};
+use crate::galaxy::presets::{GalaxyPreset, Morphology, SpiralStage};
+use crate::galaxy::Galaxy;
 use geoforge_core::galactic::GalaxyId;
 use geoforge_core::seed::Seed;
 
@@ -87,10 +88,48 @@ impl UniverseGalaxy {
         geoforge_names::name(self.seed.0)
     }
 
+    /// The seed of its stars.
+    #[must_use]
+    pub fn stars_seed(&self) -> Seed {
+        self.seed.child(b"stars")
+    }
+
+    /// Its galaxy model, to draw its stars from: the preset of its type (the Milky Way's for
+    /// a barred Sbc) scaled to its stellar mass and its size against the size a galaxy of
+    /// the preset's type and mass has, and named.
+    #[must_use]
+    pub fn model(&self) -> Galaxy {
+        let template = match self.morphology {
+            Morphology::Spiral { stage: SpiralStage::Bc, barred: true } => GalaxyPreset::MilkyWay,
+            Morphology::Spiral { stage, barred } => GalaxyPreset::Spiral(stage, barred),
+            Morphology::Lenticular => GalaxyPreset::Lenticular,
+            Morphology::Elliptical => GalaxyPreset::Elliptical,
+            Morphology::DwarfSpheroidal => GalaxyPreset::DwarfSpheroidal,
+            Morphology::DwarfIrregular => GalaxyPreset::Dwarf,
+            Morphology::Starburst => GalaxyPreset::Starburst,
+        }
+        .galaxy();
+        let mass = template.mass_msun();
+        let mut g = template.scaled(self.stellar_msun / mass, self.half_light_kpc / half_light_kpc(template.morphology, mass));
+        g.name = self.name();
+        g
+    }
+
     /// Hubble type.
     #[must_use]
     pub fn kind(&self) -> String {
         self.morphology.label()
+    }
+}
+
+/// The typical half-light radius (kpc) of a galaxy of `morphology` holding `stellar` M☉ of
+/// stars (Shen et al. 2003; dwarf spheroidals from the Local Group's).
+#[must_use]
+pub fn half_light_kpc(morphology: Morphology, stellar: f64) -> f64 {
+    match morphology {
+        Morphology::Elliptical | Morphology::Lenticular => 2.88e-6 * stellar.powf(0.56),
+        Morphology::DwarfSpheroidal => 0.3 * (stellar / 1e6).powf(0.3),
+        _ => 0.1 * stellar.powf(0.14) * (1.0 + stellar / 3.98e10).powf(0.25),
     }
 }
 
@@ -163,13 +202,7 @@ fn galaxy(universe: Seed, id: GalaxyId, halo: f64, host: f64, position_mpc: [f64
     let stellar = stellar_mass(halo) * 10f64.powf(0.15 * d.gauss());
     let central = id.member == 0;
     let morphology = morphology(&mut d, stellar, central, host);
-    let scatter = 10f64.powf(0.15 * d.gauss());
-    let half_light_kpc = scatter
-        * match morphology {
-            Morphology::Elliptical | Morphology::Lenticular => 2.88e-6 * stellar.powf(0.56),
-            Morphology::DwarfSpheroidal => 0.3 * (stellar / 1e6).powf(0.3),
-            _ => 0.1 * stellar.powf(0.14) * (1.0 + stellar / 3.98e10).powf(0.25),
-        };
+    let half_light_kpc = 10f64.powf(0.15 * d.gauss()) * half_light_kpc(morphology, stellar);
     let (mass_to_light, thickness) = match morphology {
         Morphology::Elliptical => (4.0, d.range(0.5, 0.9)),
         Morphology::Lenticular => (3.0, 0.3),
@@ -258,6 +291,23 @@ mod tests {
         assert!((50.0..130.0).contains(&median), "median satellite distance {median} kpc");
         let inner = distances.iter().filter(|&&r| r < 20.0).count() as f64 / distances.len() as f64;
         assert!(inner < 0.03, "{inner} of satellites within 20 kpc");
+    }
+
+    /// A galaxy's model is its type's preset grown or shrunk to it: a Milky Way-like one
+    /// near the Milky Way's mass, and lengths following its size.
+    #[test]
+    fn models_follow_their_galaxies() {
+        let gs: Vec<UniverseGalaxy> = (0..200).flat_map(|k| of_halo(Seed(5), &milky_way_halo(k))).collect();
+        for g in gs.iter().filter(|g| g.stellar_msun > 1e6).take(60) {
+            let m = g.model();
+            assert_eq!((m.morphology, m.name.clone()), (g.morphology, g.name()));
+            assert!((m.mass_msun() / g.stellar_msun - 1.0).abs() < 1e-9);
+        }
+        let mw = gs.iter().find(|g| g.morphology == Galaxy::milky_way().morphology && g.is_central()).expect("a barred Sbc");
+        let model = mw.model();
+        let l = model.reference_kpc / Galaxy::milky_way().reference_kpc;
+        assert!((l * half_light_kpc(mw.morphology, Galaxy::milky_way().mass_msun()) / mw.half_light_kpc - 1.0).abs() < 1e-9);
+        assert!((0.5..2.0).contains(&l), "a Milky Way-like galaxy {l} times as large");
     }
 
     fn halos_dist(p: [f64; 3]) -> f64 {

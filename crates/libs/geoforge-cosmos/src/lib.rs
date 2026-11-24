@@ -1,13 +1,11 @@
-//! Thin cosmology: one solar system as the world's root.
+//! Cosmology: a universe from a seed, down to any body's
+//! [`BodyContext`](geoforge_core::BodyContext); the surface pipeline never sees this crate.
 //!
-//! The system is a pure function of its own key and seed (never of ancestors), so it can
-//! later be attached to a galaxy sector without changing anything inside it. Its job is to
-//! produce a [`BodyContext`](geoforge_core::BodyContext) for any of its bodies; the surface
-//! pipeline never sees this crate.
-//!
-//! Two recipes make a system ([`Recipe`]): the habitable one, a Sun-like star with an
-//! Earth-like world ([`generate_system`]), and a draw from a galaxy's stellar population, any
-//! star alive or dead with whatever planets it kept ([`galactic_system`]).
+//! Everything is reached by its address ([`resolve`]): a universe's galaxies, a galaxy's
+//! stars, the system born with a star (a draw from the galaxy's stellar population: any star
+//! alive or dead, with whatever planets it kept), a body of it. A system is a pure function
+//! of its star's seed. Worlds on their own may still use the habitable recipe, a Sun-like
+//! star with an Earth-like world ([`generate_system`], [`Recipe`]).
 //!
 //! | Module | Concern |
 //! |---|---|
@@ -20,7 +18,8 @@
 //! | `dynamics` | spacing, scattering, hot Jupiters, resonant belts, Trojans |
 //! | [`spin`] | tilts that hold or wander, rotation held off by thermal tides |
 //! | [`constellations`] | figures drawn from a sky's brightest stars |
-//! | [`universe`] | halos and the galaxies in them around a home galaxy; other galaxies in a sky |
+//! | [`resolve`] | any galaxy, system or body from its address; a universe's default body |
+//! | [`universe`] | halos and the galaxies in them, and their models; other galaxies in a sky |
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
 //! | [`sky`] | the naked-eye stars around a system, dimmed by dust, and its galaxy's glow |
@@ -39,6 +38,7 @@ pub mod galactic;
 pub mod galaxy;
 mod planets;
 pub mod population;
+pub mod resolve;
 pub mod sectors;
 pub mod sky;
 pub mod sol;

@@ -148,7 +148,9 @@ pub struct Sky {
 /// If the world has no system, or its galaxy documents do not read.
 pub fn starfield(world: &World) -> Result<Starfield> {
     let system = world.load_system()?.ok_or_else(|| crate::Error::Invalid("this world has no solar system (a hand-made body), so no galaxy around it".into()))?;
-    let galaxy: Option<Galaxy> = world.load_doc(geoforge_store::GALAXY_MODEL)?;
+    // The world's own model, else its address's galaxy's (else the preset its site names).
+    let galaxy: Option<Galaxy> = world.load_galaxy_model()?;
+    let galaxy = galaxy.or_else(|| system.root.placement.and_then(|a| geoforge_cosmos::resolve::galaxy(&a).ok()).map(|g| g.model));
     Ok(Starfield::of_system(&system, galaxy, world.load_star_edits()?))
 }
 
@@ -225,7 +227,7 @@ pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64, field:
         .root
         .site
         .as_ref()
-        .map(|site| geoforge_cosmos::universe::sky::seen(site, system.root.seed, field.galaxy(), observer, GALAXY_LIMIT + 1.0))
+        .map(|site| geoforge_cosmos::universe::sky::seen(site, system.root.placement.as_ref(), system.root.seed, field.galaxy(), observer, GALAXY_LIMIT + 1.0))
         .unwrap_or_default()
         .into_iter()
         .map(|g| {

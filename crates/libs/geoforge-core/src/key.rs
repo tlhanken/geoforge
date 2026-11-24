@@ -1,4 +1,4 @@
-//! Stable identity: keys and addresses.
+//! Stable identity: keys (addresses are in [`crate::address`]).
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -12,41 +12,6 @@ pub struct Key(pub u64);
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-/// What kind of entity a key in an address names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EntityKind {
-    Universe,
-    Galaxy,
-    Sector,
-    System,
-    Body,
-}
-
-/// Where an entity lives: the chain of keys from the outermost container down.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Address(pub Vec<(EntityKind, Key)>);
-
-impl Address {
-    #[must_use]
-    pub fn root(kind: EntityKind, key: Key) -> Self {
-        Self(vec![(kind, key)])
-    }
-
-    #[must_use]
-    pub fn child(&self, kind: EntityKind, key: Key) -> Self {
-        let mut v = self.0.clone();
-        v.push((kind, key));
-        Self(v)
-    }
-
-    #[must_use]
-    pub fn last(&self) -> Option<(EntityKind, Key)> {
-        self.0.last().copied()
     }
 }
 

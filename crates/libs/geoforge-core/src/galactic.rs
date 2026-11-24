@@ -61,7 +61,7 @@ impl TryFrom<String> for GalaxyId {
 }
 
 /// The universe a system's galaxy sits in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UniverseSite {
     /// The real Local Group and nearby galaxies, as catalogued (the Solar System).

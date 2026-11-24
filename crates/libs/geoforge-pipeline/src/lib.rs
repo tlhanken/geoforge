@@ -113,8 +113,61 @@ pub fn create_world(root: &Path, opts: &NewWorld) -> Result<World> {
         sources: BTreeMap::new(),
         provenance: BTreeMap::new(),
         not_applicable: BTreeMap::new(),
+        address: None,
     };
     Ok(World::create(root, manifest, system.as_ref(), &body)?)
+}
+
+/// The world of the body at `address` in universe directory `universe`, made if it is not
+/// yet, and made the universe's focus. The address is completed to a body by the default
+/// rule ([`geoforge_cosmos::resolve::complete`]); `focus`, if given, names the body of the
+/// system instead (a body's name, or `"<belt name> #<n>"`). The galaxy's model and star
+/// edits are the universe's.
+///
+/// # Errors
+/// If the address is of another universe or names nothing, the focus name is unknown, or the
+/// grid is invalid.
+pub fn create_at(universe: &mut geoforge_store::UniverseDir, address: &geoforge_core::Address, focus: Option<&str>, grid: GridSpec) -> Result<World> {
+    use geoforge_cosmos::resolve;
+    let invalid = |e: resolve::Unresolved| PipelineError::Invalid(e.to_string());
+    if address.universe != universe.doc.universe.universe {
+        return Err(PipelineError::Invalid(format!("{address} is not in the universe {}", universe.doc.universe)));
+    }
+    grid.build()?;
+    let mut address = if focus.is_some() && address.level() >= geoforge_core::Level::System { address.up_to(geoforge_core::Level::System) } else { resolve::complete(address).map_err(invalid)? };
+    let mut galaxy = resolve::galaxy(&address).map_err(invalid)?;
+    if let Some(model) = universe.galaxy_model(&address)? {
+        galaxy.model = model;
+    }
+    let field = galaxy.starfield(universe.star_edits(&address)?);
+    let generated = resolve::system(&address, &field).map_err(invalid)?;
+    if let Some(name) = focus {
+        let body = geoforge_cosmos::find_body(&generated.system, name).ok_or_else(|| PipelineError::Invalid(format!("no body named '{name}' in the system")))?;
+        address = address.up_to(geoforge_core::Level::System).body(body.key);
+    }
+    if let Some(w) = universe.world(&address)? {
+        universe.set_focus(address)?;
+        return Ok(w);
+    }
+    let body = resolve::body(&address, &generated.system).map_err(invalid)?;
+    let params = LayerId::ALL.into_iter().filter_map(|l| registry::select(l, &body).ok()).map(|i| (i.name().to_string(), i.default_params())).collect();
+    let manifest = Manifest {
+        schema_version: geoforge_core::SCHEMA_VERSION,
+        code_version: CODE_VERSION.into(),
+        // The layers' seed: the system's, cut to the 63 bits TOML holds.
+        root_seed: Seed(generated.system.root.seed.0 & i64::MAX as u64),
+        focus: body.key,
+        focus_name: body.name.clone(),
+        grid,
+        params,
+        sources: BTreeMap::new(),
+        provenance: BTreeMap::new(),
+        not_applicable: BTreeMap::new(),
+        address: Some(address),
+    };
+    let w = World::create(&universe.body_root(&address), manifest, Some(&generated.system), &body)?;
+    universe.set_focus(address)?;
+    Ok(w)
 }
 
 // ---------------------------------------------------------------- plan

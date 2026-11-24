@@ -26,6 +26,20 @@ pub enum Shape {
     PowerLaw { inner: f64, outer: f64, break_kpc: f64, core_kpc: f64, q: f64, edge_kpc: f64 },
 }
 
+impl Shape {
+    /// The same shape with every length times `l`.
+    #[must_use]
+    pub fn scaled(&self, l: f64) -> Self {
+        match *self {
+            Self::Disk { scale_length_kpc, height } => Self::Disk { scale_length_kpc: scale_length_kpc * l, height: height.scaled(l) },
+            Self::Ellipsoid { scales_kpc, angle_deg } => Self::Ellipsoid { scales_kpc: scales_kpc.map(|s| s * l), angle_deg },
+            Self::Hernquist { a_kpc, q } => Self::Hernquist { a_kpc: a_kpc * l, q },
+            Self::Plummer { a_pc } => Self::Plummer { a_pc: a_pc * l },
+            Self::PowerLaw { inner, outer, break_kpc, core_kpc, q, edge_kpc } => Self::PowerLaw { inner, outer, break_kpc: break_kpc * l, core_kpc: core_kpc * l, q, edge_kpc: edge_kpc * l },
+        }
+    }
+}
+
 /// A disk's scale height, pc.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -43,6 +57,15 @@ pub enum Height {
 }
 
 impl Height {
+    /// Every height times `l`.
+    #[must_use]
+    pub fn scaled(self, l: f64) -> Self {
+        match self {
+            Self::Fixed { pc } => Self::Fixed { pc: pc * l },
+            Self::Aging { young_pc, old_pc, tau_gyr } => Self::Aging { young_pc: young_pc * l, old_pc: old_pc * l, tau_gyr },
+        }
+    }
+
     #[must_use]
     pub fn at(&self, age_gyr: f64) -> f64 {
         match *self {

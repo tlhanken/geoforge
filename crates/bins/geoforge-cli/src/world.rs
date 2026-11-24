@@ -5,43 +5,85 @@ use crate::system::show;
 use crate::R;
 use geoforge_core::grid::GridSpec;
 use geoforge_core::product::{LayerId, ProductId};
+use geoforge_core::Address;
 use geoforge_core::{BodyContext, Seed};
 use geoforge_cosmos::{GalaxyPreset, Recipe};
 use geoforge_pipeline::{self as pipe, GenerateOptions, LayerAction, NewWorld, State, View};
-use geoforge_store::World;
+use geoforge_store::{UniverseDir, World};
 use std::path::{Path, PathBuf};
 
-#[allow(clippy::too_many_arguments)]
-pub fn new_world(
-    dir: &Path,
-    seed: u64,
-    galaxy: GalaxyPreset,
-    galaxy_file: Option<&Path>,
-    habitable: bool,
-    width: u32,
-    body: Option<PathBuf>,
-    archetype: Option<geoforge_core::Archetype>,
-    focus: Option<String>,
-) -> R<()> {
+pub fn new_world(dir: &Path, seed: u64, at: Option<&str>, width: u32, body: Option<PathBuf>, archetype: Option<geoforge_core::Archetype>, focus: Option<&str>) -> R<()> {
     if seed > i64::MAX as u64 {
         return Err("seed must be at most 9223372036854775807".into());
     }
-    let mut body = body.as_deref().map(read_body).transpose()?;
-    // An archetype is a real body: it comes with the real Solar System at its present.
-    let mut system = None;
-    if let Some(a) = archetype {
-        let (sys, b) = geoforge_cosmos::sol::archetype(Seed(seed), a);
-        (system, body) = (Some(sys), Some(b));
+    let grid = GridSpec::Equirect { width, height: width / 2 };
+    if body.is_some() || archetype.is_some() {
+        // A world on its own: a real body with the real Solar System at its present, or a
+        // hand-made body.
+        let mut body = body.as_deref().map(read_body).transpose()?;
+        let mut system = None;
+        if let Some(a) = archetype {
+            let (sys, b) = geoforge_cosmos::sol::archetype(Seed(seed), a);
+            (system, body) = (Some(sys), Some(b));
+        }
+        let w = pipe::create_world(dir, &NewWorld { seed: Seed(seed), recipe: Recipe::Habitable, grid, body, system, focus: None })?;
+        show(&w)?;
+        println!("\ncreated {} — next: geoforge generate {}", dir.display(), dir.display());
+        return Ok(());
     }
-    let own: Option<geoforge_cosmos::Galaxy> = galaxy_file.map(|p| -> R<_> { Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?) }).transpose()?;
-    let recipe = if habitable { Recipe::Habitable } else { Recipe::Galaxy(own.clone().unwrap_or_else(|| galaxy.galaxy())) };
-    let w = pipe::create_world(dir, &NewWorld { seed: Seed(seed), recipe, grid: GridSpec::Equirect { width, height: width / 2 }, body, system, focus })?;
-    if let Some(g) = &own {
-        w.save_doc(geoforge_store::GALAXY_MODEL, g)?;
-    }
+    let existing = UniverseDir::is_at(dir).then(|| UniverseDir::open(dir)).transpose()?;
+    let address = match at {
+        Some(text) => parse_address(text, existing.as_ref())?,
+        None => existing.as_ref().map_or(Address::universe(Seed(seed)), |u| u.doc.universe),
+    };
+    let made = existing.is_none();
+    let mut u = match existing {
+        Some(u) => u,
+        None => UniverseDir::create(dir, address)?,
+    };
+    let w = match pipe::create_at(&mut u, &address, focus, grid) {
+        Ok(w) => w,
+        Err(e) => {
+            if made {
+                // Leave no empty universe behind.
+                std::fs::remove_file(dir.join("universe.json"))?;
+                let _ = std::fs::remove_dir(dir);
+            }
+            return Err(e.into());
+        }
+    };
     show(&w)?;
-    println!("\ncreated {} — next: geoforge generate {}", dir.display(), dir.display());
+    let at = w.manifest.address.map(|a| a.to_string()).unwrap_or_default();
+    println!("\n{} at {at} in {} — next: geoforge generate {}", w.manifest.focus_name, dir.display(), dir.display());
     Ok(())
+}
+
+/// The bodies made in universe `dir`, or focus it on the one `at`.
+pub fn focus(dir: &Path, at: Option<&str>) -> R<()> {
+    let mut u = UniverseDir::open(dir)?;
+    if let Some(text) = at {
+        let a = parse_address(text, Some(&u))?;
+        let w = u.world(&a)?.ok_or_else(|| format!("{a} is not made yet: geoforge new {} --at {a}", dir.display()))?;
+        u.set_focus(a)?;
+        println!("focus: {} ({a})", w.manifest.focus_name);
+        return Ok(());
+    }
+    println!("universe {}", u.doc.universe);
+    for w in u.worlds()? {
+        let a = w.manifest.address;
+        let mark = if a == u.doc.focus { "*" } else { " " };
+        println!("{mark} {:<20} {}", w.manifest.focus_name, a.map(|a| a.to_string()).unwrap_or_default());
+    }
+    Ok(())
+}
+
+/// An address as typed; in a universe's directory the universe part may be left out.
+pub fn parse_address(text: &str, universe: Option<&UniverseDir>) -> R<Address> {
+    match (text.parse::<Address>(), universe) {
+        (Ok(a), _) => Ok(a),
+        (Err(e), Some(u)) => format!("{}/{}", u.doc.universe, text.trim_start_matches('/')).parse::<Address>().map_err(|_| e.into()),
+        (Err(e), None) => Err(e.into()),
+    }
 }
 
 pub fn generate(dir: &Path, force: bool, until: Option<String>, from: Option<String>, render: bool) -> R<()> {

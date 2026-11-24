@@ -5,14 +5,13 @@
 //! ([`members`]). Every galaxy has a stable identity ([`GalaxyId`]) that seeds it, so any
 //! observer sees the same galaxy and a query generates only the cubes it reaches.
 //!
-//! A world's galaxy (the Milky Way model, a preset or its own file) is placed in a universe
-//! seeded from its galaxy seed: it is the generated galaxy nearest the universe's origin
-//! that is like it — the same class (disk, elliptical, dwarf) and within 0.25 dex of its
-//! stellar mass. Its satellites and neighbours are that galaxy's. The Solar System's sky has
-//! the real Local Group and nearby bright galaxies instead ([`sky`]).
+//! Each galaxy has a model to draw its stars from ([`UniverseGalaxy::model`]): its type's
+//! preset scaled to its mass and size. A system's galaxy is the one its address names
+//! ([`crate::resolve`]); a system made before addresses is placed in the galaxy like its
+//! model nearest its universe's origin ([`Universe::home`]). The Solar System's sky has the
+//! real Local Group and nearby bright galaxies instead ([`sky`]).
 //!
-//! Not yet: visiting the stars of another galaxy (the zoom from a universe galaxy into its
-//! sectors), superclusters' filaments beyond the lognormal field.
+//! Not yet: superclusters' filaments beyond the lognormal field.
 
 pub mod halos;
 pub mod members;
@@ -20,6 +19,7 @@ pub mod sky;
 
 use crate::galaxy::presets::Morphology;
 use crate::galaxy::Galaxy;
+use geoforge_core::address::{Address, GalaxyRef};
 use geoforge_core::body::GalacticSite;
 use geoforge_core::galactic::{GalaxyId, UniverseSite};
 use geoforge_core::seed::Seed;
@@ -37,7 +37,8 @@ pub struct Universe {
 /// Broad classes a home galaxy is matched by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Class {
-    Disk,
+    Spiral,
+    Lenticular,
     Elliptical,
     Dwarf,
 }
@@ -46,8 +47,9 @@ impl Class {
     fn of(m: Morphology) -> Self {
         match m {
             Morphology::Elliptical => Self::Elliptical,
+            Morphology::Lenticular => Self::Lenticular,
             Morphology::DwarfIrregular | Morphology::DwarfSpheroidal => Self::Dwarf,
-            Morphology::Spiral { .. } | Morphology::Lenticular | Morphology::Starburst => Self::Disk,
+            Morphology::Spiral { .. } | Morphology::Starburst => Self::Spiral,
         }
     }
 }
@@ -98,8 +100,19 @@ impl Universe {
         out
     }
 
-    /// The galaxy a world's galaxy `like` is: the nearest to the origin of its class within
-    /// 0.25 dex of its stellar mass (or, failing any within 128 Mpc, of its mass alone).
+    /// The galaxy a system at `placement` is in: the galaxy its address names, or (for a
+    /// system made before addresses) the one like its galaxy `like` ([`Self::home`]).
+    #[must_use]
+    pub fn home_at(&self, placement: Option<&Address>, like: &Galaxy) -> UniverseGalaxy {
+        match placement.and_then(|a| a.galaxy) {
+            Some(GalaxyRef::Generated(id)) => self.galaxy(&id).unwrap_or_else(|| self.home(like)),
+            _ => self.home(like),
+        }
+    }
+
+    /// The galaxy like `like` nearest the universe's origin: of its type within 0.25 dex of
+    /// its stellar mass (failing any within 128 Mpc, of its class, then of its mass alone).
+    /// A universe's default galaxy is the one like the Milky Way.
     #[must_use]
     pub fn home(&self, like: &Galaxy) -> UniverseGalaxy {
         let target = like.mass_msun().max(1e5).log10();
@@ -110,14 +123,16 @@ impl Universe {
                 (stellar_mass((lo * hi).sqrt()).log10() - target).abs() < 0.8
             })
             .collect();
-        let near = |r: f64, strict: bool| -> Option<UniverseGalaxy> {
+        let near = |r: f64, alike: &dyn Fn(&UniverseGalaxy) -> bool| -> Option<UniverseGalaxy> {
             halos::within(self.seed, &self.field, [0.0; 3], r, bins.iter().copied())
                 .iter()
                 .map(|h: &Halo| central(self.seed, h))
-                .filter(|g| (g.stellar_msun.log10() - target).abs() < 0.25 && (!strict || Class::of(g.morphology) == class))
+                .filter(|g| (g.stellar_msun.log10() - target).abs() < 0.25 && alike(g))
                 .min_by(|a, b| halos::dist(a.position_mpc, [0.0; 3]).total_cmp(&halos::dist(b.position_mpc, [0.0; 3])))
         };
-        [8.0, 16.0, 32.0, 64.0, 128.0].into_iter().find_map(|r| near(r, true)).or_else(|| near(128.0, false)).unwrap_or_else(|| {
+        let same = |g: &UniverseGalaxy| g.morphology == like.morphology;
+        let kin = |g: &UniverseGalaxy| Class::of(g.morphology) == class;
+        [8.0, 16.0, 32.0, 64.0, 128.0].into_iter().find_map(|r| near(r, &same)).or_else(|| near(128.0, &kin)).or_else(|| near(128.0, &|_| true)).unwrap_or_else(|| {
             let halo = Halo { bin: 0, cube: [0, 0, 0], n: u32::MAX, mass_msun: 1e12, position_mpc: [0.0; 3] };
             central(self.seed, &halo)
         })
@@ -132,7 +147,7 @@ mod tests {
     fn a_milky_way_finds_its_place() {
         let u = Universe::new(Seed(21));
         let home = u.home(&Galaxy::milky_way());
-        assert!(matches!(home.morphology, Morphology::Spiral { .. } | Morphology::Lenticular | Morphology::Starburst), "{:?}", home.morphology);
+        assert_eq!(home.morphology, Galaxy::milky_way().morphology, "the same type");
         assert!((home.stellar_msun.log10() - Galaxy::milky_way().mass_msun().log10()).abs() < 0.25);
         assert_eq!(u.galaxy(&home.id).as_ref(), Some(&home), "found again by its identity");
         // Its satellites are there when looked for.
