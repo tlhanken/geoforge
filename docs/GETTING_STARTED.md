@@ -124,15 +124,17 @@ years. The day, the year and the second never change with the calendar.
 ## Take its pulse
 
 ```bash
-geoforge report worlds/demo                                  # worlds/demo/report/index.html
-geoforge report worlds/earth --place "London:51.5,-0.1" --place "Cairo:30.0,31.2"
+geoforge report worlds/demo          # worlds/demo/report/index.html: the lite report, seconds
+geoforge report worlds/demo --full   # every map, by layer, and the system's bodies
 ```
 
-One page to read at a glance: every map in themed groups with its key (classes, ramps,
-chances), the world's numbers against Earth's, three places (picked by climate unless you
-name them) with their hazards and two weeks of weather, the weather map, and the night sky
-with a key to star sizes, colours and planets. The folder opens in a browser or publishes
-as is.
+One page to read at a glance: the world whole on a globe in true colour, its key figures,
+13 main maps with their keys (true colour, plates, geologic provinces, surface rock,
+elevation, January and July winds, currents, temperature, precipitation, Köppen, rivers,
+biomes) and its numbers against Earth's. `--full` adds every other map in themed groups
+(hazards, pressure, seasons, sea ice, soils, resources, auroras) and the system. Places,
+weather and the sky have their own commands (`place`, `almanac`, `weather`, `sky`). The
+folder opens in a browser or publishes as is.
 
 To set worlds against an observed one (authored products holding real data, like the
 real-Earth worlds of `scripts/real-earth/ab.sh`):

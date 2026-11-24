@@ -31,7 +31,7 @@ pub fn render_globe(map: &RgbImage, size: u32, lat_deg: f64, lon_deg: f64, backg
                 let u = ((lon.to_degrees() + 180.0).rem_euclid(360.0) / 360.0 * mw).min(mw - 1.0);
                 let v = ((90.0 - lat.to_degrees()) / 180.0 * mh).clamp(0.0, mh - 1.0);
                 let p = map.get_pixel(u as u32, v as u32).0;
-                let shade = 0.12 + 0.95 * (x * light[0] + y * light[1] + z * light[2]).max(0.0);
+                let shade = 0.2 + 0.9 * (x * light[0] + y * light[1] + z * light[2]).max(0.0);
                 p.map(|v| (f64::from(v) * shade).min(255.0))
             };
             for k in 0..3 {

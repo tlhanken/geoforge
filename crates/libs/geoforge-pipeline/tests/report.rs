@@ -12,7 +12,7 @@ fn a_report_shows_every_map_with_its_key() {
     let new = NewWorld { recipe: geoforge_cosmos::Recipe::Habitable, seed: Seed(12345), grid: GridSpec::Equirect { width: 128, height: 64 }, body: None, system: None, focus: None };
     let mut w = pipe::create_world(&dir, &new).unwrap();
     pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
-    let r = report::build(&w, &report::Options { width: 256, ..report::Options::default() }).unwrap();
+    let r = report::build(&w, &report::Options { width: 256, full: true, ..report::Options::default() }).unwrap();
 
     // Every image the page shows is made, at the width asked for (keys aside).
     let made: Vec<&str> = r.images.iter().map(|(n, _)| n.as_str()).collect();
@@ -37,5 +37,11 @@ fn a_report_shows_every_map_with_its_key() {
     // The globe comes first, before any map; places, weather and sky are left to their commands.
     assert!(r.html.find("img/globe.jpg") < r.html.find("img/appearance.jpg"));
     assert!(!r.html.contains("id=\"places\"") && !r.html.contains("id=\"sky\""));
+
+    // The lite report keeps only the main maps, and no system printout.
+    let lite = report::build(&w, &report::Options { width: 256, ..report::Options::default() }).unwrap();
+    let shown: Vec<&str> = lite.images.iter().map(|(n, _)| n.as_str()).filter(|n| *n != "globe").collect();
+    assert!(shown.iter().all(|n| report::LITE.contains(n)) && shown.len() >= 10, "{shown:?}");
+    assert!(!lite.html.contains("id=\"system\"") && r.html.contains("id=\"system\""));
     let _ = std::fs::remove_dir_all(&dir);
 }

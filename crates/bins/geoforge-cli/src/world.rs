@@ -173,9 +173,9 @@ pub fn stats(dir: &Path) -> R<()> {
     Ok(())
 }
 
-pub fn report(dir: &Path, to: Option<PathBuf>, width: u32) -> R<()> {
+pub fn report(dir: &Path, to: Option<PathBuf>, width: u32, full: bool) -> R<()> {
     let w = World::open(dir)?;
-    let opts = pipe::report::Options { width, system_text: Some(crate::system::show_text(&w)?) };
+    let opts = pipe::report::Options { width, system_text: Some(crate::system::show_text(&w)?), full };
     let r = pipe::report::build(&w, &opts)?;
     let to = to.unwrap_or_else(|| w.root.join("report"));
     let files = geoforge_store::report::write(&to, &r.html, &r.images)?;

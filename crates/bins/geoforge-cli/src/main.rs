@@ -338,6 +338,10 @@ enum Cmd {
         /// Width of the maps, px.
         #[arg(long, default_value_t = 1200)]
         width: u32,
+        /// Every map (hazards, seasons, soils, resources) and the system's bodies, not only
+        /// the main maps.
+        #[arg(long)]
+        full: bool,
     },
     /// Edit the galaxy's stars around the world: add one, move, change or remove one, add a
     /// cluster. Positions are in the focus's sky (RA and Dec in degrees, distance in light
@@ -589,7 +593,7 @@ fn run(cli: Cli) -> R<()> {
         Cmd::WeatherMap { dir, day, to, width } => almanac::weather_map(&dir, day, to, width),
         Cmd::Seed { dir, product, owner } => world::seed(&dir, &product, owner),
         Cmd::Stats { dir } => world::stats(&dir),
-        Cmd::Report { dir, to, width } => world::report(&dir, to, width),
+        Cmd::Report { dir, to, width, full } => world::report(&dir, to, width, full),
         Cmd::Compare { real, models, labels, probes, sources, to, width } => world::compare(&real, &models, &labels, &probes, &sources, to, width),
     }
 }
