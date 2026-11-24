@@ -3,9 +3,11 @@
 //!
 //! The tree: a single star at the root; a wide binary as the primary with its companion in
 //! orbit (planets around each star, inside its stable zone: the companion's named "B I", "B
-//! II"); a close binary (under 1 AU at birth) as a barycentre with both stars and the planets
-//! around both; a triple's outer star orbits whichever of these is the root. A supernova that
-//! blows off more than half a pair's mass unbinds it, and the companion is gone.
+//! II"); a close binary (under 1 AU) as a barycentre with both stars and the planets around
+//! both; a triple's outer star orbits whichever of these is the root. A supernova that blows
+//! off more than half a pair's mass unbinds it, and the companion is gone. A pair close enough
+//! to touch lives through it ([`crate::binary`]): it may now be a white dwarf with a red dwarf
+//! days apart, round which the primary's planets, formed before, now orbit, or one star.
 //!
 //! Planets close to their star are tidally locked: within 0.35 AU·M^(1/3)·(age/4.5 Gyr)^(1/6)
 //! (Mercury's distance for the Sun; the whole habitable zone of a red dwarf). An eccentric one
@@ -13,6 +15,7 @@
 //! its thermal tide ([`crate::spin`]). A rocky world's tilt wanders unless a big moon steadies
 //! it. Giants keep their Trojans where no heavier neighbour clears them.
 
+use crate::binary;
 use crate::context::{belt_member, body_context};
 use crate::draw::Draw;
 use crate::dynamics;
@@ -79,58 +82,64 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     let root_key = keys.fresh();
     let sys_name = geoforge_names::name(seed.0);
     let (age, feh) = (ph.age_gyr, ph.metallicity_dex);
-    let primary = evolve(ph.primary_mass, age, feh);
-    let companion = ph.companions.first().map(|c| (evolve(c.initial_mass, age, feh), *c));
+    // The inner pair lives as a pair: close enough, one star's envelope goes to the other or
+    // swallows it ([`binary`]); the outer star of a triple lives as if alone.
+    let pair = ph.companions.first().map(|c| binary::evolve_pair(ph.primary_mass, c.initial_mass, c.a_au, c.e, age, feh));
+    let primary = pair.as_ref().map_or_else(|| evolve(ph.primary_mass, age, feh), |p| p.primary.clone());
+    // With its birth orbit, and today's separation and eccentricity.
+    let companion = pair.as_ref().zip(ph.companions.first()).and_then(|(p, c)| p.companion.clone().map(|s| (s, *c, (p.a_au, p.e))));
     let outer = ph.companions.get(1).map(|c| (evolve(c.initial_mass, age, feh), *c));
     let lettered = |l: &str| if ph.companions.is_empty() { sys_name.clone() } else { format!("{sys_name} {l}") };
 
     // The inner pair, if it is still bound.
     let pair_birth = ph.primary_mass + ph.companions.first().map_or(0.0, |c| c.initial_mass);
     let pair_now = primary.mass_solar + companion.as_ref().map_or(0.0, |c| c.0.mass_solar);
+    // Planets formed around the pair as it was born.
+    let born_close = ph.companions.first().is_some_and(|c| c.a_au < CLOSE_PAIR_AU);
     let exploded = |s: &Star| matches!(s.stage, StellarStage::NeutronStar | StellarStage::BlackHole);
     let bound = |stars: &[&Star], birth: f64, now: f64| !(stars.iter().any(|s| exploded(s)) && birth - now > 0.5 * birth);
-    let companion = companion.filter(|(s, _)| bound(&[&primary, s], pair_birth, pair_now));
-    let close = companion.as_ref().is_some_and(|(_, c)| c.a_au < CLOSE_PAIR_AU);
+    let companion = companion.filter(|(s, _, _)| bound(&[&primary, s], pair_birth, pair_now));
+    let close = companion.as_ref().is_some_and(|(_, _, (a, _))| *a < CLOSE_PAIR_AU);
 
     let mut nodes = Vec::new();
     let a_key = keys.fresh();
     let host_key;
     let mut b_key = None;
-    if let (true, Some((b, c))) = (close, &companion) {
+    if let (true, Some((b, _, (a, e)))) = (close, &companion) {
         // A barycentre with both stars around it.
         host_key = keys.fresh();
         nodes.push(OrbitalNode { key: host_key, name: sys_name.clone(), parent: None, node: NodeKind::Barycenter, elements: None, precession: None });
-        let a = c.a_au * pair_birth / pair_now;
         let share_b = b.mass_solar / pair_now;
         // One orbit seen from the barycentre: B mirrors A, opposite it at every moment.
-        let orbit_a = orbit(&mut d, a * share_b, c.e);
+        let orbit_a = orbit(&mut d, a * share_b, *e);
         let orbit_b = Elements { a_au: a * (1.0 - share_b), argp_deg: (orbit_a.argp_deg + 180.0) % 360.0, ..orbit_a };
         nodes.push(star_node(a_key, lettered("A"), Some(host_key), primary.clone(), Some(orbit_a)));
         nodes.push(star_node(keys.fresh(), lettered("B"), Some(host_key), b.clone(), Some(orbit_b)));
     } else {
         host_key = a_key;
         nodes.push(star_node(a_key, lettered("A"), None, primary.clone(), None));
-        if let Some((b, c)) = &companion {
+        if let Some((b, _, (a, e))) = &companion {
             let key = keys.fresh();
             b_key = Some(key);
-            nodes.push(star_node(key, lettered("B"), Some(a_key), b.clone(), Some(orbit(&mut d, c.a_au * pair_birth / pair_now, c.e))));
+            nodes.push(star_node(key, lettered("B"), Some(a_key), b.clone(), Some(orbit(&mut d, *a, *e))));
         }
     }
     let total_birth = pair_birth + ph.companions.get(1).map_or(0.0, |c| c.initial_mass);
     let total_now = pair_now + outer.as_ref().map_or(0.0, |o| o.0.mass_solar);
-    let outer = outer.filter(|(s, _)| companion.is_some() && bound(&[&primary, s], total_birth, total_now));
+    let merged = pair.as_ref().is_some_and(|p| matches!(p.history, binary::History::Merged { .. }));
+    let outer = outer.filter(|(s, _)| (companion.is_some() || merged) && bound(&[&primary, s], total_birth, total_now));
     if let Some((c_star, c)) = &outer {
         nodes.push(star_node(keys.fresh(), lettered("C"), Some(host_key), c_star.clone(), Some(orbit(&mut d, c.a_au * total_birth / total_now, c.e))));
     }
 
     // Planets form around each host as it was born, then live through what its star became:
     // the primary (or the close pair), and a wide companion in its own stable zone.
-    let disk = birth_disk(ph, close);
+    let disk = birth_disk(ph, born_close);
     let host_now = if close { pair_now } else { primary.mass_solar };
-    let host_birth = if close { pair_birth } else { ph.primary_mass };
+    let host_birth = if born_close { pair_birth } else { ph.primary_mass };
     let formed = planets::form(&mut d, &disk);
     let mut hosts = vec![Host { key: host_key, mass: host_now, arch: planets::fate(&mut d, formed, &primary, host_now, host_birth), prefix: sys_name.clone() }];
-    if let (Some(key), Some((b, c))) = (b_key, &companion) {
+    if let (Some(key), Some((b, c, _))) = (b_key, &companion) {
         let mut db = Draw::new(seed.child(b"companion planets"));
         let formed = planets::form(&mut db, &companion_disk(ph, c));
         hosts.push(Host { key, mass: b.mass_solar, arch: planets::fate(&mut db, formed, b, b.mass_solar, c.initial_mass), prefix: format!("{sys_name} B") });
@@ -398,6 +407,7 @@ fn focus(system: &SolarSystem) -> Option<Key> {
 mod tests {
     use super::*;
     use crate::context::any_body;
+    use geoforge_core::derived::flux_w_m2;
 
     #[test]
     fn deterministic_and_complete() {
@@ -420,6 +430,34 @@ mod tests {
             }
         }
         assert!(barren < 150, "most systems have something solid: {barren} of 300 barren");
+    }
+
+    /// An Alpha Centauri: each star's planets get the other star's light as well, at the pair's
+    /// separation (1.5 L☉ at 23.4 AU, e 0.52, gives B's ~1/300 of what Earth gets).
+    #[test]
+    fn a_companion_lights_the_other_stars_planets() {
+        let g = Galaxy::milky_way();
+        let mut checked = 0;
+        for s in 0..40u64 {
+            let mut ph = crate::population::draw(&g, Seed(s));
+            (ph.primary_mass, ph.age_gyr, ph.metallicity_dex) = (1.1, 5.0, 0.2);
+            ph.companions = vec![Companion { initial_mass: 0.9, a_au: 23.4, e: 0.52 }];
+            let Ok(gen) = build(Seed(s), &ph) else { continue };
+            let stars: Vec<&OrbitalNode> = gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Star(_))).collect();
+            let [a, b] = stars[..] else { panic!("seed {s}: two stars") };
+            let lum = |n: &OrbitalNode| if let NodeKind::Star(st) = &n.node { st.luminosity_solar } else { 0.0 };
+            let sep = b.elements.expect("B orbits A");
+            let extra = |other: &OrbitalNode| flux_w_m2(lum(other), sep.a_au) / (1.0 - sep.e * sep.e).sqrt();
+            for n in gen.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Body(_)) && (n.parent == Some(a.key) || n.parent == Some(b.key))) {
+                let (own, other) = if n.parent == Some(a.key) { (a, b) } else { (b, a) };
+                let c = body_context(&gen.system, n.key).unwrap();
+                let bare = flux_w_m2(lum(own), n.elements.unwrap().a_au);
+                assert!((c.irradiance.flux_w_m2 - bare - extra(other)).abs() < 1e-6 * c.irradiance.flux_w_m2, "seed {s} {}: {} vs {bare}", n.name, c.irradiance.flux_w_m2);
+                checked += 1;
+            }
+        }
+        assert!(checked > 0, "some planets around either star");
+        assert!((flux_w_m2(1.52, 23.4) / (1.0 - 0.52f64.powi(2)).sqrt() / 1361.0 - 1.0 / 300.0).abs() < 1.0 / 1000.0);
     }
 
     #[test]

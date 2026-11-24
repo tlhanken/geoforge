@@ -14,6 +14,7 @@
 //! | [`pressure`] | sea-level pressure from the winds |
 
 pub mod appearance;
+pub mod dunes;
 pub mod ground;
 pub mod hazards;
 pub mod koppen;

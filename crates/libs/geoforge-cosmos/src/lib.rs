@@ -28,6 +28,7 @@
 //! | [`worlds`] | what each body is made of: shells, air, water, regime; the CO₂ thermostat |
 //! | [`context`] | the handoff for a body, belt members on demand, lookup by name |
 
+pub mod binary;
 mod draw;
 mod dynamics;
 

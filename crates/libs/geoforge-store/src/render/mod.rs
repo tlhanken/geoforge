@@ -318,7 +318,8 @@ pub fn render(p: ProductId, ctx: &Products, grid: &AnyGrid, radius_km: f64, sea:
             match elev {
                 Some(e) => image_of(spec, |i| {
                     let v = f64::from(e[i]);
-                    let c = if v < 0.0 { [190, 205, 220] } else { blend(elevation_color(v), [235, 235, 235], 0.6) };
+                    // On a dry world ground under the datum is land too (Titan's lowlands).
+                    let c = if is_sea(i) { [190, 205, 220] } else { blend(elevation_color(v.max(0.0)), [235, 235, 235], 0.6) };
                     lit(i, c)
                 })?,
                 None => image_of(spec, |_| [235, 235, 235])?,

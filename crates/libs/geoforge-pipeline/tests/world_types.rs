@@ -31,7 +31,7 @@ fn regimes_pick_their_generators() {
         (Archetype::Venus, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
         (Archetype::Moon, vec![Some(LidTectonics), Some(LidGeology), Some(LidElevation), None, None, Some(Erosion), None, None, None, None]),
         (Archetype::Europa, vec![Some(IceShellTectonics), Some(IceShellGeology), Some(IceShellElevation), None, None, Some(Erosion), None, None, None, None]),
-        (Archetype::Titan, vec![Some(IceShellTectonics), Some(IceShellGeology), Some(IceShellElevation), Some(Circulation), Some(Climate), Some(Erosion), None, None, None, None]),
+        (Archetype::Titan, vec![Some(IceShellTectonics), Some(IceShellGeology), Some(IceShellElevation), Some(Circulation), Some(Climate), Some(Erosion), Some(MethaneCycle), None, None, None]),
         (Archetype::GasGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
         (Archetype::IceGiant, [vec![None; 9], vec![Some(GiantBands)]].concat()),
     ];
@@ -68,6 +68,26 @@ fn ice_shells_generate_deterministically() {
         assert!(p1.get(p).is_some(), "{}", p.name());
         assert_eq!(p1.get(p), p2.get(p), "{} differs", p.name());
     }
+}
+
+/// Titan's methane gathers in lakes near the poles, about 1% of the ground (Titan: 1.1%,
+/// all poleward of 55°), and the same seed gives the same lakes.
+#[test]
+fn titans_lakes_gather_at_the_poles() {
+    let a = Archetype::Titan;
+    let mut w1 = world("titan-1", Some(a.context(Key(1), a.name())), None);
+    let mut w2 = world("titan-2", Some(a.context(Key(1), a.name())), None);
+    let (p1, _) = pipe::generate(&mut w1, &GenerateOptions::default(), |_| {}).unwrap();
+    let (p2, _) = pipe::generate(&mut w2, &GenerateOptions::default(), |_| {}).unwrap();
+    assert_eq!(p1.lakes(), p2.lakes());
+    let grid = GridSpec::Equirect { width: 128, height: 64 }.build().unwrap();
+    let lakes = &p1.lakes().expect("lakes").owner.values;
+    let area = |c: usize| grid.area_sr(c as geoforge_core::grid::Cell);
+    let wet: Vec<usize> = (0..grid.len()).filter(|&c| lakes[c] != 0).collect();
+    let share = wet.iter().map(|&c| area(c)).sum::<f64>() / (4.0 * std::f64::consts::PI);
+    assert!((0.002..0.03).contains(&share), "lakes cover {share}");
+    assert!(wet.iter().all(|&c| grid.center(c as geoforge_core::grid::Cell).to_lat_lon().lat_deg.abs() > 45.0), "lakes only near the poles");
+    assert!(p1.rivers().is_some_and(|r| !r.edges.is_empty()), "rivers run into them");
 }
 
 #[test]

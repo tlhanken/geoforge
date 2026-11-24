@@ -652,6 +652,17 @@ with 0.5–5 bar (Leconte et al. 2015; Valente et al. 2024); brown dwarfs (Burro
 polar cyclone rings and polygonal jets; fast spinners' ice cliff (the balance lets frost in
 no faster than radiation and transport answer) and rain lines at their fronts.
 
+Done (OpenSpec `other-worlds-2`): thermal tides of thick air (the day lengthens as
+(p/5 bar)² past 5 bar, which gives Venus its 117-day day; such worlds turn backward half the
+time, Correia & Laskar 2001); binary evolution of a system's inner pair
+(`geoforge_cosmos::binary`: Roche-lobe overflow by Eggleton, Hurley et al.'s critical mass
+ratios, stable transfer with a rejuvenated companion, common envelopes with αλ = 0.5,
+mergers); the other stars' light on each star's planets; a gyre front under each band of
+westerlies on fast spinners; Titan's methane cycle (`MethaneCycle`: the cold trap's rain and
+evaporation, no sea, a 0.85 m inventory filled coldest first: ~1% lakes poleward of 55°)
+over a drainage core shared with water (`hydrology::drain`); a `dunes` view for any world
+with rivers (Fryberger's RDP/DP for the form).
+
 The substellar point of a locked world is 0°E by the IAU's convention for synchronous bodies
 (the mean sub-parent point); its continents fall anywhere relative to it, as the tectonics
 seed places them.
@@ -659,11 +670,12 @@ seed places them.
 Open:
 - Land is assumed even for a locked world's weathering (a continent under the star would
   hold less CO₂): the air is decided before the surface exists.
-- Thermal tides of thick air (Venus); binary evolution; light from a companion on the other
-  star's planets.
-- Fast spinners' ocean gyres follow one jet.
 - Giants: storms do not drift by date; colour by class only.
-- Titan's surface processes (dunes, methane rain and lakes).
+- Titan: the climate gives no methane rain, so the dunes view bounds its dune belt by lakes
+  and rivers alone (±50° against ±30°), and its pole-to-equator contrast is 12 K, not 3; its
+  seas lie equally north and south, and its rain ignores the seasons.
+- Binary evolution: second transfers, donors of 8 M☉ or more, contact binaries; the sky's
+  stars live as if alone (a pair's members are worked out only where its system is built).
 
 ## Notes on the Artifexian summaries
 

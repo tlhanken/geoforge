@@ -20,15 +20,46 @@ struct Host {
     temperature_k: f64,
     /// Where the frost line was when the planets formed, in today's orbits, AU.
     frost_au: f64,
+    /// The year's mean light from the system's other stars, W/m² ([`others_flux_w_m2`]).
+    others_flux_w_m2: f64,
+}
+
+/// The year's mean light that the stars a host does not include give its planets, W/m²: a wide
+/// companion's on the primary's planets, the primary's on the companion's, an outer star's on
+/// all. Each star's light is taken at its separation from the host, averaged over that orbit,
+/// L/(4π a²√(1−e²)): the planets' own orbits are small beside it (they keep inside a third of
+/// it to stay stable). Alpha Centauri A gives B's planets ~1/300 of Earth's sunlight on
+/// average (1.5 L☉ at 23.4 AU, e 0.52).
+fn others_flux_w_m2(system: &SolarSystem, host_key: Key, own: &[Key]) -> f64 {
+    let Some(host) = system.node(host_key) else { return 0.0 };
+    system
+        .nodes
+        .iter()
+        .filter(|n| !own.contains(&n.key))
+        .filter_map(|n| {
+            let NodeKind::Star(s) = &n.node else { return None };
+            let sep = if n.parent == Some(host_key) {
+                n.elements?
+            } else if host.parent == Some(n.key) {
+                host.elements?
+            } else {
+                // Both orbit the same centre: the outer of the two orbits is the separation.
+                [n.elements, host.elements].into_iter().flatten().max_by(|a, b| a.a_au.total_cmp(&b.a_au))?
+            };
+            Some(flux_w_m2(s.luminosity_solar, sep.a_au) / (1.0 - sep.e * sep.e).max(1e-6).sqrt())
+        })
+        .sum()
 }
 
 fn host(system: &SolarSystem, parent: Key) -> Option<Host> {
     let node = system.node(parent)?;
-    let stars: Vec<&Star> = match &node.node {
-        NodeKind::Star(s) => vec![s],
-        NodeKind::Barycenter => system.children(parent).iter().filter_map(|c| if let NodeKind::Star(s) = &c.node { Some(s) } else { None }).collect(),
+    let stars: Vec<(Key, &Star)> = match &node.node {
+        NodeKind::Star(s) => vec![(parent, s)],
+        NodeKind::Barycenter => system.children(parent).iter().filter_map(|c| if let NodeKind::Star(s) = &c.node { Some((c.key, s)) } else { None }).collect(),
         _ => return None,
     };
+    let own: Vec<Key> = stars.iter().map(|(k, _)| *k).collect();
+    let stars: Vec<&Star> = stars.into_iter().map(|(_, s)| s).collect();
     let brightest = stars.iter().max_by(|a, b| a.luminosity_solar.total_cmp(&b.luminosity_solar))?;
     let mass_solar: f64 = stars.iter().map(|s| s.mass_solar).sum();
     let luminosity_solar = stars.iter().map(|s| s.luminosity_solar).sum();
@@ -43,7 +74,7 @@ fn host(system: &SolarSystem, parent: Key) -> Option<Host> {
         let birth: f64 = stars.iter().map(|s| s.initial_mass()).sum();
         frost_line_au(stars.iter().map(|s| main_sequence_luminosity(s.initial_mass())).sum()) * birth / mass_solar
     };
-    Some(Host { luminosity_solar, mass_solar, temperature_k: brightest.temperature_k, frost_au })
+    Some(Host { luminosity_solar, mass_solar, temperature_k: brightest.temperature_k, frost_au, others_flux_w_m2: others_flux_w_m2(system, parent, &own) })
 }
 
 /// The ancestor of `key` that orbits the star directly (the body itself for a planet).
@@ -73,7 +104,7 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
     let year = planet.elements?;
     let parent = node.parent.and_then(|p| system.node(p)).and_then(|p| if let NodeKind::Body(b) = p.node { Some((p, b)) } else { None });
 
-    let flux = flux_w_m2(star.luminosity_solar, year.a_au);
+    let flux = flux_w_m2(star.luminosity_solar, year.a_au) + star.others_flux_w_m2;
     // A moon of a giant spins in its planet's equatorial plane, so it shares the planet's seasons.
     let obliquity_deg = match parent {
         Some((_, pb)) if matches!(pb.class, BodyClass::GasGiant | BodyClass::IceGiant) => pb.obliquity_deg,
@@ -129,7 +160,7 @@ pub fn belt_member(system: &SolarSystem, belt: Key, index: u64) -> Option<BodyCo
     let ext = BodyExterior { class, mass_kg, radius_km, rotation_h: d.range(4.0, 20.0), obliquity_deg: d.range(0.0, 60.0) };
     let a_au = d.range(pop.inner_au, pop.outer_au);
     let orbit = Elements { a_au, e: d.range(0.0, 0.2), i_deg: d.range(0.0, 15.0), lan_deg: d.range(0.0, 360.0), argp_deg: d.range(0.0, 360.0), m0_deg: d.range(0.0, 360.0) };
-    let flux = flux_w_m2(star.luminosity_solar, a_au);
+    let flux = flux_w_m2(star.luminosity_solar, a_au) + star.others_flux_w_m2;
     let setting = Setting { flux_w_m2: flux, icy: icy || a_au > star.frost_au, tidally_heated: false };
     Some(BodyContext {
         key,

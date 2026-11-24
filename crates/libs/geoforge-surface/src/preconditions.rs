@@ -61,6 +61,17 @@ pub fn surface_water(body: &BodyContext) -> Check {
     require(body.interior.has_surface_liquid_water(), "needs liquid water on the surface")
 }
 
+/// Liquid methane on the surface instead of water (Titan): methane in the air, and the
+/// equilibrium temperature (Bond albedo 0.3) between 65 and 115 K, so that with a modest
+/// greenhouse the ground lies between methane's triple point (90.7 K) and its boiling point.
+pub fn surface_methane(body: &BodyContext) -> Check {
+    surface_air(body)?;
+    require(!body.interior.has_surface_liquid_water(), "has liquid water")?;
+    require(body.interior.partial_pressure_bar(geoforge_core::body::Species::Methane) >= 1e-3, "needs methane in the air")?;
+    let t = geoforge_core::derived::equilibrium_temperature_k(body.irradiance.flux_w_m2, 0.3);
+    require((65.0..115.0).contains(&t), "needs ground cold enough for liquid methane")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +95,6 @@ mod tests {
         }
         assert!(ok(Archetype::Earth, surface_water) && !ok(Archetype::Mars, surface_water));
         assert!(ok(Archetype::Titan, surface_air) && !ok(Archetype::Moon, surface_air));
+        assert!(ok(Archetype::Titan, surface_methane) && !ok(Archetype::Earth, surface_methane) && !ok(Archetype::Mars, surface_methane) && !ok(Archetype::Venus, surface_methane));
     }
 }

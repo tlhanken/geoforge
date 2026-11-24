@@ -17,8 +17,8 @@
 //! Brown dwarfs (under 0.08 M☉) never burn hydrogen: they shine by their birth heat and fade,
 //! by Burrows & Liebert's (1993) fits, L ≈ 4×10⁻⁵ L☉·(t/Gyr)^−1.3·(M/0.05 M☉)^2.64 and
 //! T ≈ 1550 K·(t/Gyr)^−0.32·(M/0.05 M☉)^0.83, which put them about a Jupiter radius across,
-//! through the spectral types M, L (from 2400 K), T (1300 K) and Y (550 K). Binary evolution
-//! (mass transfer, mergers) is not modelled: every star of a multiple lives as if alone.
+//! through the spectral types M, L (from 2400 K), T (1300 K) and Y (550 K). This is a star
+//! alone; a pair close enough to touch lives through [`crate::binary`].
 
 use geoforge_core::body::{Star, StellarStage};
 use geoforge_core::derived::{effective_temperature_k, main_sequence_luminosity, main_sequence_radius};

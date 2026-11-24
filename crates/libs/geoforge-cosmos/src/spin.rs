@@ -17,10 +17,14 @@
 //! (Leconte et al. 2015; Valente et al. 2024, their fit and their eccentric runs), where the
 //! solar day comes in at ~30 days (the thermal tide's peak, Leconte's σ₀ = 145 per year) and
 //! shortens to one day by 0.62 AU around a 0.82 M☉ star: 30 d·(a/a_c)^−4.7. That is worked
-//! out for air near a bar, and is used for 0.5–5 bar; with less the planet locks. Thicker air
-//! (Venus's 92 bar) responds more slowly and is not modelled: such a world stays locked. The
-//! planet keeps the prograde of the two stable states, the one it falls into while being
-//! slowed.
+//! out for air near a bar, and is used from 0.5 bar up; with less the planet locks. Thicker
+//! air holds its heat longer (its radiative time grows with its mass), so the bulge lags less
+//! and the day it settles to is longer: past 5 bar the day grows as (p/5 bar)², which brings
+//! Venus's 92 bar at 0.72 AU to its 117-day solar day. Up to 5 bar the planet keeps the
+//! prograde of the two stable states, the one it falls into while being slowed; thick air
+//! drives it toward either (Correia & Laskar 2001, 2003: which one turns on the planet's
+//! early spin, tilt and the friction between its core and mantle), so a thick-aired world
+//! turns backward half the time, as Venus does (tilt 177°).
 
 use crate::context::body_context;
 use crate::draw::Draw;
@@ -29,8 +33,10 @@ use geoforge_core::key::Key;
 
 /// Birth-to-now reach of a moonless world's tilt, degrees: from Lissauer et al. to Laskar.
 const WANDER_DEG: (f64, f64) = (10.0, 45.0);
-/// Air (bar) for which the thermal tide is worked out.
+/// Air (bar) for which the thermal tide is worked out, and past which it is thick.
 const THERMAL_TIDE_BAR: (f64, f64) = (0.5, 5.0);
+/// How fast the day lengthens with thick air's pressure, (p/5 bar)^this.
+const THICK_AIR_SLOPE: f64 = 2.0;
 /// Solar day where the thermal tide first wins, days.
 const THERMAL_TIDE_DAY_D: f64 = 30.0;
 /// How fast the solar day shortens outward of a_c.
@@ -56,19 +62,28 @@ pub fn thermal_tide_edge_au(star_mass: f64, e: f64) -> f64 {
     (0.4 - 0.12 * star_mass).max(0.05) * (1.0 + 0.8 * e * e)
 }
 
-/// Sidereal rotation (hours) of a planet that tides would lock, at `a_au` with eccentricity
-/// `e` from a star of `star_mass` M☉, under `pressure_bar` of air, with a year of `year_h`
-/// hours: `None` if it locks after all.
+/// Solar day (hours) that the thermal tide holds a planet to, at `a_au` with eccentricity `e`
+/// from a star of `star_mass` M☉, under `pressure_bar` of air: `None` if it locks after all.
+#[must_use]
+pub fn thermal_tide_solar_day_h(a_au: f64, e: f64, star_mass: f64, pressure_bar: f64) -> Option<f64> {
+    let edge = thermal_tide_edge_au(star_mass, e);
+    (pressure_bar >= THERMAL_TIDE_BAR.0 && a_au > edge)
+        .then(|| 24.0 * THERMAL_TIDE_DAY_D * (a_au / edge).powf(-THERMAL_TIDE_SLOPE) * (pressure_bar / THERMAL_TIDE_BAR.1).max(1.0).powf(THICK_AIR_SLOPE))
+}
+
+/// Sidereal rotation (hours) of such a planet turning forward, with a year of `year_h` hours.
 #[must_use]
 pub fn thermal_tide_rotation_h(a_au: f64, e: f64, star_mass: f64, pressure_bar: f64, year_h: f64) -> Option<f64> {
-    if !(THERMAL_TIDE_BAR.0..=THERMAL_TIDE_BAR.1).contains(&pressure_bar) {
-        return None;
-    }
-    let edge = thermal_tide_edge_au(star_mass, e);
-    (a_au > edge).then(|| {
-        let solar_h = 24.0 * THERMAL_TIDE_DAY_D * (a_au / edge).powf(-THERMAL_TIDE_SLOPE);
-        1.0 / (1.0 / solar_h + 1.0 / year_h)
-    })
+    thermal_tide_solar_day_h(a_au, e, star_mass, pressure_bar).map(|solar_h| 1.0 / (1.0 / solar_h + 1.0 / year_h))
+}
+
+/// Spin of such a planet turning backward: its sidereal rotation (hours) and whether that
+/// spin, measured along the orbit's pole, is backward (a tilt past 90°). A solar day longer
+/// than the year leaves the planet turning slowly forward.
+#[must_use]
+pub fn backward_rotation_h(solar_h: f64, year_h: f64) -> (f64, bool) {
+    let spin = 1.0 / year_h - 1.0 / solar_h;
+    (1.0 / spin.abs().max(1e-12), spin < 0.0)
 }
 
 /// Rotation (hours) of a world tidally locked on an orbit of `year_h` hours and eccentricity
@@ -90,14 +105,21 @@ pub(crate) fn set_body(nodes: &mut [OrbitalNode], key: Key, f: impl FnOnce(&mut 
 }
 
 /// Free the locked rocky planets of `system` (keys, with their hosts' masses in M☉) whose air's
-/// thermal tide holds them off.
+/// thermal tide holds them off; a thick-aired one turns backward or forward by a draw of its own.
 pub(crate) fn thermal_tides(system: &mut SolarSystem, locked: &[(Key, f64)]) {
     for &(key, host_mass) in locked {
         let Some(ctx) = body_context(system, key) else { continue };
         let year_h = ctx.irradiance.year_days * 24.0;
-        if let Some(rotation_h) = thermal_tide_rotation_h(ctx.orbit.a_au, ctx.orbit.e, host_mass, ctx.interior.surface_pressure_bar(), year_h) {
-            set_body(&mut system.nodes, key, |b| b.rotation_h = rotation_h);
-        }
+        let pressure = ctx.interior.surface_pressure_bar();
+        let Some(solar_h) = thermal_tide_solar_day_h(ctx.orbit.a_au, ctx.orbit.e, host_mass, pressure) else { continue };
+        let backward = pressure > THERMAL_TIDE_BAR.1 && Draw::new(system.root.seed.child_u64(b"thermal-tide", key.0)).u() < 0.5;
+        let (rotation_h, flip) = if backward { backward_rotation_h(solar_h, year_h) } else { (1.0 / (1.0 / solar_h + 1.0 / year_h), false) };
+        set_body(&mut system.nodes, key, |b| {
+            b.rotation_h = rotation_h;
+            if flip {
+                b.obliquity_deg = 180.0 - b.obliquity_deg;
+            }
+        });
     }
 }
 
@@ -137,8 +159,21 @@ mod tests {
         assert!((20.0..30.0).contains(&(1.0 / (1.0 / near - 1.0 / 2000.0) / 24.0)), "{near} h");
         assert!(thermal_tide_rotation_h(0.25, 0.0, 0.7, 1.0, 2000.0).is_none());
         assert!(thermal_tide_rotation_h(0.5, 0.0, 0.7, 0.1, 2000.0).is_none());
-        assert!(thermal_tide_rotation_h(0.5, 0.0, 0.7, 90.0, 2000.0).is_none(), "Venus-like air is not modelled");
         // Eccentric orbits need to be farther out (Valente et al.: 0.35 AU needs e under 0.33).
         assert!(thermal_tide_edge_au(0.7, 0.33) > 1.08 * edge);
+    }
+
+    /// Venus: 92 bar at 0.72 AU gives its 117-day solar day, and turning backward, its
+    /// 243-day sidereal day; air past 5 bar lengthens the day.
+    #[test]
+    fn thick_air_gives_venus_its_day() {
+        let solar = thermal_tide_solar_day_h(0.7233, 0.0068, 1.0, 92.0).unwrap() / 24.0;
+        assert!((100.0..135.0).contains(&solar), "solar day {solar} d");
+        let (sidereal, backward) = backward_rotation_h(solar * 24.0, 224.7 * 24.0);
+        assert!(backward && (215.0..275.0).contains(&(sidereal / 24.0)), "{} d", sidereal / 24.0);
+        let at = |p: f64| thermal_tide_solar_day_h(0.5, 0.0, 0.7, p).unwrap();
+        assert!((at(5.0) - at(1.0)).abs() < 1e-9 && at(20.0) > 10.0 * at(5.0));
+        // A day longer than the year leaves the planet turning slowly forward.
+        assert!(!backward_rotation_h(500.0 * 24.0, 224.7 * 24.0).1);
     }
 }

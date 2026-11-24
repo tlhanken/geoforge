@@ -151,12 +151,13 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
 
     if let (Some(rv), Some(lk)) = (pr.rivers(), pr.lakes()) {
         let mut s = BTreeMap::new();
-        // Discharge into the sea: edges whose downstream node is a sea cell.
+        // Discharge into the sea: edges whose downstream node is a sea cell (on a world without
+        // one, a lake: the rivers' ends).
         let mut to_sea = 0.0;
         let mut mouths: Vec<f64> = Vec::new();
         for e in &rv.edges {
             if let Some(to) = rv.nodes.get(e.to) {
-                if elev[to.cell as usize] < 0.0 {
+                if if sea { elev[to.cell as usize] < 0.0 } else { lk.owner.values[to.cell as usize] != 0 } {
                     to_sea += e.attrs.discharge_m3_s;
                     mouths.push(e.attrs.discharge_m3_s);
                 }

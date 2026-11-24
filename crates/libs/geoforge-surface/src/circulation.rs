@@ -26,6 +26,7 @@
 //! Climate reads these products, so editing a wind or current map changes rainfall and
 //! temperature downstream.
 
+use crate::atmosphere::cells::jets_for;
 use crate::atmosphere::flow::{self, Keep};
 use crate::atmosphere::grid::is_sea;
 use crate::atmosphere::transport::semi_lagrangian;
@@ -207,7 +208,11 @@ impl OceanJet {
     }
 }
 
-fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams, jet: Option<&OceanJet>) -> (Vec<(f64, f64)>, Vec<f64>) {
+/// `jets` is the count of eddy-driven jets per hemisphere ([`jets_for`]): a fast spinner's
+/// westerlies come in several bands, and each drives a subtropical and a subpolar gyre of its
+/// own (the gyres of a fast-spinning ocean world in GCMs, Cullum et al. 2014), so its basins
+/// hold a stack of gyres, each pair meeting under its own jet.
+fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationParams, jet: Option<&OceanJet>, jets: u32) -> (Vec<(f64, f64)>, Vec<f64>) {
     let g = &a.g;
     let b = basins(a, radius_km);
     // Zonal wind stress (quadratic drag) averaged over each row's sea.
@@ -229,8 +234,9 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         })
         .collect();
     // Basin-scale stress varies smoothly with latitude (eddies and storms average out the
-    // idealised cell pattern's kinks).
-    let sigma = (10.0 / g.res).max(1.0);
+    // idealised cell pattern's kinks), over a share of each jet's band.
+    let band_share = 1.0 / f64::from(jets.max(1));
+    let sigma = (10.0 * band_share / g.res).max(1.0);
     let rad = (3.0 * sigma).ceil() as i64;
     let tau: Vec<f64> = (0..g.h as i64)
         .map(|y| {
@@ -266,7 +272,7 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             s / w
         })
         .collect();
-    let fronts = gyre_fronts(g, &tau);
+    let fronts = gyre_fronts(g, &tau, jets);
     // Sverdrup interior closed by a Stommel western boundary layer.
     let psi: Vec<f64> = (0..g.len())
         .map(|i| {
@@ -285,7 +291,8 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
     // broad across the interior, and along a shore wherever one stands across its path, so
     // whatever flows into a stretch of sea flows out and none crosses a coast.
     let cur = flow::from_streamfunction(g, radius_km, &sea, &psi);
-    let reach = overturning_reach(a, &b, fronts, radius_km);
+    // Deep water forms only beyond the most poleward gyres.
+    let reach = overturning_reach(a, &b, (fronts[0].last().copied(), fronts[1].last().copied()), radius_km);
     let mut overturning = vec![0.0; g.len()];
     // Scale so the strongest western boundary currents (meridional flow) reach the set speed.
     let mut speeds: Vec<f64> = cur.iter().map(|v| v.1.abs()).filter(|s| *s > 0.0).collect();
@@ -302,13 +309,13 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         }
         let lat = g.lat(y);
         let hemi = lat.signum();
-        let gyre = if hemi > 0.0 { fronts.0 } else { fronts.1 };
+        let gyres = if hemi > 0.0 { &fronts[0] } else { &fronts[1] };
         // Poleward of where the western boundary current separates, the cold current coming
         // down from the subpolar gyre takes its place along the coast (the Labrador Current,
         // Oyashio and Malvinas Current), slower than the warm current it meets. (Where the
         // warm current stops, its water has turned offshore into the jet below.)
-        if let Some(f) = gyre {
-            if v.1 * hemi > 0.0 && lat.abs() < f.front + 1.0 {
+        if let Some(f) = gyres.iter().find(|f| lat.abs() < f.front + 1.0) {
+            if v.1 * hemi > 0.0 {
                 v.1 *= 1.0 - (1.0 + SUBPOLAR_COAST_SHARE) * smoothstep(f.separation, f.separation + 3.0, lat.abs());
             }
         }
@@ -338,7 +345,9 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
         // Currents). Only in a basin of a gyre's width: across a wider stretch of open water
         // (the Atlantic and Indian Oceans together at 45°S) the current joins the circumpolar
         // flow instead.
-        if let Some(GyreFront { front, separation }) = gyre {
+        // A stack of gyres repeats this under each jet, its widths shrunk with the band.
+        let (jet_deg, beyond_deg) = ((5.0 * band_share).max(1.5 * g.res), 28.0 * band_share);
+        for (k, &GyreFront { front, separation }) in gyres.iter().enumerate() {
             let basin = 1.0 - open_band[y];
             let width = b.west_km[i] + b.east_km[i];
             let crossing = 1.0 - smoothstep(MAX_GYRE_KM, 1.5 * MAX_GYRE_KM, width);
@@ -348,9 +357,9 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             // its path.
             let path = separation + (front - separation) * smoothstep(0.0, JET_RISE_SHARE, x_rel);
             let rise_km = (front - separation) * smoothstep_slope(0.0, JET_RISE_SHARE, x_rel) / width.max(1.0) * radius_km.to_radians();
-            let jet = (-((lat.abs() - path) / 5.0).powi(2)).exp();
+            let jet = (-((lat.abs() - path) / jet_deg).powi(2)).exp();
             j.1 += hemi * basin * crossing * p.drift_m_s * jet * (1.0 - 0.5 * x_rel) * rise_km.min(1.0);
-            let beyond = ((lat.abs() - front) / 5.0).clamp(0.0, 1.0) * ((front + 28.0 - lat.abs()) / 6.0).clamp(0.0, 1.0);
+            let beyond = ((lat.abs() - front) / jet_deg).clamp(0.0, 1.0) * ((front + beyond_deg - lat.abs()) / (6.0 * band_share)).clamp(0.0, 1.0);
             // An eastern shore the current can run up: a coast that also reaches ~5° toward
             // the equator (Norway, Alaska, southern Chile), not Antarctica's, which runs
             // east–west.
@@ -363,7 +372,7 @@ fn currents(a: &Atmo, annual: &[(f64, f64)], radius_km: f64, p: &CirculationPara
             // Where the subpolar sea opens wide onto a polar sea, water sinking there draws
             // warm water poleward along the basin's eastern side (the North Atlantic Current
             // into the Norwegian Sea).
-            if reach[i] {
+            if reach[i] && k + 1 == gyres.len() {
                 let band = smoothstep(front - 5.0, front + 2.0, lat.abs()) * (1.0 - smoothstep(front + 18.0, front + 25.0, lat.abs()));
                 overturning[i] = band * (-b.east_km[i] / OVERTURNING_EAST_KM).exp();
                 j.1 += hemi * OVERTURNING_M_S * overturning[i];
@@ -504,16 +513,36 @@ struct GyreFront {
     separation: f64,
 }
 
-/// Each hemisphere's (north, south) gyre front.
-fn gyre_fronts(g: &AtmoGrid, tau: &[f64]) -> (Option<GyreFront>, Option<GyreFront>) {
-    let best = |north: bool| {
-        let rows = || (0..g.h).filter(move |&y| (g.lat(y) > 0.0) == north);
-        let front = rows().filter(|&y| (25.0..65.0).contains(&g.lat(y).abs()) && tau[y] > 0.0).max_by(|&a, &b| tau[a].total_cmp(&tau[b])).map(|y| g.lat(y).abs())?;
-        // The westerlies' equatorward edge: the last row with easterly stress short of the front.
-        let start = rows().filter(|&y| g.lat(y).abs() < front && tau[y] <= 0.0).map(|y| g.lat(y).abs()).fold(0.0, f64::max);
-        Some(GyreFront { front, separation: start + SEPARATION_SHARE * (front - start) })
+/// Each hemisphere's (north, south) gyre fronts, from the equator out. With one jet or none,
+/// the one front under the strongest westerly stress between 25° and 65° (Earth's); with more,
+/// one under each band of westerlies: every peak of westerly stress from 15° to 85°.
+fn gyre_fronts(g: &AtmoGrid, tau: &[f64], jets: u32) -> [Vec<GyreFront>; 2] {
+    let find = |north: bool| {
+        let rows: Vec<usize> = {
+            let mut r: Vec<usize> = (0..g.h).filter(|&y| (g.lat(y) > 0.0) == north).collect();
+            r.sort_by(|&a, &b| g.lat(a).abs().total_cmp(&g.lat(b).abs()));
+            r
+        };
+        let peaks: Vec<usize> = if jets <= 1 {
+            rows.iter().copied().filter(|&y| (25.0..65.0).contains(&g.lat(y).abs()) && tau[y] > 0.0).max_by(|&a, &b| tau[a].total_cmp(&tau[b])).into_iter().collect()
+        } else {
+            (1..rows.len().saturating_sub(1))
+                .filter(|&k| (15.0..85.0).contains(&g.lat(rows[k]).abs()) && tau[rows[k]] > 0.0 && tau[rows[k]] >= tau[rows[k - 1]] && tau[rows[k]] > tau[rows[k + 1]])
+                .map(|k| rows[k])
+                .collect()
+        };
+        let mut out: Vec<GyreFront> = Vec::new();
+        for y in peaks {
+            let front = g.lat(y).abs();
+            // The westerlies' equatorward edge: the last row with easterly stress short of the
+            // front (and past the front before it).
+            let floor = out.last().map_or(0.0, |f| f.front);
+            let start = rows.iter().filter(|&&r| (floor..front).contains(&g.lat(r).abs()) && tau[r] <= 0.0).map(|&r| g.lat(r).abs()).fold(floor, f64::max);
+            out.push(GyreFront { front, separation: start + SEPARATION_SHARE * (front - start) });
+        }
+        out
     };
-    (best(true), best(false))
+    [find(true), find(false)]
 }
 
 /// Depth of the air near the ground that high ranges block, m, and the least share of it
@@ -721,7 +750,7 @@ pub struct Circulation;
 impl Generator for Circulation {
     type Params = CirculationParams;
     const NAME: &'static str = "circulation";
-    const VERSION: u32 = 12;
+    const VERSION: u32 = 13;
     const LAYER: LayerId = LayerId::Circulation;
 
     fn needs() -> &'static [ProductId] {
@@ -748,7 +777,8 @@ impl Generator for Circulation {
         let annual: Vec<(f64, f64)> = jul.iter().zip(&jan).map(|(a, b)| (0.5 * (a.0 + b.0), 0.5 * (a.1 + b.1))).collect();
         let has_sea = atmo.land.iter().any(|l| *l < 0.5);
         let jet = OceanJet::for_body(body);
-        let (cur, overturning) = if has_sea { currents(&atmo, &annual, r, p, jet.as_ref()) } else { (vec![(0.0, 0.0); g.len()], vec![0.0; g.len()]) };
+        let jets = jets_for(body.exterior.rotation_h, r);
+        let (cur, overturning) = if has_sea { currents(&atmo, &annual, r, p, jet.as_ref(), jets) } else { (vec![(0.0, 0.0); g.len()], vec![0.0; g.len()]) };
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let cp = ClimateParams::default();
         let radiation = Radiation::for_body(body, cp.heat_transport, cp.greenhouse_offset_c);
@@ -835,7 +865,7 @@ mod tests {
         // The year's mean of July's and January's winds, as the generator takes it.
         let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::new(&a, 24.0, 6371.0, 23.0, sign, p.monsoon), &p));
         let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
-        let ocean = currents(&a, &annual, 6371.0, &p, None);
+        let ocean = currents(&a, &annual, 6371.0, &p, None, 1);
         (a, p, annual, ocean)
     }
 
@@ -858,7 +888,7 @@ mod tests {
         let p = CirculationParams::default();
         let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::for_body(&a, &body, sign, p.monsoon), &p));
         let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
-        let (cur, overturning) = currents(&a, &annual, 6371.0, &p, OceanJet::for_body(&body).as_ref());
+        let (cur, overturning) = currents(&a, &annual, 6371.0, &p, OceanJet::for_body(&body).as_ref(), jets_for(body.exterior.rotation_h, body.exterior.radius_km));
         let star = crate::atmosphere::Substellar::for_body(&body).expect("locked");
         let lats: Vec<f64> = (0..g.h).map(|y| g.lat(y)).collect();
         let (tz, _) = Radiation::for_body(&body, 3.2, 0.0).substellar_temperature(&lats);
@@ -915,8 +945,8 @@ mod tests {
             assert!(at(lat, 118).1 < -0.1, "eastern leg at {lat}°N {:?}", at(lat, 118));
             assert!(at(-lat, 118).1 > 0.1, "eastern leg at {lat}°S {:?}", at(-lat, 118));
         }
-        let (north, _) = gyre_fronts(&g, &(0..g.h).map(|y| annual[y * g.w + 80].0 * annual[y * g.w + 80].0.abs()).collect::<Vec<_>>());
-        let f = north.expect("a gyre front");
+        let [north, _] = gyre_fronts(&g, &(0..g.h).map(|y| annual[y * g.w + 80].0 * annual[y * g.w + 80].0.abs()).collect::<Vec<_>>(), 1);
+        let f = *north.first().expect("a gyre front");
         assert!(f.separation > 30.0 && f.separation < f.front - 5.0, "{f:?}");
         let coast = at(f.separation + 4.0, 41);
         assert!(coast.1 < 0.0, "cold coastal current poleward of separation {coast:?}");
@@ -924,6 +954,30 @@ mod tests {
         let s = |lat: f64, x: usize| sst[g.index(lat, g.lon(x))];
         assert!(s(f.separation + 4.0, 41) < s(f.separation - 4.0, 41) - 2.0, "warm current meets cold at the separation");
         assert!(s(0.5, 112) < s(0.5, 50) - 1.0, "equatorial cold tongue in the east: {} vs {}", s(0.5, 112), s(0.5, 50));
+    }
+
+    /// A world turning in six hours has three jets a hemisphere, and its basin a stack of
+    /// gyres: a front under each band of westerlies, and along the western shore the boundary
+    /// current runs poleward under each subtropical gyre and equatorward under each subpolar
+    /// one, band after band.
+    #[test]
+    fn a_fast_spinner_stacks_its_gyres() {
+        let g = AtmoGrid::new(1.0);
+        let land: Vec<f64> = (0..g.len()).map(|i| if (i % g.w) < 40 || (i % g.w) > 120 { 1.0 } else { 0.0 }).collect();
+        let a = Atmo { g, wet: true, land, elev: vec![0.0; g.len()] };
+        let p = CirculationParams::default();
+        let jets = jets_for(6.0, 6371.0);
+        assert_eq!(jets, 3);
+        let [jul, jan] = [1.0, -1.0].map(|sign| season_winds(&a, &Season::new(&a, 6.0, 6371.0, 23.0, sign, p.monsoon), &p));
+        let annual: Vectors = jul.iter().zip(&jan).map(|(n, s)| (0.5 * (n.0 + s.0), 0.5 * (n.1 + s.1))).collect();
+        let tau: Vec<f64> = (0..g.h).map(|y| annual[y * g.w + 80].0 * annual[y * g.w + 80].0.abs()).collect();
+        let [north, south] = gyre_fronts(&g, &tau, jets);
+        assert!(north.len() >= 2 && south.len() >= 2, "{north:?} {south:?}");
+        let (cur, _) = currents(&a, &annual, 6371.0, &p, None, jets);
+        // Bands of poleward flow along the western shore, 10°–80°N.
+        let v: Vec<f64> = (10..80).map(|lat| cur[g.index(f64::from(lat) + 0.5, g.lon(41))].1).collect();
+        let poleward_bands = v.windows(2).filter(|w| w[0] <= 0.05 && w[1] > 0.05).count() + usize::from(v[0] > 0.05);
+        assert!(poleward_bands >= 2, "western shore flow {v:?}");
     }
 
     /// A basin that opens wide onto its polar sea draws warm water poleward along its eastern

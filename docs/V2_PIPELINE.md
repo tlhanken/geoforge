@@ -105,7 +105,7 @@ exactly that layer and everything after it stale.
 | circulation | `circulation` | `circulation` | `circulation` | solid surface, atmosphere |
 | climate | `climate` | `climate` | `climate` | solid surface, atmosphere |
 | erosion | `erosion` | `erosion` (copies the rough heightmap: no water to cut with) | `erosion` (copies it) | solid surface |
-| hydrology | `hydrology` | `hydrology` | — | liquid water on the surface |
+| hydrology | `hydrology` | `hydrology` | `methane_cycle` (Titan) | liquid water on the surface; or methane in the air and ground cold enough for it to pool |
 | biomes | `biomes` | `biomes` | — | liquid water on the surface |
 | resources | `giant_deposits` | `giant_deposits` | — | liquid water on the surface |
 | bands | — | — | — | no solid surface, an atmosphere: `giant_bands` |
@@ -147,13 +147,14 @@ the products they read instead):
 | `earthquakes`, `tsunamis`, `volcanoes`, `cyclones`, `tornadoes`, `floods`, `wildfire`, `landslides` | Chance of one in a 10,000 km² region over a window that suits it (a year for storms, a decade for quakes, floods and fires, a century for tsunamis) | grayscale PNG + note |
 | `blizzards`, `dust_storms`, `fog`, `auroras` | Share of the year's days (nights) with one | grayscale PNG + note |
 | `lightning` | Artifexian's four tiers, under 1 to over 15 flashes per km² a year | class PNG + legend |
+| `dunes` | Sand seas on dry, flat land away from lakes and rivers (worlds with rivers): transverse, linear or star dunes by the seasons' winds (Fryberger's RDP/DP) | class PNG + legend |
 | `sea_ice` | Sea ice: open water, ice in winter, ice all year | class PNG + legend |
 | `reefs` | Coral reefs and atolls | class PNG + legend |
 | `productivity` | How much life the sea holds, 0 (gyre desert) to 1 (upwelling coast) | grayscale PNG + note |
 | `pressure_jan`, `pressure_jul` | Sea-level pressure, hPa; previews blue below the mean to red above, isobars every 4 hPa | 16-bit grayscale PNG + `<view>.json` with the units and range |
 
 Every view has a world file and projection (`.pgw`, `.prj`). The groups `climate_maps`
-(Köppen, pressure), `oceans`, `resources` and `hazards` name all of theirs at once
+(Köppen, pressure, dunes), `oceans`, `resources` and `hazards` name all of theirs at once
 (`render <dir> hazards`). Legends give each class's share of the area mapped (the land,
 for land maps).
 
@@ -469,7 +470,10 @@ product's randomness. `seed <dir> <product>` prints it.
 - **Hydrology**: Budyko (Fu) runoff; priority-flood drainage with jittered routing across
   flats; lakes from each depression's water balance (open where overflowing and kept open by
   rifting, depth or glaciation; endorheic and shrunk to balance where not); arid channel
-  losses; Strahler-ordered rivers; watersheds by terminal outlet.
+  losses; Strahler-ordered rivers; watersheds by terminal outlet. On a methane world
+  (`methane_cycle`) the same drainage runs on the cold trap's rain and evaporation (the
+  coldest ground wet, the warmest dry), with no sea and lakes filled coldest first until a
+  0.85 m global layer of liquid runs out.
 - **Biomes**: Köppen thresholds (10 °C tree line, 18 °C tropics, aridity threshold that
   depends on temperature and rain seasonality, dry-summer Mediterranean) and Whittaker's
   rainfall steps, alpine by altitude, wetlands on flat floodplains.

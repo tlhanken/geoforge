@@ -8,6 +8,7 @@
 //! **quantity maps** (sea-level pressure), exported as 16-bit grayscale PNGs with the range
 //! and units.
 
+use geoforge_analysis::dunes::Dunes;
 use geoforge_analysis::ground::{self, Ground};
 use geoforge_analysis::hazards::{self, Hazard, Lightning, Measure};
 use geoforge_analysis::koppen::{self, Koppen, KoppenRules};
@@ -38,6 +39,8 @@ pub enum View {
     Lightning,
     /// Sea-level pressure in January (`false`) or July (`true`).
     Pressure { july: bool },
+    /// Sand seas by their dunes' form.
+    Dunes,
     /// Sea ice: none, seasonal or perennial.
     SeaIce,
     /// Coral reefs and atolls.
@@ -54,19 +57,19 @@ impl View {
         v.extend(Deposit::ALL.map(Self::Deposit));
         v.extend(Hazard::ALL.map(Self::Hazard));
         v.push(Self::Lightning);
-        v.extend([Self::Pressure { july: false }, Self::Pressure { july: true }]);
+        v.extend([Self::Pressure { july: false }, Self::Pressure { july: true }, Self::Dunes]);
         v.extend([Self::SeaIce, Self::Reefs, Self::Productivity]);
         v
     }
 
-    /// Views by group name: `appearance` (true colour), `climate_maps` (Köppen, pressure),
+    /// Views by group name: `appearance` (true colour), `climate_maps` (Köppen, pressure, dunes),
     /// `oceans` (sea ice, reefs, productivity), `resources` (deposits, soils, fertility,
     /// timber) or `hazards`.
     #[must_use]
     pub fn group(name: &str) -> Option<Vec<Self>> {
         match name {
             "appearance" => Some(vec![Self::Appearance]),
-            "climate_maps" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Koppen | Self::Pressure { .. })).collect()),
+            "climate_maps" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Koppen | Self::Pressure { .. } | Self::Dunes)).collect()),
             "oceans" => Some(vec![Self::SeaIce, Self::Reefs, Self::Productivity]),
             "resources" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Soil | Self::Fertility | Self::Timber | Self::Deposit(_))).collect()),
             "hazards" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Hazard(_) | Self::Lightning)).collect()),
@@ -87,6 +90,7 @@ impl View {
             Self::Lightning => "lightning",
             Self::Pressure { july: false } => "pressure_jan",
             Self::Pressure { july: true } => "pressure_jul",
+            Self::Dunes => "dunes",
             Self::SeaIce => "sea_ice",
             Self::Reefs => "reefs",
             Self::Productivity => "productivity",
@@ -106,6 +110,7 @@ impl View {
             Self::Koppen => &[ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation, ProductId::PrecipitationWarmShare],
             Self::Pressure { july: false } => &[ProductId::WindJan, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
             Self::Pressure { july: true } => &[ProductId::WindJul, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
+            Self::Dunes => &[ProductId::WindJan, ProductId::WindJul, ProductId::Precipitation, ProductId::Elevation, ProductId::Rivers, ProductId::Lakes],
             Self::SeaIce | Self::Reefs | Self::Productivity => &[ProductId::Elevation, ProductId::Temperature, ProductId::TemperatureRange, ProductId::SstAnomaly],
             _ => &ground::READS,
         }
@@ -252,6 +257,7 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
             };
             chances((0..g.len()).map(|c| (h.at_sea() || !g.sea[c]).then(|| m.value(lambda[c]))).collect(), meaning)
         }
+        View::Dunes => Map::Classes(tally(s.grid, &geoforge_analysis::dunes::map(s.products, s.grid, s.body.exterior.radius_km, sea)?, Dunes::info, &Dunes::ALL)),
         View::Pressure { july } => Map::Quantity(Quantity { cells: geoforge_analysis::pressure::seasonal(s.products, s.grid, s.body, july)?, units: "hPa", contour: 4.0 }),
         View::SeaIce | View::Reefs | View::Productivity => {
             let sea = geoforge_analysis::oceans::Sea::read(s.products, s.grid, s.body.exterior.radius_km, s.sea_world())?;

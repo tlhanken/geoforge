@@ -454,12 +454,16 @@ Their gaps:
   ∝ L^−0.85), then helium burns in the core (the red clump: 50 L☉, 4800 K for Sun-like
   stars) for a fifth of the main sequence, at most 120 Myr. No asymptotic giant branch,
   blue loops or horizontal-branch colours.
-- No binary evolution: mass transfer, mergers and X-ray binaries are missing, and a
-  supernova that blows off half a pair's mass always unbinds it (in fact ~8% of black holes
-  keep a companion). Brown dwarfs cool by Burrows & Liebert's fits, which start at 10 Myr.
-- A wide companion's planets feel only their own star's light.
+- Binary evolution covers a system's inner pair with a donor under 8 M☉ (stable transfer,
+  common envelope, merger); no second transfer, contact binaries, X-ray binaries or type Ia
+  supernovae, and the sky's stars live as if alone. A supernova that blows off half a pair's
+  mass always unbinds it (in fact ~8% of black holes keep a companion). Brown dwarfs cool by
+  Burrows & Liebert's fits, which start at 10 Myr.
+- A companion's light reaches the other star's planets as part of the year's mean flux only:
+  not their colour of light, their days or their seasons.
 - Tilts wander or hold by a simple rule (a moon's pull against the star's); the chaotic
-  zones themselves are not computed. Thermal tides are worked out for air near a bar only.
+  zones themselves are not computed. Thermal tides are worked out for air near a bar and
+  scaled past 5 bar by one fit to Venus, (p/5 bar)².
 - A giant's light turns its rocky planets into Venuses, but icy moons do not thaw: icy
   interiors ignore starlight.
 - Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping
@@ -499,5 +503,6 @@ Their gaps:
    forcing is flatter), so dim, CO₂-rich worlds have cold high latitudes.
 8. **Mercury's basins come out deep** (−7.6 km vs −5.4 km), and the Moon's highest highlands
    low (+5.4 vs +10.8 km): basin depth does not yet depend on the lithosphere's heat.
-9. **No generator yet for ice-shell surfaces** (Europa, Titan) or giants; their layers report
-   why they are skipped. Titan's methane cycle is out of scope.
+9. **Titan's methane** runs on a cold-trap rule over the climate's temperatures, not a moist
+   climate of its own: ~1% lakes poleward of 55° (Titan: 1.1%), but no methane rain map, so
+   its dune belt reaches ±50° (Titan's ±30°), and its seas lie in both hemispheres alike.

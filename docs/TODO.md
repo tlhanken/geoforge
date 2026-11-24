@@ -76,16 +76,24 @@ Languages and cultures in `geoforge-names`.
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.
 
-## 14. Other worlds — mostly done (OpenSpec `systems-and-worlds`)
+## 14. Other worlds — done but for giants' storms (OpenSpec `systems-and-worlds`, `other-worlds-2`)
 Done: brown dwarfs (a fifth of systems, cooling, M/L/T/Y); planets of wide companions;
-thermal-tide rotation of locked worlds with 0.5–5 bar; ice shells (Europa-like and
-Ganymede-like generators); locked oceans that superrotate and carry heat to the night side;
-fast spinners without an ice cliff or rain lines at their fronts; giants' polar cyclones and
-hexagons. Open:
+thermal-tide rotation of locked worlds, thick air included (Venus's 117-day day, backward
+half the time); binary evolution of close pairs (stable transfer, common envelope, mergers);
+a companion's light on the other star's planets; ice shells (Europa-like and Ganymede-like
+generators); locked oceans that superrotate and carry heat to the night side; fast spinners
+without an ice cliff or rain lines at their fronts, and a stack of gyres per basin, one pair
+per jet; giants' polar cyclones and hexagons; Titan's methane cycle (rivers, ~1% lakes near
+the poles) and a dunes view for any world with rivers. Open:
 - Storms that drift by date (a dated view of the bands).
-- Several gyres per basin on fast spinners.
-- Thermal tides of thick (Venus-like) air; binary evolution; a companion's light on the
-  other star's planets; Titan's dunes and methane lakes.
+- Titan's dune belt reaches ±50°, not ±30°: the climate gives no methane rain, so the dunes
+  view sees only its lakes and rivers; Titan's pole-to-equator contrast is 12 K, not 3.
+- Titan's seas lie in both hemispheres equally (the orbit's asymmetry is not modelled), and
+  its rain does not follow the seasons.
+- Binary evolution: a second transfer (cataclysmic variables, type Ia supernovae), donors of
+  8 M☉ or more, and contact binaries are not modelled; the sky's stars still live as if
+  alone.
+- Mars's and Venus's dunes (sand from older water and wind abrasion).
 
 ## 1. Earth A/B in Rust, every layer against a real baseline [8f] — command done
 Done: `geoforge compare REAL MODEL… --probe … --source …` writes the page. Every product
