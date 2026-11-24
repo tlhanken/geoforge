@@ -55,6 +55,9 @@ pub struct GalacticSite {
     /// its north pole). `None`: a rotation from the system's seed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<[[f64; 3]; 3]>,
+    /// The universe around the galaxy. `None`: one seeded from the galaxy's seed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub universe: Option<crate::galactic::UniverseSite>,
 }
 
 /// Keplerian orbital elements. The period is derived from `a_au` and the parent's mass.

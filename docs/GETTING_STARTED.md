@@ -75,6 +75,15 @@ geoforge visit worlds/demo Baene --to worlds/baene              # a new world at
 ```
 
 Edits live in `galaxy/stars.json`, constellations in `constellations.json`; `sky` draws both.
+A world without constellations of its own is shown figures drawn from its brightest stars;
+`geoforge constellation auto worlds/demo` saves them, to rename (`remove`, `add`) or keep.
+
+Beyond the galaxy, a universe of other galaxies is generated around it; the sky and the
+report list those brighter than magnitude 8 and how they are seen:
+
+```bash
+geoforge universe worlds/demo --radius-mpc 5     # the home galaxy, its satellites and neighbours
+```
 `new --galaxy-file my-galaxy.json` makes a world in a galaxy of your own (components,
 arms, dust; see `geoforge_cosmos::galaxy`).
 

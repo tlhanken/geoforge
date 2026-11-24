@@ -200,7 +200,7 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
     let calendar = calendar_of(&body);
     let field = geoforge_almanac::sky::starfield(w)?;
     let s = geoforge_almanac::sky::sky(&sys, w.manifest.focus, day, calendar.year_days, &field)?;
-    let figures = s.figures(&w.load_constellations()?, &field);
+    let figures = s.figures(&s.constellations_or_automatic(w.load_constellations()?), &field);
     let (year, local) = calendar.date(day);
     let date = |t: f64| geoforge_almanac::ephemeris::real_date(&sys, t).map_or(String::new(), |d| format!(", {d}"));
     println!("The sky of {} on day {day} (year {year}, day {local:.1}{}): {} naked-eye stars; {} {:.1} kpc from its centre", body.name, date(day), s.stars.len(), s.galaxy, s.radius_kpc);
@@ -209,6 +209,23 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
     for o in s.stars.iter().take(12) {
         let name = o.name.clone().unwrap_or_default();
         println!("  {name:<12} {:>5.2}  {:<7} {:>6.0} ly  {}", o.v, o.spectral_class.as_deref().unwrap_or(""), o.distance, radec(o));
+    }
+    if !s.galaxies.is_empty() {
+        println!("Other galaxies (to magnitude {:.0}):", geoforge_almanac::sky::GALAXY_LIMIT);
+        for g in &s.galaxies {
+            println!(
+                "  {:<24} {:<9} {:>5.1}  {:>7.2} Mly  {:>5.2}° across  RA {:>5.1}° Dec {:>+5.1}°  {:.1} mag/″²: {}",
+                g.name,
+                g.kind,
+                g.v,
+                g.distance_mly,
+                g.size_deg,
+                g.ra_deg,
+                g.dec_deg,
+                g.surface_brightness,
+                g.seen_with()
+            );
+        }
     }
     println!("The system:");
     for o in &s.bodies {
@@ -252,7 +269,7 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
     }
     if let Some(dir) = to {
         std::fs::create_dir_all(dir)?;
-        let (gw, gh) = (360, 180);
+        let (gw, gh) = (720, 360);
         let glow = s.glow(gw, gh);
         let lines: Vec<[(f64, f64); 2]> = figures.iter().flat_map(|f| f.lines.iter().copied()).collect();
         let points: Vec<geoforge_store::render::SkyPoint> = s

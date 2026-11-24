@@ -198,14 +198,14 @@ Still needed:
   today); generated galaxy-recipe seeds now draw different systems than before (the
   realism tables' s-worlds predate this).
 
-## 12b. Later, above one galaxy
-- The universe zoom: universe, superclusters and galaxy rosters (the v2-architecture
-  layers), with galaxies placed by the same nested cubes, so a universe zooms down to a
-  planet and details are generated as they are looked at; a world holding more than one
-  system.
-- Other galaxies in the night sky: Andromeda-like neighbours, satellite galaxies like the
-  Magellanic Clouds, as patches in the glow (it is built as a sum of sources for this).
-- Automatic constellations from the brightest stars.
+## 12b. Above one galaxy — first part done (OpenSpec `universe-and-figures`)
+- Done: a universe of halos and galaxies in nested cubes, clustered, each galaxy with an
+  identity; a world's galaxy placed in it (the Sun's is the real one); other galaxies in
+  the night sky and its glow, rated by surface brightness; automatic constellations;
+  `geoforge universe`, `geoforge constellation auto`.
+- Open: visiting another galaxy's stars (a galaxy model scaled to a generated galaxy and
+  its sectors, so the zoom runs universe → galaxy → star → planet); superclusters'
+  filaments and voids beyond the lognormal field; a world holding more than one system.
 
 ## 12c. Sky and almanac refinements [6, 8b]
 - A system's local environment: nebulae and supernova remnants (clusters and associations

@@ -351,6 +351,17 @@ enum Cmd {
         #[command(subcommand)]
         action: ConstellationCmd,
     },
+    /// The galaxies around the world's own: its place in the universe, its satellites and
+    /// neighbours, nearest first.
+    Universe {
+        dir: PathBuf,
+        /// How far to look, Mpc.
+        #[arg(long, default_value_t = 5.0)]
+        radius_mpc: f64,
+        /// Only galaxies brighter than this (apparent V from the home galaxy's centre).
+        #[arg(long, default_value_t = 12.0)]
+        limit: f64,
+    },
     /// Make a new world at a star of this world's galaxy: the system born with that star, the
     /// galaxy and its star edits carried over.
     Visit {
@@ -508,6 +519,14 @@ enum ConstellationCmd {
     List {
         dir: PathBuf,
     },
+    /// Save the figures drawn from the brightest stars as the world's own, to rename or
+    /// edit (the sky chart draws them anyway while the world has none).
+    Auto {
+        dir: PathBuf,
+        /// Replace the world's own constellations.
+        #[arg(long)]
+        replace: bool,
+    },
 }
 
 type R<T> = Result<T, Box<dyn std::error::Error>>;
@@ -532,7 +551,9 @@ fn run(cli: Cli) -> R<()> {
             ConstellationCmd::Add { dir, name, lines } => stars::constellation_add(&dir, &name, &lines),
             ConstellationCmd::Remove { dir, name } => stars::constellation_remove(&dir, &name),
             ConstellationCmd::List { dir } => stars::constellation_list(&dir),
+            ConstellationCmd::Auto { dir, replace } => stars::constellation_auto(&dir, replace),
         },
+        Cmd::Universe { dir, radius_mpc, limit } => stars::universe(&dir, radius_mpc, limit),
         Cmd::Visit { dir, star, to } => stars::visit(&dir, &star, &to),
         Cmd::Generate { dir, force, until, from, render } => world::generate(&dir, force, until, from, render),
         Cmd::Plan { dir } => world::plan(&dir),

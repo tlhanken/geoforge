@@ -399,6 +399,23 @@ world's edits). Calibration: the galaxy-integrated IMF (α = 2.6 above 1 M☉; w
 2.3 the Sun's sky held 11,400 stars and twice the third- and fourth-magnitude ones) and the
 thin disk's mass set by the 10 pc census. A sky takes under a second on two cores.
 
+## 8g. The universe and the sky's figures — done (November 2026)
+
+OpenSpec change `universe-and-figures`. A universe from a seed
+(`geoforge_cosmos::universe`): dark-matter halos by the z = 0 mass function in thirteen
+half-decade bins, each bin in cubes of its own size, clustered by a lognormal field with
+mass-dependent bias; in each halo a central (Moster 2013 stellar masses, types by mass and
+environment, Shen 2003 sizes) and satellites in subhalos, heavy ones sunk by friction and
+inner ones torn apart by tides. Each galaxy has an identity (`h{bin}:{i},{j},{k}:{n}.{m}`)
+that regenerates it. A world's galaxy is the generated galaxy like it nearest the origin;
+the Sun's universe is the real one (the Local Group and the bright galaxies to magnitude
+7.5). The sky lists galaxies to magnitude 8 with how they are seen (by magnitude and
+central surface brightness) and adds them to the glow through the home galaxy's dust.
+Worlds without constellations of their own get figures drawn from the brightest stars
+(`geoforge_cosmos::constellations`), which `constellation auto` saves to edit.
+Open: visiting another galaxy's stars, superclusters' filaments, more than one system in a
+world.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often

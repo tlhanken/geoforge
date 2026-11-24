@@ -135,6 +135,10 @@ pub struct Neighbourhood {
     /// Glow on the grid of galactic longitude (columns) and latitude (rows), relative to the
     /// north galactic pole's.
     glow: Vec<f64>,
+    /// The north galactic pole's glow, L☉ (V) per pc².
+    pole_sigma: f64,
+    /// Extinction out of the galaxy on the same grid, magnitudes.
+    out: Vec<f64>,
 }
 
 /// The stars brighter than `limit` seen by `observer` among `field`'s, and the glow.
@@ -172,16 +176,19 @@ pub fn neighbourhood(field: &Starfield, observer: &Observer, limit: f64) -> Neig
     for s in stars.iter_mut().take(NAMED) {
         s.name = Some(field.name_of(&s.id));
     }
-    let glow = glow(field, observer, &dust, limit);
+    let (glow, pole_sigma, out) = glow(field, observer, &dust, limit);
     let r = here[0].hypot(here[1]) / 1000.0;
-    Neighbourhood { stars, observer: observer.clone(), galaxy: field.galaxy().name.clone(), radius_kpc: r, limit, glow }
+    Neighbourhood { stars, observer: observer.clone(), galaxy: field.galaxy().name.clone(), radius_kpc: r, limit, glow, pole_sigma, out }
 }
 
 const GLOW_LON: usize = (360.0 / GLOW_DEG) as usize;
 const GLOW_LAT: usize = (180.0 / GLOW_DEG) as usize + 1;
 
-/// The glow toward each grid direction, relative to the north galactic pole's.
-fn glow(field: &Starfield, observer: &Observer, dust: &DustView, limit: f64) -> Vec<f64> {
+/// The glow toward each grid direction, relative to the north galactic pole's; the pole's in
+/// L☉ (V) per pc² (the light of the stars along the line of sight, projected: the unit of
+/// surface brightness that does not depend on distance, 26.4 mag/arcsec² for 1); and the
+/// extinction out of the galaxy toward each.
+fn glow(field: &Starfield, observer: &Observer, dust: &DustView, limit: f64) -> (Vec<f64>, f64, Vec<f64>) {
     let s = field.sectors();
     let g = s.galaxy();
     let here = observer.position_pc;
@@ -206,7 +213,7 @@ fn glow(field: &Starfield, observer: &Observer, dust: &DustView, limit: f64) -> 
         })
         .collect();
     let axes = observer.axes();
-    let ray = |lon: f64, lat: f64| -> f64 {
+    let ray = |lon: f64, lat: f64| -> (f64, f64) {
         let (l, b) = (lon.to_radians(), lat.to_radians());
         let local = [b.cos() * l.cos(), b.cos() * l.sin(), b.sin()];
         let u = [0, 1, 2].map(|k| axes[0][k] * local[0] + axes[1][k] * local[1] + axes[2][k] * local[2]);
@@ -223,11 +230,11 @@ fn glow(field: &Starfield, observer: &Observer, dust: &DustView, limit: f64) -> 
             e += s.young.iter().zip(&young_light).map(|(y, light)| y.mass_msun * y.shape.density(p) * arm(y.component, y.age) * light[i]).sum::<f64>();
             total += e * step * 10f64.powf(-0.4 * dim[i]);
         }
-        total
+        (total, dim.last().copied().unwrap_or(0.0))
     };
-    let grid: Vec<f64> = (0..GLOW_LAT * GLOW_LON).into_par_iter().map(|i| ray((i % GLOW_LON) as f64 * GLOW_DEG, -90.0 + (i / GLOW_LON) as f64 * GLOW_DEG)).collect();
+    let (grid, out): (Vec<f64>, Vec<f64>) = (0..GLOW_LAT * GLOW_LON).into_par_iter().map(|i| ray((i % GLOW_LON) as f64 * GLOW_DEG, -90.0 + (i / GLOW_LON) as f64 * GLOW_DEG)).unzip();
     let pole = grid[(GLOW_LAT - 1) * GLOW_LON].max(1e-300);
-    grid.into_iter().map(|v| v / pole).collect()
+    (grid.into_iter().map(|v| v / pole).collect(), pole, out)
 }
 
 impl Neighbourhood {
@@ -235,6 +242,11 @@ impl Neighbourhood {
     /// pole's.
     #[must_use]
     pub fn glow(&self, direction: [f64; 3]) -> f64 {
+        self.on_grid(&self.glow, direction)
+    }
+
+    /// `grid` (galactic longitude by latitude) toward `direction` (the system's frame).
+    fn on_grid(&self, grid: &[f64], direction: [f64; 3]) -> f64 {
         let t = &self.observer.to_system;
         let g = [0, 1, 2].map(|k| t[0][k] * direction[0] + t[1][k] * direction[1] + t[2][k] * direction[2]);
         let lat = g[2].clamp(-1.0, 1.0).asin().to_degrees();
@@ -242,8 +254,21 @@ impl Neighbourhood {
         let (fx, fy) = (lon / GLOW_DEG, (lat + 90.0) / GLOW_DEG);
         let (x0, y0) = (fx.floor() as usize % GLOW_LON, (fy.floor() as usize).min(GLOW_LAT - 2));
         let (tx, ty) = (fx - fx.floor(), (fy - y0 as f64).clamp(0.0, 1.0));
-        let at = |x: usize, y: usize| self.glow[y * GLOW_LON + x % GLOW_LON];
+        let at = |x: usize, y: usize| grid[y * GLOW_LON + x % GLOW_LON];
         (1.0 - ty) * ((1.0 - tx) * at(x0, y0) + tx * at(x0 + 1, y0)) + ty * ((1.0 - tx) * at(x0, y0 + 1) + tx * at(x0 + 1, y0 + 1))
+    }
+
+    /// The north galactic pole's glow, L☉ (V) per pc².
+    #[must_use]
+    pub fn pole_sigma(&self) -> f64 {
+        self.pole_sigma
+    }
+
+    /// Extinction (magnitudes) out of the galaxy toward `direction` (the system's frame): what
+    /// dims another galaxy seen that way.
+    #[must_use]
+    pub fn extinction_out(&self, direction: [f64; 3]) -> f64 {
+        self.on_grid(&self.out, direction)
     }
 
     /// The place in the galaxy seen `distance_pc` away in `direction` (the system's frame).

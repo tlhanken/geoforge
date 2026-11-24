@@ -109,6 +109,7 @@ pub(crate) fn site(galaxy: &Galaxy, position: [f64; 3], galaxy_seed: Seed, star:
         galaxy_seed: Some(galaxy_seed),
         star,
         orientation: Some(d.rotation()),
+        universe: None,
     }
 }
 

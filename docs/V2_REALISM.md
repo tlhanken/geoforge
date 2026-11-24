@@ -376,6 +376,18 @@ magnetosphere.
   clouds, and through Cygnus. Gap: no Gould-Belt-like local excess of young stars.
 - Inside the bulge stars crowd so that a sky lists them to a brighter limit (about four
   Suns' skies' worth), the rest in the glow.
+- Other galaxies (universe-and-figures, November 2026): from Earth the LMC, SMC, Andromeda
+  and Triangulum at their places (the LMC at l 280.5°, b −32.9°), the LMC 21.4 mag/arcsec²
+  at its centre (observed about 21) and more than twice the sky's brightness 40° away,
+  Andromeda 20.2 — all four naked-eye, Centaurus A for binoculars. Generated universes:
+  Milky Way halos hold 3–6×10¹⁰ M☉ of stars, 7–20 satellites above 10⁵ M☉ (median 50–130
+  kpc, under 3% within 20 kpc) and an LMC in 8–25% of halos; halo counts within 15% of the
+  mass function. Twelve generated Milky Way skies list 0–5 galaxies to magnitude 8 (most
+  of them dwarf spheroidals too faint per arcsec² to see) and a naked-eye galaxy in four;
+  the Sun's has four. Gap: whether an Andromeda-like neighbour is as common as in
+  simulations is not checked.
+- Automatic constellations: a Sun-like sky gets 40–120 figures of 2–10 stars (Earth's
+  generated sky: 74; the IAU has 88), no line over 15°, every first-magnitude star in one.
 
 ### Weather
 

@@ -19,6 +19,8 @@
 //! | `planets` | planets for any star at birth, and what survives the star's death |
 //! | `dynamics` | spacing, scattering, hot Jupiters, resonant belts, Trojans |
 //! | [`spin`] | tilts that hold or wander, rotation held off by thermal tides |
+//! | [`constellations`] | figures drawn from a sky's brightest stars |
+//! | [`universe`] | halos and the galaxies in them around a home galaxy; other galaxies in a sky |
 //! | [`galactic`] | the orbital tree of a drawn system, and its focus |
 //! | [`census`] | statistics of many drawn systems, with example seeds |
 //! | [`sky`] | the naked-eye stars around a system, dimmed by dust, and its galaxy's glow |
@@ -31,6 +33,7 @@ mod draw;
 mod dynamics;
 
 pub mod census;
+pub mod constellations;
 pub mod context;
 pub mod galactic;
 pub mod galaxy;
@@ -43,6 +46,7 @@ pub mod spin;
 pub mod starfield;
 pub mod stars;
 pub mod system;
+pub mod universe;
 pub mod worlds;
 
 pub use context::{any_body, belt_member, body_context, find_body};

@@ -6,6 +6,71 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+/// A galaxy's stable identity in its universe: its halo's mass bin, the cube of that bin's
+/// grid it was generated in and its number there, and its number among the halo's galaxies
+/// (0 the central, then the satellites).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(into = "String", try_from = "String")]
+pub struct GalaxyId {
+    pub bin: u8,
+    pub cube: [i32; 3],
+    pub n: u32,
+    pub member: u32,
+}
+
+impl GalaxyId {
+    /// The seed of the galaxy in a universe seeded `universe`.
+    #[must_use]
+    pub fn seed(&self, universe: Seed) -> Seed {
+        let s = self.cube.iter().fold(universe.child_u64(b"halo bin", u64::from(self.bin)), |s, &v| s.child_u64(b"axis", u64::from(v as u32)));
+        s.child_u64(b"n", u64::from(self.n)).child_u64(b"member", u64::from(self.member))
+    }
+}
+
+impl fmt::Display for GalaxyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let [i, j, k] = self.cube;
+        write!(f, "h{}:{i},{j},{k}:{}.{}", self.bin, self.n, self.member)
+    }
+}
+
+impl FromStr for GalaxyId {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, String> {
+        let bad = || format!("not a galaxy identity: {s} (h<bin>:<i>,<j>,<k>:<n>.<member>)");
+        let rest = s.strip_prefix('h').ok_or_else(bad)?;
+        let parts: Vec<&str> = rest.split(':').collect();
+        let [bin, cube, n] = parts.as_slice() else { return Err(bad()) };
+        let cube: Vec<i32> = cube.split(',').map(str::parse).collect::<Result<_, _>>().map_err(|_| bad())?;
+        let (n, member) = n.split_once('.').ok_or_else(bad)?;
+        Ok(Self { bin: bin.parse().map_err(|_| bad())?, cube: cube.try_into().map_err(|_| bad())?, n: n.parse().map_err(|_| bad())?, member: member.parse().map_err(|_| bad())? })
+    }
+}
+
+impl From<GalaxyId> for String {
+    fn from(id: GalaxyId) -> Self {
+        id.to_string()
+    }
+}
+
+impl TryFrom<String> for GalaxyId {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        s.parse()
+    }
+}
+
+/// The universe a system's galaxy sits in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UniverseSite {
+    /// The real Local Group and nearby galaxies, as catalogued (the Solar System).
+    Real,
+    /// A universe made from this seed; the home galaxy is the nearest one to its origin like
+    /// the system's galaxy.
+    Seeded(Seed),
+}
+
 /// A star's stable identity: where it was generated (or that it was added by hand). It is
 /// the same for every observer and seeds the system made at the star.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -194,6 +259,15 @@ pub struct Constellation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn galaxy_ids_read_back() {
+        let id = GalaxyId { bin: 6, cube: [-3, 0, 12], n: 2, member: 17 };
+        assert_eq!(id.to_string().parse::<GalaxyId>(), Ok(id));
+        assert_eq!(serde_json::from_str::<GalaxyId>(&serde_json::to_string(&id).unwrap()).unwrap(), id);
+        assert!("h6:1,2:3.4".parse::<GalaxyId>().is_err());
+        assert_ne!(id.seed(Seed(1)), GalaxyId { member: 18, ..id }.seed(Seed(1)));
+    }
 
     #[test]
     fn identities_round_trip_as_text() {

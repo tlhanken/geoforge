@@ -1,6 +1,9 @@
 //! A world's sky on a date: the naked-eye stars of its neighbourhood, the galaxy's glow, the
+//! other galaxies to about the eighth magnitude (drawn into the glow by their surface
+//! brightness, dimmed by the home galaxy's dust; [`geoforge_cosmos::universe::sky`]), the
 //! other stars and planets of its system, its moons and their phases, the eclipses to come,
-//! and the world's constellations. The stars are the galaxy's ([`Starfield`]) around the
+//! and the world's constellations (drawn from its brightest stars when it has none of its
+//! own; [`geoforge_cosmos::constellations`]). The stars are the galaxy's ([`Starfield`]) around the
 //! system's place, with the world's edits; all else is derived from the system file.
 //!
 //! Coordinates are the world's own right ascension and declination: its equator, and its
@@ -17,6 +20,7 @@ use geoforge_core::body::{BodyClass, NodeKind, SolarSystem, AU_KM};
 use geoforge_core::galactic::{Constellation, StarId};
 use geoforge_core::key::Key;
 use geoforge_cosmos::sky::{self as stars, Neighbourhood, Observer, LY_PER_PC, NAKED_EYE};
+use geoforge_cosmos::universe::sky::SkyGalaxy;
 use geoforge_cosmos::{Galaxy, Starfield};
 use geoforge_store::World;
 use serde::Serialize;
@@ -25,6 +29,46 @@ use serde::Serialize;
 const PC_PER_AU: f64 = 1.0 / 206_264.806;
 /// A planet closer to the star than this in the sky is lost in its glare, degrees.
 const GLARE_DEG: f64 = 15.0;
+/// Galaxies are listed to this magnitude, about a pair of binoculars'.
+pub const GALAXY_LIMIT: f64 = 8.0;
+
+/// Another galaxy in the sky.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct GalaxyObject {
+    pub name: String,
+    /// Hubble type.
+    pub kind: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+    /// Integrated visual magnitude, through the home galaxy's dust.
+    pub v: f64,
+    /// Millions of light-years.
+    pub distance_mly: f64,
+    /// Across its major axis to its catalogued edge, degrees.
+    pub size_deg: f64,
+    pub axis_ratio: f64,
+    /// Position angle of its major axis, degrees east of north.
+    pub pa_deg: f64,
+    /// Surface brightness at its centre, V magnitudes per square arcsecond (a dark sky is
+    /// about 22).
+    pub surface_brightness: f64,
+}
+
+impl GalaxyObject {
+    /// What it takes to see it from a dark site, by its magnitude and how faint its light is
+    /// spread: "naked eye", "binoculars", "telescope" or "long exposures" (the Large
+    /// Magellanic Cloud at 21.4 mag/arcsec² is plain to the eye; a dwarf spheroidal at 25 is
+    /// not, however bright it is in all).
+    #[must_use]
+    pub fn seen_with(&self) -> &'static str {
+        match self.surface_brightness {
+            mu if mu <= 22.5 && self.v <= stars::NAKED_EYE => "naked eye",
+            mu if mu <= 23.0 => "binoculars",
+            mu if mu <= 24.0 => "telescope",
+            _ => "long exposures",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,11 +126,17 @@ pub struct Sky {
     pub stars: Vec<Object>,
     /// The system's stars and bodies, brightest first.
     pub bodies: Vec<Object>,
+    /// Other galaxies, brightest first.
+    pub galaxies: Vec<GalaxyObject>,
     pub eclipses: Vec<Eclipse>,
     /// The path of the system's brightest star through the year, as (RA, Dec).
     pub ecliptic: Vec<(f64, f64)>,
     #[serde(skip)]
     neighbourhood: Neighbourhood,
+    #[serde(skip)]
+    seen: Vec<SkyGalaxy>,
+    #[serde(skip)]
+    seed: geoforge_core::seed::Seed,
     #[serde(skip)]
     pub frame: Frame,
 }
@@ -170,6 +220,21 @@ pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64, field:
             }
         })
         .collect();
+    let observer = &place.observer;
+    let seen: Vec<SkyGalaxy> = system
+        .root
+        .site
+        .as_ref()
+        .map(|site| geoforge_cosmos::universe::sky::seen(site, system.root.seed, field.galaxy(), observer, GALAXY_LIMIT + 1.0))
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| {
+            let dust = neighbourhood.extinction_out(observer.to_system_frame(g.direction));
+            g.dimmed(dust)
+        })
+        .filter(|g| g.v <= GALAXY_LIMIT)
+        .collect();
+    let galaxies = seen.iter().map(|g| galaxy_object(g, observer, &frame)).collect();
     let bodies = bodies(system, world, day, &frame);
     let ecliptic = bodies
         .iter()
@@ -186,7 +251,43 @@ pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64, field:
                 .collect()
         })
         .unwrap_or_default();
-    Ok(Sky { day, galaxy: neighbourhood.galaxy.clone(), radius_kpc, stars, bodies, eclipses: ephemeris::eclipses(system, world, day, eclipse_days), ecliptic, neighbourhood, frame: place })
+    Ok(Sky {
+        day,
+        galaxy: neighbourhood.galaxy.clone(),
+        radius_kpc,
+        stars,
+        bodies,
+        galaxies,
+        eclipses: ephemeris::eclipses(system, world, day, eclipse_days),
+        ecliptic,
+        neighbourhood,
+        seen,
+        seed: system.root.seed,
+        frame: place,
+    })
+}
+
+/// Where `g` is in the sky, and how its major axis lies.
+fn galaxy_object(g: &SkyGalaxy, observer: &Observer, frame: &Equatorial) -> GalaxyObject {
+    let toward = observer.to_system_frame(g.direction);
+    let (ra, dec) = frame.ra_dec(toward);
+    let major = observer.to_system_frame(g.major);
+    let local = [dot(major, frame.x), dot(major, frame.y), dot(major, frame.z)];
+    let (a, d) = (ra.to_radians(), dec.to_radians());
+    let north = [-d.sin() * a.cos(), -d.sin() * a.sin(), d.cos()];
+    let east = [-a.sin(), a.cos(), 0.0];
+    GalaxyObject {
+        name: g.name.clone(),
+        kind: g.kind.clone(),
+        ra_deg: ra,
+        dec_deg: dec,
+        v: g.v,
+        distance_mly: g.distance_pc * LY_PER_PC / 1e6,
+        size_deg: g.size_deg(),
+        axis_ratio: g.axis_ratio,
+        pa_deg: dot(local, east).atan2(dot(local, north)).to_degrees().rem_euclid(180.0),
+        surface_brightness: 26.4 - 2.5 * g.sigma0.max(1e-12).log10(),
+    }
 }
 
 /// A constellation's lines on the sky, (RA, Dec) at each end, degrees.
@@ -209,7 +310,8 @@ impl Sky {
             let local = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
             let f = &self.frame.equatorial;
             let dir = [0, 1, 2].map(|k| f.x[k] * local[0] + f.y[k] * local[1] + f.z[k] * local[2]);
-            *v = self.neighbourhood.glow(dir) as f32;
+            let galaxies: f64 = self.seen.iter().map(|g| g.sigma(self.frame.observer.to_galaxy_frame(dir))).sum();
+            *v = (self.neighbourhood.glow(dir) + galaxies / self.neighbourhood.pole_sigma()) as f32;
         }
         let top = out.iter().copied().fold(f32::MIN, f32::max).max(1e-9);
         out.iter_mut().for_each(|v| *v /= top);
@@ -228,6 +330,22 @@ impl Sky {
     #[must_use]
     pub fn galactic_of(&self, ra_deg: f64, dec_deg: f64, distance_pc: f64) -> [f64; 3] {
         self.frame.galactic_of(ra_deg, dec_deg, distance_pc)
+    }
+
+    /// Figures drawn from this sky's brightest stars, for a world with none of its own.
+    #[must_use]
+    pub fn automatic_constellations(&self) -> Vec<Constellation> {
+        geoforge_cosmos::constellations::automatic(&self.neighbourhood.stars, self.seed)
+    }
+
+    /// The world's `constellations`, or if it has none the automatic ones.
+    #[must_use]
+    pub fn constellations_or_automatic(&self, constellations: Vec<Constellation>) -> Vec<Constellation> {
+        if constellations.is_empty() {
+            self.automatic_constellations()
+        } else {
+            constellations
+        }
     }
 
     /// The figures of `constellations`, their stars found in this sky or else in `field`.
@@ -354,6 +472,10 @@ fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
+fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
 fn norm(v: [f64; 3]) -> f64 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
@@ -430,5 +552,18 @@ mod tests {
         let (centre, cygnus, north, south) = (best(270.0, -28.0), best(305.0, 40.0), at(192.9, 27.1), at(12.9, -27.1));
         assert!(centre > 5.0 * north && centre > 5.0 * south, "centre {centre}, poles {north} {south}");
         assert!(cygnus > 3.0 * north, "Cygnus {cygnus}, pole {north}");
+        // The Local Group where it is: the Clouds as patches brighter than the sky around
+        // them, Andromeda a dimmer smudge.
+        let named = |n: &str| s.galaxies.iter().find(|g| g.name == n).unwrap_or_else(|| panic!("no {n}"));
+        let (lmc, m31) = (named("Large Magellanic Cloud"), named("Andromeda Galaxy"));
+        assert!((lmc.dec_deg + 69.76).abs() < 0.5 && (m31.dec_deg - 41.27).abs() < 0.5 && (m31.v - 3.44).abs() < 0.3, "{lmc:?} {m31:?}");
+        let (cloud, beside) = (at(lmc.ra_deg, lmc.dec_deg), at(lmc.ra_deg + 40.0, lmc.dec_deg + 15.0));
+        assert!(cloud > 2.0 * beside, "LMC {cloud}, beside it {beside}");
+        assert!(at(m31.ra_deg, m31.dec_deg) > at(m31.ra_deg + 10.0, m31.dec_deg), "Andromeda");
+        // At their centres the Large Cloud is 21.4 mag/arcsec² (observed about 21), Andromeda's
+        // disk about 20; both plain to the eye, Centaurus A not.
+        assert!((lmc.surface_brightness - 21.4).abs() < 0.5 && (m31.surface_brightness - 20.3).abs() < 0.7, "{} {}", lmc.surface_brightness, m31.surface_brightness);
+        assert_eq!([lmc.seen_with(), m31.seen_with(), named("Centaurus A").seen_with()], ["naked eye", "naked eye", "binoculars"]);
+        assert!(s.automatic_constellations().len() > 40);
     }
 }

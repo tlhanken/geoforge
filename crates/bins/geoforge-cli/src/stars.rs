@@ -332,6 +332,77 @@ pub fn constellation_list(dir: &Path) -> R<()> {
     Ok(())
 }
 
+/// Save the automatic figures as the world's constellations.
+pub fn constellation_auto(dir: &Path, replace: bool) -> R<()> {
+    let w = World::open(dir)?;
+    if !replace && !w.load_constellations()?.is_empty() {
+        return Err("the world has constellations of its own (--replace to replace them)".into());
+    }
+    let system = w.load_system()?.ok_or("this world has no solar system (a hand-made body)")?;
+    let field = starfield(&w)?;
+    let s = geoforge_almanac::sky::sky(&system, w.manifest.focus, 0.0, 0.0, &field)?;
+    let figures = s.automatic_constellations();
+    for f in &figures {
+        println!("{}: {} lines", f.name, f.lines.len());
+    }
+    w.save_constellations(&figures)?;
+    println!("saved {} constellations", figures.len());
+    Ok(())
+}
+
+/// The galaxies within `radius_mpc` of the world's own, brighter than `limit` from it.
+pub fn universe(dir: &Path, radius_mpc: f64, limit: f64) -> R<()> {
+    use geoforge_cosmos::universe::Universe;
+    let w = World::open(dir)?;
+    let system = w.load_system()?.ok_or("this world has no solar system (a hand-made body)")?;
+    let site = system.root.site.as_ref().ok_or("this system has no place in a galaxy")?;
+    let field = starfield(&w)?;
+    let Some(u) = Universe::of_site(site, system.root.seed) else {
+        println!("This world is in the real universe: its sky has the Local Group and the bright galaxies near it (`geoforge sky`).");
+        return Ok(());
+    };
+    let home = u.home(field.galaxy());
+    println!(
+        "Home: {} ({}, {}), {:.1e} M☉ of stars in a {:.1e} M☉ halo, at ({:.1}, {:.1}, {:.1}) Mpc in universe {}",
+        field.galaxy().name,
+        home.kind(),
+        home.id,
+        home.stellar_msun,
+        home.halo_msun,
+        home.position_mpc[0],
+        home.position_mpc[1],
+        home.position_mpc[2],
+        u.seed().0
+    );
+    let mut near: Vec<_> = u
+        .galaxies_seen(home.position_mpc, radius_mpc, limit)
+        .into_iter()
+        .filter(|g| g.id != home.id)
+        .map(|g| {
+            let d = (0..3).map(|k| (g.position_mpc[k] - home.position_mpc[k]).powi(2)).sum::<f64>().sqrt();
+            let v = g.absolute_v() + 5.0 * (d * 1e5).max(1e-9).log10();
+            (d, v, g)
+        })
+        .filter(|(_, v, _)| *v <= limit)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let with_home = |g: &geoforge_cosmos::universe::UniverseGalaxy| {
+        if g.id.bin == home.id.bin && g.id.cube == home.id.cube && g.id.n == home.id.n {
+            "satellite"
+        } else if g.is_central() {
+            ""
+        } else {
+            "satellite of another"
+        }
+    };
+    println!("{} galaxies within {radius_mpc} Mpc brighter than V {limit}:", near.len());
+    println!("  {:<18} {:<20} {:<8} {:>8} {:>10} {:>6}", "name", "identity", "type", "Mpc", "stars M☉", "V");
+    for (d, v, g) in &near {
+        println!("  {:<18} {:<20} {:<8} {:>8.3} {:>10.1e} {:>6.1} {}", g.name(), g.id.to_string(), g.kind(), d, g.stellar_msun, v, with_home(g));
+    }
+    Ok(())
+}
+
 /// A new world at `star` of `dir`'s galaxy, in `to`: the system made at the star, the galaxy
 /// and its edits carried over.
 pub fn visit(dir: &Path, star: &str, to: &Path) -> R<()> {

@@ -180,15 +180,17 @@ pub fn build(world: &World, opts: &Options) -> Result<Report> {
             .and_then(|field| geoforge_almanac::sky::sky(sys, world.manifest.focus, opts.day, calendar.year_days, &field).map(|s| (s, field)))
         {
             Ok((s, field)) => {
-                let (gw, gh) = (360, 180);
-                let lines: Vec<[(f64, f64); 2]> = s.figures(&world.load_constellations().unwrap_or_default(), &field).iter().flat_map(|f| f.lines.iter().copied()).collect();
+                let (gw, gh) = (720, 360);
+                let own = world.load_constellations().unwrap_or_default();
+                let drawn = own.is_empty();
+                let lines: Vec<[(f64, f64); 2]> = s.figures(&s.constellations_or_automatic(own), &field).iter().flat_map(|f| f.lines.iter().copied()).collect();
                 let points: Vec<SkyPoint> = s.stars.iter().chain(s.bodies.iter().filter(|b| b.v <= geoforge_cosmos::sky::NAKED_EYE)).map(sky_point).collect();
                 images.push(("sky".into(), render::render_sky(opts.width, &s.glow(gw, gh), gw, &points, &s.ecliptic, &lines)));
                 let key = |points: &[SkyPoint]| render::render_sky_key(56, KEY_SCALE, points);
                 images.push(("sky_key_magnitude".into(), key(&MAGNITUDES.map(|v| key_point(v, 5800.0, false)))));
                 images.push(("sky_key_colour".into(), key(&SPECTRAL.map(|(_, t)| key_point(1.0, t, false)))));
                 images.push(("sky_key_planet".into(), key(&[key_point(0.0, 5800.0, true)])));
-                sky_section(&body, sys, &s, opts.day)
+                sky_section(&body, sys, &s, opts.day, drawn)
             }
             Err(e) => format!(r#"<p class="note">No sky: {}</p>"#, esc(&e)),
         },
@@ -455,7 +457,7 @@ fn sky_point(o: &geoforge_almanac::sky::Object) -> SkyPoint {
     SkyPoint { ra_deg: o.ra_deg, dec_deg: o.dec_deg, v: o.v, temperature_k: o.temperature_k, ring: matches!(o.kind, Kind::Planet | Kind::Moon) }
 }
 
-fn sky_section(body: &BodyContext, system: &geoforge_core::body::SolarSystem, s: &geoforge_almanac::sky::Sky, day: f64) -> String {
+fn sky_section(body: &BodyContext, system: &geoforge_core::body::SolarSystem, s: &geoforge_almanac::sky::Sky, day: f64, drawn_figures: bool) -> String {
     let labels = |items: Vec<String>| -> String { items.into_iter().map(|l| format!("<span>{}</span>", esc(&l))).collect() };
     let mags = labels(MAGNITUDES.iter().map(|v| num(*v)).collect());
     let classes = labels(SPECTRAL.iter().map(|(c, t)| format!("{c} {}", short(*t))).collect());
@@ -504,15 +506,50 @@ fn sky_section(body: &BodyContext, system: &geoforge_core::body::SolarSystem, s:
         })
         .collect();
     let eclipses = if eclipses.is_empty() { r#"<p class="note">No eclipses in the year.</p>"#.to_string() } else { format!("<h3>Eclipses in the year</h3><ul>{eclipses}</ul>") };
+    let galaxy_rows: String = s
+        .galaxies
+        .iter()
+        .map(|g| {
+            let size = if g.size_deg >= 1.0 {
+                format!("{:.1}° × {:.1}°", g.size_deg, g.size_deg * g.axis_ratio)
+            } else {
+                format!("{:.0}′ × {:.0}′", 60.0 * g.size_deg, 60.0 * g.size_deg * g.axis_ratio)
+            };
+            format!(
+                r#"<tr><td>{}</td><td>{}</td><td class="n">{:.1}</td><td class="n">{}</td><td class="n">{size}</td><td class="n">{:.1}° / {:+.1}°</td><td>{}</td></tr>"#,
+                esc(&g.name),
+                esc(&g.kind),
+                g.v,
+                if g.distance_mly < 1.0 { format!("{:.0} kly", 1000.0 * g.distance_mly) } else { format!("{:.1} Mly", g.distance_mly) },
+                g.ra_deg,
+                g.dec_deg,
+                g.seen_with()
+            )
+        })
+        .collect();
+    let galaxies = if galaxy_rows.is_empty() {
+        format!(r#"<p class="note">No other galaxy is brighter than magnitude {:.0} in this sky.</p>"#, geoforge_almanac::sky::GALAXY_LIMIT)
+    } else {
+        format!(
+            r#"<h3>Other galaxies</h3><p class="note">To magnitude {:.0}, drawn into the chart's haze by their surface brightness; how they are seen goes by that too (a dwarf spreads its light too thin for the eye).</p><div class="scroll"><table class="stack"><thead><tr><th>Galaxy</th><th>Type</th><th>Mag</th><th>Distance</th><th>Size</th><th>RA / Dec</th><th>Seen with</th></tr></thead><tbody>{galaxy_rows}</tbody></table></div>"#,
+            geoforge_almanac::sky::GALAXY_LIMIT
+        )
+    };
+    let figures = if drawn_figures {
+        "Its constellations are drawn from its brightest stars: the world has none of its own (<code>geoforge constellation auto</code> saves these to rename or edit)."
+    } else {
+        "Its constellations are the world's own."
+    };
     let date = real_date(system, day).map_or(String::new(), |d| format!(" ({d})"));
     format!(
-        r#"<figure class="sq"><img src="img/sky.jpg" alt="Star chart"><figcaption><b>Star chart of {name}'s sky, day {day}{date}:</b> right ascension and declination on the world's equator, RA 360° at the left to 0° at the right, as the sky looks from below. {n} naked-eye stars, drawn from the {galaxy} model {r:.1} kpc from its centre (not a catalogue).</figcaption></figure>
+        r#"<figure class="sq"><img src="img/sky.jpg" alt="Star chart"><figcaption><b>Star chart of {name}'s sky, day {day}{date}:</b> right ascension and declination on the world's equator, RA 360° at the left to 0° at the right, as the sky looks from below. {n} naked-eye stars, drawn from the {galaxy} model {r:.1} kpc from its centre (not a catalogue). {figures}</figcaption></figure>
 <div class="cols skykey"><div class="card"><h3>Key</h3>
 <p class="note">Brightness by visual magnitude (a G star; drawn 2.5 times the chart's size):</p><img class="keystrip" src="img/sky_key_magnitude.jpg" alt="Star sizes by magnitude"><div class="keylabels">{mags}</div>
 <p class="note">Colour by spectral class and surface temperature in K (magnitude 1):</p><img class="keystrip" src="img/sky_key_colour.jpg" alt="Star colours by class"><div class="keylabels">{classes}</div>
 <p class="note"><img class="keydot" src="img/sky_key_planet.jpg" alt="Planet">A green ring marks a planet or moon of the system. The dotted gold line is the star's yearly path (the ecliptic); grid lines every 30°, the equator brighter; the blue-grey haze is the galaxy's band, its dust lane dark.</p></div>
 <div class="card"><h3>Brightest stars</h3><div class="scroll"><table><thead><tr><th>Star</th><th>Mag</th><th>Class</th><th>Distance</th><th>RA / Dec</th></tr></thead><tbody>{star_rows}</tbody></table></div></div></div>
 <h3>The system tonight</h3><div class="scroll"><table class="stack"><thead><tr><th>Body</th><th>Mag</th><th>From the star</th><th>Lit</th><th>Seen</th></tr></thead><tbody>{body_rows}</tbody></table></div>
+{galaxies}
 {eclipses}"#,
         name = esc(&body.name),
         n = s.stars.len(),

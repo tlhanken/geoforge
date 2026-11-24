@@ -216,17 +216,19 @@ pub fn at(seed: Seed, jd_tt: f64) -> SolarSystem {
             galaxy_seed: Some(seed.child(b"galaxy")),
             star: None,
             orientation: Some(ecliptic_in_galactic()),
+            universe: Some(geoforge_core::galactic::UniverseSite::Real),
         }),
         present_jd_tt: Some(jd_tt),
     };
     SolarSystem { root, nodes }
 }
 
+/// The galactic axes (toward the centre, longitude 90°, the north pole) in the ICRS (rows).
+pub(crate) const GALACTIC: [[f64; 3]; 3] =
+    [[-0.054_875_560_4, -0.873_437_090_2, -0.483_835_015_5], [0.494_109_427_9, -0.444_829_630_0, 0.746_982_244_5], [-0.867_666_149_0, -0.198_076_373_4, 0.455_983_776_2]];
+
 /// The J2000 ecliptic's axes in galactic coordinates (rows).
 fn ecliptic_in_galactic() -> [[f64; 3]; 3] {
-    // The galactic axes (toward the centre, longitude 90°, the north pole) in the ICRS.
-    const GALACTIC: [[f64; 3]; 3] =
-        [[-0.054_875_560_4, -0.873_437_090_2, -0.483_835_015_5], [0.494_109_427_9, -0.444_829_630_0, 0.746_982_244_5], [-0.867_666_149_0, -0.198_076_373_4, 0.455_983_776_2]];
     let (s, c) = OBLIQUITY_J2000_DEG.to_radians().sin_cos();
     let ecliptic = [[1.0, 0.0, 0.0], [0.0, c, s], [0.0, -s, c]];
     ecliptic.map(|e| GALACTIC.map(|g| g[0] * e[0] + g[1] * e[1] + g[2] * e[2]))
