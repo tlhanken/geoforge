@@ -198,6 +198,16 @@ Still needed:
   today); generated galaxy-recipe seeds now draw different systems than before (the
   realism tables' s-worlds predate this).
 
+## 12c. One universe per seed, and the viewer — done (OpenSpec `universe-addresses`)
+- Done: addresses for every galaxy, star's system and body, generated from the seed and
+  address alone; galaxy models from generated galaxies; default body by rule; universe
+  directories (`new --seed/--at`, `focus`, `visit` in the universe); true colour for every
+  body (`appearance` view); `geoforge view`, zoom universe → galaxy → stars → system →
+  body, search, layers on a globe or map, make and generate from the page.
+- Next: clouds over the true colour; stars' and galaxies' names searched farther out (an
+  index of what has been looked at); the real Earth's true colour from its data; the
+  viewer's galaxy view at the stars' own scale (sectors drawn as they come into view).
+
 ## 12b. Above one galaxy — first part done (OpenSpec `universe-and-figures`)
 - Done: a universe of halos and galaxies in nested cubes, clustered, each galaxy with an
   identity; a world's galaxy placed in it (the Sun's is the real one); other galaxies in

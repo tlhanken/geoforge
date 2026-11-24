@@ -62,6 +62,18 @@ enum Cmd {
         #[arg(long, conflicts_with_all = ["body", "archetype"])]
         focus: Option<String>,
     },
+    /// Look around a universe in a browser: zoom from its galaxies to a galaxy's stars, a
+    /// system and a body's maps, search, and make or generate any body you find.
+    View {
+        /// The universe directory.
+        dir: PathBuf,
+        /// Where to listen: 127.0.0.1 for this computer only, 0.0.0.0 to reach it from
+        /// another device on your network.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, default_value_t = 8137)]
+        port: u16,
+    },
     /// The bodies made in a universe's directory, or make one of them its focus.
     Focus {
         /// The universe directory.
@@ -541,6 +553,12 @@ fn run(cli: Cli) -> R<()> {
     match cli.cmd {
         Cmd::New { dir, seed, at, width, body, archetype, focus } => world::new_world(&dir, seed, at.as_deref(), width, body, archetype, focus.as_deref()),
         Cmd::Focus { dir, at } => world::focus(&dir, at.as_deref()),
+        Cmd::View { dir, host, port } => {
+            let viewer = geoforge_view::Viewer::open(&dir)?;
+            println!("geoforge viewer: http://{}:{port}/ (Ctrl-C to stop)", if host == "0.0.0.0" { "localhost" } else { &host });
+            geoforge_view::server::serve(viewer, &format!("{host}:{port}"))?;
+            Ok(())
+        }
         Cmd::Star { action } => match action {
             StarCmd::Add { dir, name, ra, dec, distance_ly, mass, age_gyr, feh, companion } => stars::add(&dir, &name, ra, dec, distance_ly, mass, age_gyr, feh, companion),
             StarCmd::Move { dir, star, ra, dec, distance_ly } => stars::move_star(&dir, &star, ra, dec, distance_ly),

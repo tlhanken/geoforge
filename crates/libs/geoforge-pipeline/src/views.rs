@@ -20,6 +20,8 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum View {
+    /// True colour from space, without clouds.
+    Appearance,
     /// Köppen–Geiger climate classes.
     Koppen,
     /// Soil classes.
@@ -48,7 +50,7 @@ impl View {
     /// Every view.
     #[must_use]
     pub fn all() -> Vec<Self> {
-        let mut v = vec![Self::Koppen, Self::Soil, Self::Fertility, Self::Timber];
+        let mut v = vec![Self::Appearance, Self::Koppen, Self::Soil, Self::Fertility, Self::Timber];
         v.extend(Deposit::ALL.map(Self::Deposit));
         v.extend(Hazard::ALL.map(Self::Hazard));
         v.push(Self::Lightning);
@@ -57,11 +59,13 @@ impl View {
         v
     }
 
-    /// Views by group name: `climate_maps` (Köppen, pressure), `oceans` (sea ice, reefs,
-    /// productivity), `resources` (deposits, soils, fertility, timber) or `hazards`.
+    /// Views by group name: `appearance` (true colour), `climate_maps` (Köppen, pressure),
+    /// `oceans` (sea ice, reefs, productivity), `resources` (deposits, soils, fertility,
+    /// timber) or `hazards`.
     #[must_use]
     pub fn group(name: &str) -> Option<Vec<Self>> {
         match name {
+            "appearance" => Some(vec![Self::Appearance]),
             "climate_maps" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Koppen | Self::Pressure { .. })).collect()),
             "oceans" => Some(vec![Self::SeaIce, Self::Reefs, Self::Productivity]),
             "resources" => Some(Self::all().into_iter().filter(|v| matches!(v, Self::Soil | Self::Fertility | Self::Timber | Self::Deposit(_))).collect()),
@@ -73,6 +77,7 @@ impl View {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
+            Self::Appearance => "appearance",
             Self::Koppen => "koppen",
             Self::Soil => "soil",
             Self::Fertility => "fertility",
@@ -97,6 +102,7 @@ impl View {
     #[must_use]
     pub fn reads(self) -> &'static [ProductId] {
         match self {
+            Self::Appearance => &[ProductId::Elevation, ProductId::Temperature, ProductId::TemperatureRange, ProductId::SstAnomaly, ProductId::Biome, ProductId::Lithology],
             Self::Koppen => &[ProductId::Temperature, ProductId::TemperatureRange, ProductId::Precipitation, ProductId::PrecipitationWarmShare],
             Self::Pressure { july: false } => &[ProductId::WindJan, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
             Self::Pressure { july: true } => &[ProductId::WindJul, ProductId::Temperature, ProductId::TemperatureRange, ProductId::Elevation],
@@ -152,6 +158,8 @@ pub enum Map {
     Classes(Classes),
     Chances(Chances),
     Quantity(Quantity),
+    /// Each cell's colour, sRGB.
+    Colours(Vec<[u8; 3]>),
 }
 
 /// What views are worked out from; the per-cell ground is read once, on first need.
@@ -200,6 +208,7 @@ pub fn compute(view: View, s: &Source) -> Option<Map> {
     let sea = s.sea_world();
     let chances = |cells: Vec<Option<f64>>, meaning: String| Map::Chances(Chances { cells, meaning });
     Some(match view {
+        View::Appearance => Map::Colours(geoforge_analysis::appearance::surface(s.products, s.grid, s.body)?),
         View::Koppen => Map::Classes(tally(s.grid, &koppen::map(s.products, sea, &KoppenRules::default())?, |k| (k.code(), k.name(), k.color()), &Koppen::ALL)),
         View::Soil => {
             let g = s.ground()?;
@@ -293,7 +302,7 @@ mod tests {
         }
         let names: std::collections::BTreeSet<&str> = all.iter().map(|v| v.name()).collect();
         assert_eq!(names.len(), all.len(), "names are unique");
-        let grouped: usize = ["climate_maps", "oceans", "resources", "hazards"].iter().map(|g| View::group(g).unwrap().len()).sum();
+        let grouped: usize = ["appearance", "climate_maps", "oceans", "resources", "hazards"].iter().map(|g| View::group(g).unwrap().len()).sum();
         assert_eq!(grouped, all.len(), "every view is in one group");
     }
 

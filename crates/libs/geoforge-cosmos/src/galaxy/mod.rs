@@ -118,8 +118,45 @@ impl Galaxy {
         self.components.iter().map(|c| c.mass_msun).sum()
     }
 
+    /// `n` stars drawn from the whole galaxy by mass, seeded `seed`: where each is (pc from the
+    /// centre) and how old (Gyr) — its shape as a cloud, to draw it.
+    #[must_use]
+    pub fn sample(&self, seed: geoforge_core::seed::Seed, n: usize) -> Vec<([f64; 3], f64)> {
+        let mut d = Draw::new(seed.child(b"sample"));
+        (0..n)
+            .map(|_| {
+                let (_, age, p) = self.draw_star(&mut d);
+                (p, age)
+            })
+            .collect()
+    }
+
     /// A star drawn from the whole galaxy: its component (by mass), age and place.
     pub(crate) fn draw_star(&self, d: &mut Draw) -> (usize, f64, [f64; 3]) {
+        let (c, age) = self.draw_birth(d);
+        (c, age, self.draw_place(d, c, age))
+    }
+
+    /// `n` stars younger than `max_age_gyr`, seeded `seed`, as [`Self::sample`] gives them
+    /// (fewer if the galaxy hardly forms any): the young trace its arms.
+    #[must_use]
+    pub fn sample_young(&self, seed: geoforge_core::seed::Seed, n: usize, max_age_gyr: f64) -> Vec<([f64; 3], f64)> {
+        let mut d = Draw::new(seed.child(b"young"));
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n.saturating_mul(5000) {
+            if out.len() == n {
+                break;
+            }
+            let (c, age) = self.draw_birth(&mut d);
+            if age <= max_age_gyr {
+                out.push((self.draw_place(&mut d, c, age), age));
+            }
+        }
+        out
+    }
+
+    /// A star's component (by mass) and age.
+    fn draw_birth(&self, d: &mut Draw) -> (usize, f64) {
         let total = self.mass_msun();
         let mut u = d.u() * total;
         let c = self.components.iter().position(|c| {
@@ -127,12 +164,14 @@ impl Galaxy {
             u <= 0.0
         });
         let c = c.unwrap_or(self.components.len() - 1);
-        let comp = &self.components[c];
-        let age = comp.history.draw_lookback(d.u(), d.u());
-        let shape = Prepared::new(&comp.shape, age, self.edge_kpc);
+        (c, self.components[c].history.draw_lookback(d.u(), d.u()))
+    }
+
+    /// Where a star of component `c` born `age` Gyr ago is, pc.
+    fn draw_place(&self, d: &mut Draw, c: usize, age: f64) -> [f64; 3] {
+        let shape = Prepared::new(&self.components[c].shape, age, self.edge_kpc);
         let peak = self.arms.as_ref().map_or(1.0, |_| 1.0 + 8.0 * self.arm_contrast(c, age));
-        let p = shape.draw(d, &|p| self.arm_factor(c, age, p[0], p[1]) / peak);
-        (c, age, p)
+        shape.draw(d, &|p| self.arm_factor(c, age, p[0], p[1]) / peak)
     }
 }
 

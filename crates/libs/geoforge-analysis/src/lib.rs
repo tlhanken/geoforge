@@ -5,6 +5,7 @@
 //!
 //! | Module | Concern |
 //! |---|---|
+//! | [`appearance`] | true colour: a generated surface, a body without one, a star |
 //! | [`ground`] | one read of everything the analyses need, per cell |
 //! | [`koppen`] | Köppen–Geiger classes from the climate |
 //! | [`resources`] | ore deposits (λ prospectivity, local draws, giants), soils, timber |
@@ -12,6 +13,7 @@
 //! | [`oceans`] | sea ice, coral reefs and atolls, productivity |
 //! | [`pressure`] | sea-level pressure from the winds |
 
+pub mod appearance;
 pub mod ground;
 pub mod hazards;
 pub mod koppen;

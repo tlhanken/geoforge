@@ -55,7 +55,8 @@ pub struct Report {
 
 /// The maps, by layer in the order the pipeline makes them, each derived view after the layer
 /// it is read from: anchor, heading, and product or view names.
-pub(crate) const GROUPS: [(&str, &str, &[&str]); 10] = [
+pub(crate) const GROUPS: [(&str, &str, &[&str]); 11] = [
+    ("appearance", "From space", &["appearance"]),
     ("tectonics", "Tectonics", &["plates", "earthquakes", "volcanoes", "tsunamis"]),
     ("geology", "Geology", &["provinces", "lithology", "rock_age"]),
     ("elevation", "Elevation", &["rough_elevation"]),
@@ -74,6 +75,7 @@ pub(crate) const GROUPS: [(&str, &str, &[&str]); 10] = [
 
 pub(crate) fn caption(name: &str) -> String {
     let c = match name {
+        "appearance" => "True colour from space, without clouds: seas by depth, sea ice, land by what covers it, snow",
         "rough_elevation" => "Elevation from the plates, before erosion",
         "elevation" => "Elevation after erosion",
         "plates" => "Tectonic plates",
@@ -283,6 +285,7 @@ pub(crate) fn map(name: &str, products: &Products, grid: &AnyGrid, body: &BodyCo
             let span = 6.0 * q.contour;
             Some((render::render_quantity(&q.cells, sea_cells, q.contour, span, grid, relief)?, Some(render::quantity_legend(&q.cells, span, q.units))))
         }
+        Some(views::Map::Colours(c)) => Some((render::render_classes(&c.into_iter().map(Some).collect::<Vec<_>>(), grid, relief)?, None)),
         None => None,
     })
 }

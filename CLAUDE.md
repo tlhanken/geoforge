@@ -118,7 +118,12 @@ Getting started with the command: `docs/GETTING_STARTED.md`. Formatting follows
 | `geoforge-store` | the world directory: manifest, products, edit views and patches, renders, derived cache |
 | `geoforge-almanac` | the world in time: ephemeris and calendar, eclipses, sky, storms, weather, hazards near a place |
 | `geoforge-pipeline` | the generator registry, plan, provenance, generation, export/import, views, place reports |
+| `geoforge-view` | the viewer: scenes by address (universe, galaxy, stars, system, body), search, maps; a local web server and its page (`web/`, three.js) |
 | `geoforge-cli` | the `geoforge` command |
+
+Everything in a universe has an address (`7/h6:0,0,-1:17.0/f12:3,-4,0:5/4`: universe /
+galaxy / star's system / body) and is generated from the seed and that address alone
+(`geoforge_cosmos::resolve`); a universe directory keeps only what is made or edited.
 
 Rules: `geoforge-core` has no algorithms that generate and no I/O; generators never branch
 on the kind of body (another kind gets another generator); surface layers see a

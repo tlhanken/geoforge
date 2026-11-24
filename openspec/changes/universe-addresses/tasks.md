@@ -13,10 +13,10 @@
 - [x] 2.4 Sky and `universe` find the home galaxy by address
 
 ## 3. Appearance
-- [ ] 3.1 True-colour view of a generated surface
-- [ ] 3.2 Bodies without a generated surface; stars
+- [x] 3.1 True-colour view of a generated surface
+- [x] 3.2 Bodies without a generated surface; stars
 
 ## 4. Viewer
-- [ ] 4.1 `geoforge-view`: scenes by address, search, images; local server
-- [ ] 4.2 Web page: universe, galaxy, system, body; layers; sphere or map
-- [ ] 4.3 `geoforge view`
+- [x] 4.1 `geoforge-view`: scenes by address, search, images; local server
+- [x] 4.2 Web page: universe, galaxy, system, body; layers; sphere or map
+- [x] 4.3 `geoforge view`

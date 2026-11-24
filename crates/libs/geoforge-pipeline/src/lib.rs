@@ -639,6 +639,7 @@ pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[Produ
             Some(views::Map::Classes(c)) => geoforge_store::render::render_classes(&c.colors(), &grid, relief)?,
             Some(views::Map::Chances(c)) => geoforge_store::render::render_chances(&c.cells, &sea_cells, &grid, relief)?,
             Some(views::Map::Quantity(q)) => geoforge_store::render::render_quantity(&q.cells, &sea_cells, q.contour, 6.0 * q.contour, &grid, relief)?,
+            Some(views::Map::Colours(c)) => geoforge_store::render::render_classes(&c.into_iter().map(Some).collect::<Vec<_>>(), &grid, relief)?,
             None => continue,
         };
         let f = to.join(format!("{}.png", v.name()));
@@ -646,6 +647,34 @@ pub fn render_all(world: &World, stored: &Products, to: &Path, products: &[Produ
         out.push(f);
     }
     Ok(out)
+}
+
+/// The map `name` (a product or a derived view) of `world` as its preview image (hillshaded
+/// where it has a heightmap); `None` while the world lacks what it is made from.
+///
+/// # Errors
+/// If `name` is neither a product nor a view, or on unreadable files.
+pub fn map_image(world: &World, name: &str) -> Result<Option<image::RgbImage>> {
+    let body = world.load_body()?;
+    let grid = world.manifest.grid.build()?;
+    let products = world.load_products()?;
+    let source = views::Source::new(&products, &grid, &body);
+    let sea = source.sea();
+    Ok(report::map(name, &products, &grid, &body, &source, &sea)?.map(|(img, _)| img))
+}
+
+/// The maps `world` can draw now ([`map_image`]): its stored products that are maps, and
+/// the views those are enough for, true colour first.
+#[must_use]
+pub fn map_names(world: &World) -> Vec<&'static str> {
+    let stored = |p: &ProductId| world.has_product(*p);
+    let mut out: Vec<&'static str> = View::all()
+        .into_iter()
+        .filter(|v| if *v == View::Appearance { stored(&ProductId::Elevation) || stored(&ProductId::RoughElevation) } else { v.reads().iter().all(stored) })
+        .map(View::name)
+        .collect();
+    out.extend(ProductId::ALL.into_iter().filter(|p| stored(p) && !matches!(p, ProductId::TectonicEvents | ProductId::GeologyEvents | ProductId::Deposits)).map(ProductId::name));
+    out
 }
 
 /// Export derived views with world files: a class map as an exact-colour PNG and a legend
@@ -686,6 +715,12 @@ pub fn export_views(world: &World, views: &[View], to: &Path) -> Result<Vec<(Vie
                 let (img, min, max) = geoforge_store::render::gray_quantity(&q.cells, &grid)?;
                 img.save(&png).map_err(geoforge_store::StoreError::from)?;
                 let note = serde_json::json!({ "view": name, "units": q.units, "min": min, "max": max, "value": "min + v/65535 × (max − min)" });
+                std::fs::write(to.join(format!("{name}.json")), serde_json::to_string_pretty(&note)?)?;
+                "json"
+            }
+            Some(views::Map::Colours(c)) => {
+                geoforge_store::render::render_classes(&c.into_iter().map(Some).collect::<Vec<_>>(), &grid, None)?.save(&png).map_err(geoforge_store::StoreError::from)?;
+                let note = serde_json::json!({ "view": name, "value": "sRGB, true colour from space without clouds or shading" });
                 std::fs::write(to.join(format!("{name}.json")), serde_json::to_string_pretty(&note)?)?;
                 "json"
             }

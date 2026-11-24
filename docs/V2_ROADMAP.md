@@ -399,6 +399,21 @@ world's edits). Calibration: the galaxy-integrated IMF (α = 2.6 above 1 M☉; w
 2.3 the Sun's sky held 11,400 stars and twice the third- and fourth-magnitude ones) and the
 thin disk's mass set by the 10 pc census. A sky takes under a second on two cores.
 
+## 8h. One universe per seed, and the viewer — done (November 2026)
+
+OpenSpec change `universe-addresses`. Every item of a universe has an address
+(`geoforge_core::address`) and is generated from the universe's seed and that address alone
+(`geoforge_cosmos::resolve`): a galaxy (generated, with a model of its own — its type's preset
+scaled to its mass and size), the system born with one of its stars, a body of that system.
+A universe's default body is an address chosen by a fixed rule (its galaxy most like the Milky
+Way nearest its origin; the nearest Sun-like star with a wet world near that galaxy's
+reference circle; its focus). A universe directory keeps what is made or edited
+(`universe.json`, shared `galaxies/<galaxy>/` documents, a world per body at
+`bodies/<galaxy>/<star>/<body>/`). Every body has a true-colour face (`appearance`: a generated
+surface's seas, ice, land cover and snow; a body without one drawn from what it is; stars by
+temperature). `geoforge view` serves the viewer (`geoforge-view`: scenes, search and maps in
+Rust behind a local server; the page draws them with three.js).
+
 ## 8g. The universe and the sky's figures — done (November 2026)
 
 OpenSpec change `universe-and-figures`. A universe from a seed

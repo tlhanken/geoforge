@@ -48,6 +48,19 @@ The previews in `renders/` show each layer (elevation, biomes, climate, rivers, 
 and the derived views (Köppen climates, soils, deposits, hazards, sea ice, pressure).
 `geoforge render worlds/demo koppen hazards` redraws chosen ones.
 
+## Look around
+
+```bash
+geoforge view worlds/demo                  # then open http://127.0.0.1:8137/
+geoforge view worlds/demo --host 0.0.0.0   # reachable from a phone or tablet on your network
+```
+
+The viewer zooms from the universe's galaxies into a galaxy (its shape, the systems made in
+it), the stars around a system, the system's orbits and a body: its true colour on a globe
+or a flat map, and every layer and view once it is generated. Search finds names among what
+is made or nearby; type an address to go anywhere. A body you find can be made, and its
+layers generated, from its panel.
+
 ## Ask about a place
 
 ```bash

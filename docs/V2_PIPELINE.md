@@ -49,6 +49,7 @@ Other starting points:
 |---|---|
 | `new <dir> [--seed N] [--at ADDRESS] [--focus BODY] [--width 2048] [--archetype NAME \| --body file]` | Create a universe's body (or a world on its own) |
 | `focus <dir> [ADDRESS]` | List a universe directory's bodies, or switch its focus |
+| `view <dir> [--host 127.0.0.1] [--port 8137]` | The viewer in a browser: universe → galaxy → stars → system → body, search, layers |
 | `generate <dir> [--render] [--from LAYER] [--until LAYER] [--force]` | Build what is missing or stale |
 | `plan <dir>` | Which generator fills each layer, what `generate` would run, and why |
 | `status <dir>` | Source (generate / patched / authored) and state of every product |
@@ -67,6 +68,16 @@ Other starting points:
 | `census [--galaxy NAME] [--count N] [--from SEED]` | Draw many systems: kinds of star, planets, wet worlds, example seeds |
 
 ## The world directory
+
+A world is one body. `new` puts it in a universe directory, at its address:
+
+```text
+universe.json                    the universe (seed or real) and the focus body
+galaxies/<galaxy>/               galaxy.json (if edited) and stars.json (star edits), shared
+bodies/<galaxy>/<star>/<body>/   a world, as below
+```
+
+and each world holds:
 
 ```text
 world.toml                       seed, grid, layer parameters, product sources, provenance
@@ -128,6 +139,7 @@ the products they read instead):
 
 | View | What | Export |
 |---|---|---|
+| `appearance` | True colour from space without clouds: seas by depth, sea ice, land by its biome's colour from orbit, snow where cold, bare rock (grey regolith, or rust under air) on a dry world, the cloud deck over 30 bar | sRGB PNG + note |
 | `koppen` | Köppen–Geiger classes, from the climate | `koppen.png` (Beck et al. 2018's palette), `koppen.legend.json` (code, name, colour, share of land) |
 | `soil` | Soil classes (WRB reference groups) from climate, rock, relief and rivers | class PNG + legend |
 | `fertility`, `timber` | Soil fertility for farming; standing timber below the tree line | grayscale PNG (0–255 for 0–1) + `<view>.json` saying what 1 means |
