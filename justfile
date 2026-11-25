@@ -6,9 +6,13 @@ world_dir := "worlds"
 default:
     @just --list
 
-# Build the geoforge command (target/release/geoforge).
+# Build the geoforge command and the viewer (target/release/geoforge, geoforge-viewer).
 build:
-    cargo build --release -p geoforge-cli
+    cargo build --release -p geoforge-cli -p geoforge-viewer
+
+# Look around a universe in a browser: just view worlds/world-42
+view dir port="8137": build
+    ./target/release/geoforge-viewer {{dir}} --port {{port}}
 
 # Run every test.
 test:

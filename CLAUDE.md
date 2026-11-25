@@ -98,7 +98,8 @@ See `docs/V2_ROADMAP.md`. Layers and products: `docs/V2_PIPELINE.md`.
 
 ## Development Commands
 ```bash
-just build        # cargo build --release -p geoforge-cli → target/release/geoforge
+just build        # target/release/geoforge and target/release/geoforge-viewer
+just view worlds/world-42   # the viewer at http://127.0.0.1:8137/
 just test         # cargo test --release --workspace
 just check        # clippy + rustfmt --check
 just world 42     # make worlds/world-42 and generate it with previews
@@ -118,8 +119,8 @@ Getting started with the command: `docs/GETTING_STARTED.md`. Formatting follows
 | `geoforge-store` | the world directory: manifest, products, edit views and patches, renders, derived cache |
 | `geoforge-almanac` | the world in time: ephemeris and calendar, eclipses, sky, storms, weather, hazards near a place |
 | `geoforge-pipeline` | the generator registry, plan, provenance, generation, export/import, views, place reports |
-| `geoforge-view` | the viewer: scenes by address (universe, galaxy, stars, system, body), search, maps; a local web server and its page (`web/`, three.js) |
-| `geoforge-cli` | the `geoforge` command |
+| `geoforge-cli` | the `geoforge` command (`crates/bins`) |
+| `geoforge-viewer` | the `geoforge-viewer` program (`crates/bins`): scenes by address (universe, galaxy, stars, system, body), search, maps; a local web server and its page (`web/`, three.js) |
 
 Everything in a universe has an address (`7/h6:0,0,-1:17.0/f12:3,-4,0:5/4`: universe /
 galaxy / star's system / body) and is generated from the seed and that address alone

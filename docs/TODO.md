@@ -18,7 +18,7 @@ An interactive viewer for a world:
 - Done: addresses for every galaxy, star's system and body, generated from the seed and
   address alone; galaxy models from generated galaxies; default body by rule; universe
   directories (`new --seed/--at`, `focus`, `visit` in the universe); true colour for every
-  body (`appearance` view); `geoforge view`, zoom universe → galaxy → stars → system →
+  body (`appearance` view); the viewer (`geoforge-viewer`), zoom universe → galaxy → stars → system →
   body, search, layers on a globe or map, make and generate from the page.
 - Next: clouds over the true colour; stars' and galaxies' names searched farther out (an
   index of what has been looked at); the real Earth's true colour from its data; the

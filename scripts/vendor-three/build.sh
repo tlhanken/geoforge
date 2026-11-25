@@ -8,5 +8,5 @@ trap 'rm -rf "${work:?}"' EXIT
 cp scripts/vendor-three/entry.js "$work/"
 (cd "$work" && npm init -y >/dev/null && npm install --silent "three@$version" esbuild@0.25 >/dev/null \
   && npx esbuild entry.js --bundle --minify --format=esm --legal-comments=none --outfile=three.js)
-{ echo "// three.js $version (MIT License, Copyright © 2010-2026 three.js authors), the parts entry.js names."; cat "$work/three.js"; } > crates/libs/geoforge-view/web/three.js
-echo "wrote crates/libs/geoforge-view/web/three.js ($(wc -c < crates/libs/geoforge-view/web/three.js) bytes)"
+{ echo "// three.js $version (MIT License, Copyright © 2010-2026 three.js authors), the parts entry.js names."; cat "$work/three.js"; } > crates/bins/geoforge-viewer/web/three.js
+echo "wrote crates/bins/geoforge-viewer/web/three.js ($(wc -c < crates/bins/geoforge-viewer/web/three.js) bytes)"

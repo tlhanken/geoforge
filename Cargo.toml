@@ -19,8 +19,8 @@ members = [
     "crates/libs/geoforge-store",
     "crates/libs/geoforge-almanac",
     "crates/libs/geoforge-pipeline",
-    "crates/libs/geoforge-view",
     "crates/bins/geoforge-cli",
+    "crates/bins/geoforge-viewer",
 ]
 resolver = "2"
 

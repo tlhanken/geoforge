@@ -224,7 +224,7 @@ mod tests {
     /// search, and an address given without its universe.
     #[test]
     fn a_universe_seen_level_by_level() {
-        let dir = std::env::temp_dir().join(format!("geoforge-view-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("geoforge-viewer-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut u = UniverseDir::create(&dir, Address::universe(Seed(7))).unwrap();
         let w = geoforge_pipeline::create_at(&mut u, &Address::universe(Seed(7)), None, geoforge_core::grid::GridSpec::Equirect { width: 64, height: 32 }).unwrap();

@@ -1,5 +1,5 @@
 // The parts of three.js the viewer's page uses; bundled into
-// crates/libs/geoforge-view/web/three.js by scripts/vendor-three/build.sh.
+// crates/bins/geoforge-viewer/web/three.js by scripts/vendor-three/build.sh.
 export {
   AdditiveBlending, AmbientLight, BufferGeometry, CanvasTexture, Color, DirectionalLight,
   DoubleSide, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineLoop, MathUtils,

@@ -51,8 +51,8 @@ and the derived views (Köppen climates, soils, deposits, hazards, sea ice, pres
 ## Look around
 
 ```bash
-geoforge view worlds/demo                  # then open http://127.0.0.1:8137/
-geoforge view worlds/demo --host 0.0.0.0   # reachable from a phone or tablet on your network
+geoforge-viewer worlds/demo                  # then open http://127.0.0.1:8137/
+geoforge-viewer worlds/demo --host 0.0.0.0   # reachable from a phone or tablet on your network
 ```
 
 The viewer zooms from the universe's galaxies into a galaxy (its shape, the systems made in

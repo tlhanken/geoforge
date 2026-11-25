@@ -411,7 +411,7 @@ reference circle; its focus). A universe directory keeps what is made or edited
 (`universe.json`, shared `galaxies/<galaxy>/` documents, a world per body at
 `bodies/<galaxy>/<star>/<body>/`). Every body has a true-colour face (`appearance`: a generated
 surface's seas, ice, land cover and snow; a body without one drawn from what it is; stars by
-temperature). `geoforge view` serves the viewer (`geoforge-view`: scenes, search and maps in
+temperature). The viewer, `geoforge-viewer DIR` (its own program and crate: scenes, search and maps in
 Rust behind a local server; the page draws them with three.js).
 
 ## 8g. The universe and the sky's figures — done (November 2026)

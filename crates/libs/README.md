@@ -11,7 +11,8 @@
 | `geoforge-almanac` | The world in time: Kepler positions and calendars, eclipses, the night sky, the storm field, daily weather and its phenomena, hazards near a place | core, cosmos, analysis, store, names |
 | `geoforge-pipeline` | The generator registry, plan, provenance, incremental generation, export/import/reset, derived views, place reports, realism stats | all of the above |
 
-Binary: `crates/bins/geoforge-cli` (`geoforge`).
+Programs, side by side on the pipeline: `crates/bins/geoforge-cli` (`geoforge`) and
+`crates/bins/geoforge-viewer` (`geoforge-viewer`, the viewer in a browser).
 
 Rules:
 

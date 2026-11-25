@@ -47,7 +47,7 @@ their own).
 ## Later in this change
 - Appearance: a true-colour view for every body (the focus world from its products; other
   bodies from their bulk properties; stars by temperature), low resolution, cached.
-- Viewer: `geoforge view DIR` — a local server (Rust: resolving, search, layers, images)
+- Viewer: `geoforge-viewer DIR` (its own program) — a local server (Rust: resolving, search, layers, images)
   and a thin web page (three.js) — zoom universe → galaxy → system → body, search by name
   among what is generated nearby or made, and by address anywhere; layers on a sphere or a
   map.

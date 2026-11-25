@@ -1,5 +1,5 @@
 // The geoforge viewer's page: it asks the server for the scene at an address and draws it.
-// Everything shown is worked out by the server (geoforge-view); this only draws and picks.
+// Everything shown is worked out by the server (geoforge-viewer); this only draws and picks.
 import * as THREE from '/three.js';
 
 const canvas = document.getElementById('view');

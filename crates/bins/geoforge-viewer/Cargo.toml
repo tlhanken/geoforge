@@ -1,0 +1,24 @@
+[package]
+name = "geoforge-viewer"
+description = "The geoforge viewer: a universe directory's scenes by address, search and maps, served to a browser"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "geoforge-viewer"
+path = "src/main.rs"
+
+[dependencies]
+geoforge-core = { path = "../../libs/geoforge-core" }
+geoforge-cosmos = { path = "../../libs/geoforge-cosmos" }
+geoforge-analysis = { path = "../../libs/geoforge-analysis" }
+geoforge-almanac = { path = "../../libs/geoforge-almanac" }
+geoforge-store = { path = "../../libs/geoforge-store" }
+geoforge-pipeline = { path = "../../libs/geoforge-pipeline" }
+image = { version = "0.24", default-features = false, features = ["png"] }
+serde = { workspace = true }
+serde_json = "1"
+tiny_http = "0.12"
+clap = { workspace = true }

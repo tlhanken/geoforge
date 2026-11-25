@@ -21,6 +21,11 @@
     dir = root + /crates/bins;
   in {
     geoforge-cli = makeCrate (dir + /geoforge-cli);
+    # The viewer embeds its page (web/: HTML, its script and three.js) in the binary.
+    geoforge-viewer = let
+      crate = makeCrate (dir + /geoforge-viewer);
+    in
+      crate // {fileset = lib.fileset.unions [crate.fileset (dir + /geoforge-viewer/web)];};
   };
 
   libs = let
@@ -34,11 +39,6 @@
     geoforge-store = makeCrate (dir + /geoforge-store);
     geoforge-almanac = makeCrate (dir + /geoforge-almanac);
     geoforge-pipeline = makeCrate (dir + /geoforge-pipeline);
-    # The viewer embeds its page (web/: HTML, its script and three.js) in the binary.
-    geoforge-view = let
-      crate = makeCrate (dir + /geoforge-view);
-    in
-      crate // {fileset = lib.fileset.unions [crate.fileset (dir + /geoforge-view/web)];};
   };
 
   allCrates = bins // libs;

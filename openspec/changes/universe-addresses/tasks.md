@@ -17,6 +17,6 @@
 - [x] 3.2 Bodies without a generated surface; stars
 
 ## 4. Viewer
-- [x] 4.1 `geoforge-view`: scenes by address, search, images; local server
+- [x] 4.1 `geoforge-viewer`: scenes by address, search, images; local server
 - [x] 4.2 Web page: universe, galaxy, system, body; layers; sphere or map
-- [x] 4.3 `geoforge view`
+- [x] 4.3 `geoforge-viewer DIR`, its own program

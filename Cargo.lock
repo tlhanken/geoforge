@@ -305,7 +305,6 @@ dependencies = [
  "geoforge-pipeline",
  "geoforge-store",
  "geoforge-surface",
- "geoforge-view",
  "libc",
  "serde_json",
  "toml",
@@ -376,9 +375,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoforge-view"
+name = "geoforge-viewer"
 version = "0.2.0"
 dependencies = [
+ "clap",
  "geoforge-almanac",
  "geoforge-analysis",
  "geoforge-core",
