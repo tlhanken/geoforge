@@ -11,11 +11,12 @@
 //! - **Body**: what it is, whether it is made and generated, and the maps it can show.
 
 use crate::{star_id, Result, ViewError, Viewer};
-use geoforge_analysis::appearance::star_rgb;
+use geoforge_analysis::appearance::star_colour;
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
-use geoforge_core::body::{BodyClass, NodeKind, SolarSystem};
+use geoforge_core::body::{BodyClass, NodeKind, SolarSystem, StellarStage};
 use geoforge_core::galactic::UniverseSite;
 use geoforge_cosmos::galaxy::Morphology;
+use geoforge_cosmos::remnants::notes;
 use geoforge_cosmos::universe::Universe;
 use geoforge_cosmos::worlds::{climate_estimate, habitability, Habitability};
 use serde::Serialize;
@@ -102,12 +103,26 @@ pub struct StarDot {
     pub address: String,
     pub name: String,
     pub spectral: String,
+    /// "star", "white_dwarf", "brown_dwarf", "neutron_star" or "black_hole".
+    pub kind: &'static str,
     /// From the centre star, pc.
     pub position_pc: [f32; 3],
     pub colour: [u8; 3],
-    pub absolute_v: f64,
+    /// `None` for a dark remnant.
+    pub absolute_v: Option<f64>,
     pub made: bool,
     pub centre: bool,
+}
+
+/// A star's kind as the page draws it.
+fn kind_of(stage: StellarStage) -> &'static str {
+    match stage {
+        StellarStage::WhiteDwarf => "white_dwarf",
+        StellarStage::BrownDwarf => "brown_dwarf",
+        StellarStage::NeutronStar => "neutron_star",
+        StellarStage::BlackHole => "black_hole",
+        _ => "star",
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -159,10 +174,13 @@ pub struct StarBody {
     pub key: u64,
     pub name: String,
     pub spectral: String,
+    pub kind: &'static str,
     pub colour: [u8; 3],
     pub radius_solar: f64,
     pub temperature_k: f64,
     pub position_au: [f32; 3],
+    /// A remnant's spin, field, horizon or feeding ([`notes`]).
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -337,7 +355,7 @@ impl Viewer {
         let made: Vec<Address> = self.worlds()?.into_iter().filter_map(|w| w.manifest.address.map(|a| a.up_to(Level::System))).collect();
         let mut stars: Vec<StarDot> = g
             .field
-            .near(centre, STARS_RADIUS_PC, 20.0)
+            .near(centre, STARS_RADIUS_PC, f64::INFINITY)
             .into_iter()
             .map(|s| {
                 let a = galaxy.star(StarRef::Star(s.id));
@@ -345,9 +363,10 @@ impl Viewer {
                     address: a.to_string(),
                     name: g.field.name_of(&s.id),
                     spectral: s.star.spectral_class.clone(),
+                    kind: kind_of(s.star.stage),
                     position_pc: [0, 1, 2].map(|k| (s.position_pc[k] - centre[k]) as f32),
-                    colour: star_rgb(s.star.temperature_k),
-                    absolute_v: s.absolute_v,
+                    colour: star_colour(&s.star),
+                    absolute_v: s.absolute_v.is_finite().then_some(s.absolute_v),
                     made: made.contains(&a),
                     centre: a == system,
                 }
@@ -360,9 +379,10 @@ impl Viewer {
                     address: system.to_string(),
                     name: "Sun".into(),
                     spectral: sun.spectral_class.clone(),
+                    kind: "star",
                     position_pc: [0.0; 3],
-                    colour: star_rgb(sun.temperature_k),
-                    absolute_v: 4.83,
+                    colour: star_colour(&sun),
+                    absolute_v: Some(4.83),
                     made: made.contains(&system),
                     centre: true,
                 });
@@ -387,10 +407,12 @@ impl Viewer {
                     key: n.key.0,
                     name: n.name.clone(),
                     spectral: s.spectral_class.clone(),
-                    colour: star_rgb(s.temperature_k),
+                    kind: kind_of(s.stage),
+                    colour: star_colour(s),
                     radius_solar: s.radius_solar,
                     temperature_k: s.temperature_k,
                     position_au: where_is(n.key),
+                    notes: notes(sys, n.key),
                 }),
                 NodeKind::Body(b) => {
                     let a = at.body(n.key);
@@ -405,7 +427,7 @@ impl Viewer {
                         position_au: where_is(n.key),
                         orbit_au: n.elements.map(|e| (0..ORBIT_POINTS).map(|k| e.position_at(360.0 * k as f64 / ORBIT_POINTS as f64).map(|v| v as f32)).collect()).unwrap_or_default(),
                         made: made.contains(&a),
-                        focus: n.key == generated.focus,
+                        focus: Some(n.key) == generated.focus,
                         habitable,
                     });
                 }

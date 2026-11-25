@@ -190,26 +190,41 @@ function drawGalaxy(s, reframe) {
   if (reframe) aim(s.radius_kpc * 0.6, [0.15, 1.0, 0.35]);
 }
 
+const KIND_NAME = { star: 'star', white_dwarf: 'white dwarf', brown_dwarf: 'brown dwarf', neutron_star: 'neutron star', black_hole: 'black hole' };
+
 function drawStars(s, reframe) {
   fresh(s.radius_pc);
   const pos = [], col = [];
   for (const st of s.stars) {
     pos.push(st.position_pc[0], st.position_pc[2], -st.position_pc[1]);
-    const f = Math.max(0.25, Math.min(1, 1.2 - (st.absolute_v - 2) / 14));
+    const f = st.absolute_v === null ? 1 : Math.max(0.25, Math.min(1, 1.2 - (st.absolute_v - 2) / 14));
     const c = rgb(st.colour);
     col.push(c.r * f, c.g * f, c.b * f);
   }
-  // Three sizes by brightness: the bright few, the Sun-like, the dim many.
-  const layer = (lo, hi, size) => {
-    const idx = s.stars.map((st, i) => i).filter((i) => s.stars[i].absolute_v >= lo && s.stars[i].absolute_v < hi);
+  const label = (st) => `${st.name} · ${st.kind === 'star' ? st.spectral : KIND_NAME[st.kind]} · ${(Math.hypot(...st.position_pc) * 3.2616).toFixed(1)} ly`;
+  const layer = (keep, size) => {
+    const idx = s.stars.map((st, i) => i).filter((i) => keep(s.stars[i]));
+    if (!idx.length) return;
     const p = points(idx.flatMap((i) => pos.slice(3 * i, 3 * i + 3)), idx.flatMap((i) => col.slice(3 * i, 3 * i + 3)), s.radius_pc * size);
-    pickables.push({ object: p, pick: (k) => go(s.stars[idx[k]].address), label: (k) => { const st = s.stars[idx[k]]; return `${st.name} · ${st.spectral} · ${(Math.hypot(...st.position_pc) * 3.2616).toFixed(1)} ly`; } });
+    pickables.push({ object: p, pick: (k) => go(s.stars[idx[k]].address), label: (k) => label(s.stars[idx[k]]) });
   };
-  layer(-99, 2, 0.05);
-  layer(2, 8, 0.025);
-  layer(8, 99, 0.012);
+  // Shining stars in three sizes by brightness: the bright few, the Sun-like, the dim many.
+  const lit = (st) => st.kind === 'star' || st.kind === 'white_dwarf';
+  layer((st) => lit(st) && st.absolute_v < 2, 0.05);
+  layer((st) => lit(st) && st.absolute_v >= 2 && st.absolute_v < 8, 0.025);
+  layer((st) => lit(st) && st.absolute_v >= 8, 0.012);
+  // Brown dwarfs and neutron stars small, in their own colours; black holes as a violet ring.
+  layer((st) => st.kind === 'brown_dwarf', 0.01);
+  layer((st) => st.kind === 'neutron_star', 0.014);
+  for (const st of s.stars.filter((x) => x.kind === 'black_hole')) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: rgb(st.colour), depthWrite: false, transparent: true, sizeAttenuation: false }));
+    m.position.set(st.position_pc[0], st.position_pc[2], -st.position_pc[1]);
+    m.scale.setScalar(0.018);
+    scene.add(m);
+    pickables.push({ object: m, go: () => go(st.address), label: label(st) });
+  }
   for (const st of s.stars) {
-    if (st.centre || st.made || st.absolute_v < 3) marker(new THREE.Vector3(st.position_pc[0], st.position_pc[2], -st.position_pc[1]), st.centre ? [255, 240, 160] : st.colour, s.radius_pc * (st.centre ? 0.08 : 0.04), st.name, () => go(st.address), { dim: !st.centre && !st.made });
+    if (st.centre || st.made || (st.absolute_v !== null && st.absolute_v < 3)) marker(new THREE.Vector3(st.position_pc[0], st.position_pc[2], -st.position_pc[1]), st.centre ? [255, 240, 160] : st.colour, s.radius_pc * (st.centre ? 0.08 : 0.04), st.name, () => go(st.address), { dim: !st.centre && !st.made });
   }
   // A ring at the centre's plane, for scale: 10 light-years.
   const ring = new THREE.LineLoop(circle(10 / 3.2616, 96), new THREE.LineBasicMaterial({ color: 0x26304a }));
@@ -277,13 +292,31 @@ function drawSystem(s, reframe) {
     const p = toScene(squeeze(st.position_au));
     where.set(st.key, p);
     const r = systemScale * Math.max(0.6, 0.6 * Math.cbrt(st.radius_solar));
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), new THREE.MeshBasicMaterial({ color: rgb(st.colour) }));
+    // A black hole is a dark disc in a ring of bent light; it lights nothing.
+    const dark = st.kind === 'black_hole';
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), new THREE.MeshBasicMaterial({ color: dark ? 0x000000 : rgb(st.colour) }));
     m.position.copy(p);
     scene.add(m);
     marker(p, st.colour, r * 7, st.name, null);
-    const sun = new THREE.PointLight(rgb(st.colour), 2.5, 0, 0);
-    sun.position.copy(p);
-    scene.add(sun);
+    if (dark) {
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: rgb(st.colour), depthWrite: false, transparent: true }));
+      halo.position.copy(p);
+      halo.scale.setScalar(r * 3.2);
+      scene.add(halo);
+    } else {
+      const sun = new THREE.PointLight(rgb(st.colour), st.kind === 'neutron_star' || st.kind === 'brown_dwarf' ? 0.6 : 2.5, 0, 0);
+      sun.position.copy(p);
+      scene.add(sun);
+    }
+    // A pulsar's two beams sweep out from its magnetic poles.
+    if (st.kind === 'neutron_star' && st.notes.some((n) => /pulsar|magnetar/.test(n))) {
+      for (const sgn of [1, -1]) {
+        const beam = new THREE.Mesh(new THREE.ConeGeometry(r * 1.2, r * 14, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x9fc4ff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }));
+        beam.position.copy(p).add(new THREE.Vector3(0, sgn * r * 7, 0).applyAxisAngle(new THREE.Vector3(0, 0, 1), 0.4));
+        beam.rotation.z = 0.4 + (sgn > 0 ? Math.PI : 0);
+        scene.add(beam);
+      }
+    }
   }
   // Bodies around stars first (their places), then moons around them.
   const around = (b) => s.bodies.find((x) => x.key === b.parent);
@@ -396,12 +429,15 @@ function panel(s) {
       `<div class="note">Gold marks: systems made here (or the default star). Pick one to see the stars around it.</div>`;
   } else if (s.level === 'stars') {
     const n = (k) => (s.habitable ? String(s.habitable.filter((h) => h.habitability === k).length) : '…');
-    p.innerHTML = head('Neighbourhood', s.address) + facts([['Stars', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ['Ring', '10 light-years']]) +
+    const count = (k) => s.stars.filter((st) => st.kind === k).length;
+    p.innerHTML = head('Neighbourhood', s.address) + facts([['Systems', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Of them', `${count('brown_dwarf')} brown dwarfs, ${count('white_dwarf')} white dwarfs, ${count('neutron_star')} neutron stars, ${count('black_hole')} black holes`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ['Ring', '10 light-years']]) +
       `<div class="row"><button id="tosys">Open this system</button></div><div class="note">Pick any star to open its system: it is generated as you look. Circled: systems with a world of open water, <span style="color:#6ee68c">green</span> temperate like Earth, <span style="color:#5aaadc">blue</span> colder or hotter.</div>`;
     $('tosys').onclick = () => go(s.address);
   } else if (s.level === 'system') {
     const star = s.stars[0];
-    p.innerHTML = head(s.name, s.address) + facts([['Star', star ? `${star.spectral}, ${Math.round(star.temperature_k)} K` : '—'], ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
+    const what = (st) => (st.kind === 'black_hole' ? 'black hole' : `${st.spectral}, ${Math.round(st.temperature_k)} K`);
+    const notes = s.stars.flatMap((st) => st.notes.map((n) => [st.name, n]));
+    p.innerHTML = head(s.name, s.address) + facts([['Star', star ? what(star) : '—'], ...s.stars.slice(1).map((st) => [st.name, what(st)]), ...notes, ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
       `<div class="row"><button id="near">Stars around</button></div><div class="note">Distances are squeezed (√ of AU); moons on rings by their planet. ★ is the system's most Earth-like body; ✓ a temperate world, ~ one with open water but colder or hotter.</div>`;
     $('near').onclick = () => go(s.address, { stars: true });
   } else if (s.level === 'body') {

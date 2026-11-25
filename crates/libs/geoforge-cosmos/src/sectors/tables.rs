@@ -4,13 +4,17 @@
 //! A bright star is rare and a faint one common, so kinds are sampled by importance: masses
 //! log-uniform and ages within each star's shining life, each weighted by the IMF and the
 //! star formation history; a second stratum samples the dead (remnants), which carry mass
-//! and, as white dwarfs, faint light. Each kind may have an unresolved companion of the same
-//! age, as often as the galaxy's systems do (mass ratios flat; Duchêne & Kraus 2013).
+//! and, as white dwarfs, faint light; a third the brown dwarfs, one to every four stars born
+//! ([`BROWN_DWARFS_PER_STAR`]), their masses by their own mass function. Neutron stars,
+//! black holes and brown dwarfs go in the [`DARK`] bin. Brown dwarfs' mass (~2% of the
+//! stars') is left out of the populations' mass, so the lit bins' counts are as without them.
+//! Each kind may have an unresolved companion of the same age, as often as the galaxy's
+//! systems do (mass ratios flat; Duchêne & Kraus 2013).
 
-use super::bins::{bin_of, BINS};
+use super::bins::{bin_of, BINS, DARK};
 use crate::draw::Draw;
 use crate::galaxy::Imf;
-use crate::population::multiple_fraction;
+use crate::population::{brown_dwarf_mass_function, multiple_fraction, BROWN_DWARFS_PER_STAR};
 use crate::sky::absolute_v;
 use crate::stars::{end_of_life_gyr, evolve};
 use geoforge_core::seed::Seed;
@@ -103,7 +107,7 @@ fn sample(d: &mut Draw, m: f64, t: f64, w: f64, feh: &(dyn Fn(f64, f64) -> f64 +
         }
         companion = Some(mc);
     }
-    let bin = v.map(bin_of);
+    let bin = Some(v.map_or(DARK, bin_of));
     (w, Kind { initial_mass: m, age_gyr: t, scatter, companion, absolute_v: v.unwrap_or(f64::INFINITY) }, present, bin)
 }
 
@@ -117,7 +121,7 @@ impl Table {
         let (lo, hi) = imf.range();
         let (a0, a1) = ages;
         let dead = alive / 10;
-        let samples: Vec<Sample> = (0..alive + dead)
+        let mut samples: Vec<Sample> = (0..alive + dead)
             .into_par_iter()
             .filter_map(|i| {
                 let mut d = Draw::new(seed.child_u64(b"kind", i as u64));
@@ -150,6 +154,25 @@ impl Table {
             })
             .collect();
         let present: f64 = samples.iter().map(|s| s.0 * s.2).sum();
+        // Brown dwarfs, alive at every age.
+        let bd = brown_dwarf_mass_function();
+        let (bd_lo, bd_hi) = bd.range();
+        let brown = alive / 5;
+        samples.extend(
+            (0..brown)
+                .into_par_iter()
+                .map(|i| {
+                    let mut d = Draw::new(seed.child_u64(b"brown", i as u64));
+                    let span = (bd_hi / bd_lo).ln();
+                    let m = bd_lo * (d.u() * span).exp();
+                    let t = a0 + d.u() * (a1 - a0);
+                    let w = BROWN_DWARFS_PER_STAR * bd.density(m) * m * span * density(t) * (a1 - a0) / brown as f64;
+                    let mut s = sample(&mut d, m, t, w, feh, bd_lo);
+                    s.3 = Some(DARK);
+                    s
+                })
+                .collect::<Vec<_>>(),
+        );
         Self::from_samples(&samples, present.max(1e-300))
     }
 

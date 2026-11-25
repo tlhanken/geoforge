@@ -222,6 +222,24 @@ fn mix64(mut z: u64) -> u64 {
     z ^ (z >> 31)
 }
 
+/// How a star of any kind is drawn: living stars and white dwarfs as [`star_rgb`]; brown
+/// dwarfs by their spectra, not a blackbody's (sodium and potassium swallow their yellow and
+/// green, and methane their near infrared): L dwarfs a deep red-orange, T dwarfs a dim
+/// magenta, Y dwarfs nearly black-purple (Burgasser 2009's rendered colours); a neutron star
+/// a hard blue-white; a black hole the violet of the lensed light round it.
+#[must_use]
+pub fn star_colour(star: &geoforge_core::body::Star) -> [u8; 3] {
+    use geoforge_core::body::StellarStage;
+    match star.stage {
+        StellarStage::BrownDwarf if star.temperature_k >= 1300.0 => [200, 70, 30],
+        StellarStage::BrownDwarf if star.temperature_k >= 550.0 => [150, 50, 120],
+        StellarStage::BrownDwarf => [80, 35, 75],
+        StellarStage::NeutronStar => [190, 210, 255],
+        StellarStage::BlackHole => [150, 110, 255],
+        _ => star_rgb(star.temperature_k),
+    }
+}
+
 /// A star's colour at `temperature_k`: a blackbody's, as the eye sees it in daylight (the
 /// Sun near white, red dwarfs orange, the hottest blue-white). Tanner Helland's fit to
 /// Charity's blackbody table, good to a few percent from 1,000 to 40,000 K.

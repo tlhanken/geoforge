@@ -43,6 +43,9 @@ pub fn show_text(w: &World) -> R<String> {
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };
             writeln!(out, "  {:<14} {kind} {a}{mark}", n.name)?;
+            for note in geoforge_cosmos::remnants::notes(&sys, n.key) {
+                writeln!(out, "  {:<14}   {note}", "")?;
+            }
         }
     }
     writeln!(

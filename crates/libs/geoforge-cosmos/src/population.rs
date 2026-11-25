@@ -15,8 +15,8 @@
 //! One system in five is a brown dwarf's: four stars to every brown dwarf (Kirkpatrick et al.
 //! 2024, the 20 pc census), their masses from 0.01 to 0.08 M☉ by dN/dM ∝ M^−0.6 below
 //! 0.05 M☉ and M^−0.25 above (ibid.). A fifth of them are pairs (Burgasser et al. 2007), most
-//! of nearly equal mass a few AU apart. The galaxy's stars by sectors are stars only: brown
-//! dwarfs are too faint for any night sky.
+//! of nearly equal mass a few AU apart. The galaxy's sectors hold them too, in their own
+//! bin (too faint for any night sky).
 
 use crate::draw::Draw;
 use crate::galaxy::{power_integral, Galaxy, Imf};
@@ -119,8 +119,11 @@ const TRIPLE_SHARE: f64 = 0.27;
 /// Share of systems whose primary is a brown dwarf: one brown dwarf to four stars.
 pub const BROWN_DWARF_SHARE: f64 = 0.2;
 
+/// Brown dwarfs born for each star: one to four.
+pub const BROWN_DWARFS_PER_STAR: f64 = 0.25;
+
 /// Brown dwarf masses (Kirkpatrick et al. 2024).
-fn brown_dwarf_mass_function() -> Imf {
+pub(crate) fn brown_dwarf_mass_function() -> Imf {
     Imf { breaks: vec![0.01, 0.05, 0.08], slopes: vec![0.6, 0.25] }
 }
 

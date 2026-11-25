@@ -1,14 +1,19 @@
 //! Brightness bins and the cubes each lives in.
 //!
 //! Stars are binned by absolute visual magnitude, one magnitude a bin from −12 to +18 (the
-//! faintest bin takes everything fainter). A bin's reach is how far its brightest stars stay
+//! faintest bin takes everything fainter). One more bin, [`DARK`], holds what hardly shines
+//! in visible light or not at all: brown dwarfs, neutron stars and black holes. A bin's reach is how far its brightest stars stay
 //! brighter than a limit with no dust; its cubes are about half that reach on a side, in
 //! powers of two of 8 pc, so a query for a bin around a point visits about 5³ cubes.
 
 /// The brightest bin's bright edge, absolute V.
 pub const BRIGHTEST: f64 = -12.0;
-/// Number of bins.
-pub const BINS: usize = 30;
+/// Number of bins of stars by their light.
+pub const LIT_BINS: usize = 30;
+/// The bin of brown dwarfs and dark remnants, after the lit ones.
+pub const DARK: usize = LIT_BINS;
+/// Number of bins, the dark one included.
+pub const BINS: usize = LIT_BINS + 1;
 /// The smallest cube's side, pc.
 pub const BASE_PC: f64 = 8.0;
 /// The largest cube's side: 8 pc × 2¹¹ ≈ 16 kpc.
@@ -16,10 +21,10 @@ const MAX_LEVEL: u32 = 11;
 /// The limit cube sizes are set for: the naked eye.
 const SIZING_LIMIT: f64 = 6.5;
 
-/// The bin of absolute magnitude `v`.
+/// The lit bin of absolute magnitude `v`.
 #[must_use]
 pub fn bin_of(v: f64) -> usize {
-    ((v - BRIGHTEST).floor().max(0.0) as usize).min(BINS - 1)
+    ((v - BRIGHTEST).floor().max(0.0) as usize).min(LIT_BINS - 1)
 }
 
 /// The bright edge of bin `b`, absolute V.
@@ -84,7 +89,7 @@ mod tests {
     fn bins_and_cubes() {
         assert_eq!(bin_of(4.83), 16);
         assert_eq!(bin_of(-40.0), 0);
-        assert_eq!(bin_of(25.0), BINS - 1);
+        assert_eq!(bin_of(25.0), LIT_BINS - 1);
         // The Sun is seen to 22 pc, a supergiant of −7 to 5 kpc.
         assert!((reach_pc(4.83, 6.5) - 21.6).abs() < 0.2);
         assert!((reach_pc(-7.0, 6.5) / 5012.0 - 1.0).abs() < 0.01);

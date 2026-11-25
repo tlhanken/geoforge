@@ -1,7 +1,7 @@
 // The parts of three.js the viewer's page uses; bundled into
 // crates/bins/geoforge-viewer/web/three.js by scripts/vendor-three/build.sh.
 export {
-  AdditiveBlending, AmbientLight, BufferGeometry, CanvasTexture, Color, DirectionalLight,
+  AdditiveBlending, AmbientLight, BufferGeometry, CanvasTexture, Color, ConeGeometry, DirectionalLight,
   DoubleSide, Float32BufferAttribute, Group, Line, LineBasicMaterial, LineLoop, MathUtils,
   Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Points,
   PointLight, PointsMaterial, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, Sprite,

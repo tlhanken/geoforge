@@ -12,6 +12,8 @@ pub mod search;
 pub mod server;
 
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
+use geoforge_core::body::SolarSystem;
+use geoforge_core::Key;
 use geoforge_cosmos::resolve::{self, GalaxyAt};
 use geoforge_cosmos::starfield::Starfield;
 use geoforge_cosmos::worlds::{habitability, Habitability};
@@ -51,6 +53,14 @@ pub struct Galaxy {
     pub field: Starfield,
     /// Its shape as drawn stars, old and young, once asked for ([`scene`]).
     pub cloud: std::sync::OnceLock<(Vec<f32>, Vec<f32>)>,
+}
+
+/// A system as the viewer shows it: its tree, and its most Earth-like body if it has a solid
+/// one (a lone black hole's system has none).
+#[derive(Debug, Clone)]
+pub struct Sys {
+    pub system: SolarSystem,
+    pub focus: Option<Key>,
 }
 
 /// A universe directory being viewed.
@@ -174,14 +184,15 @@ impl Viewer {
     ///
     /// # Errors
     /// If the address stops above a system or names nothing.
-    pub fn system(&self, address: &Address) -> Result<geoforge_cosmos::system::Generated> {
+    pub fn system(&self, address: &Address) -> Result<Sys> {
         if let Some(w) = self.made_in(address)? {
             if let Some(system) = w.load_system()? {
-                return Ok(geoforge_cosmos::system::Generated { focus: w.manifest.focus, system });
+                return Ok(Sys { focus: Some(w.manifest.focus), system });
             }
         }
         let g = self.galaxy(address)?;
-        Ok(resolve::system(address, &g.field)?)
+        let (system, focus) = resolve::system_or_barren(address, &g.field)?;
+        Ok(Sys { system, focus })
     }
 
     /// How habitable the most Earth-like body of each system is ([`habitability`]), the
@@ -196,7 +207,7 @@ impl Viewer {
         let found: Vec<(Address, Habitability)> = missing
             .par_iter()
             .map(|a| {
-                let h = self.system(a).ok().and_then(|g| scene::body_of(&a.body(g.focus), &g.system).ok()).map_or(Habitability::None, |b| habitability(&b));
+                let h = self.system(a).ok().and_then(|g| scene::body_of(&a.body(g.focus?), &g.system).ok()).map_or(Habitability::None, |b| habitability(&b));
                 (*a, h)
             })
             .collect();
@@ -296,5 +307,54 @@ mod tests {
         assert_eq!(v.parse(&short).unwrap(), body);
         assert!(v.parse("8").is_err(), "another universe");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod every_kind {
+    use super::*;
+    use crate::scene::Scene;
+    use geoforge_core::body::StellarStage;
+    use geoforge_core::Seed;
+
+    /// Around universe 7's default star every kind of star is there to see, in about the
+    /// numbers near the Sun (a brown dwarf to four stars; white dwarfs a few per cent;
+    /// neutron stars and black holes about one in a thousand), and each one's system opens,
+    /// a lone remnant's too, with its spin or horizon told.
+    #[test]
+    fn every_kind_of_star_opens() {
+        let dir = std::env::temp_dir().join(format!("geoforge-viewer-kinds-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut u = UniverseDir::create(&dir, Address::universe(Seed(7))).unwrap();
+        let w = geoforge_pipeline::create_at(&mut u, &Address::universe(Seed(7)), None, geoforge_core::grid::GridSpec::Equirect { width: 64, height: 32 }).unwrap();
+        let body = w.manifest.address.unwrap();
+        let v = Viewer::open(&dir).unwrap();
+        let g = v.galaxy(&body).unwrap();
+        let Some(StarRef::Star(id)) = body.star else { panic!("a generated star") };
+        let all = g.field.near(g.field.star(&id).unwrap().position_pc, 40.0, f64::INFINITY);
+        let share = |stage: StellarStage| all.iter().filter(|s| s.star.stage == stage).count() as f64 / all.len() as f64;
+        assert!((0.15..0.25).contains(&share(StellarStage::BrownDwarf)), "brown dwarfs {}", share(StellarStage::BrownDwarf));
+        assert!((0.01..0.06).contains(&share(StellarStage::WhiteDwarf)), "white dwarfs {}", share(StellarStage::WhiteDwarf));
+        assert!((2e-4..5e-3).contains(&share(StellarStage::NeutronStar)) && (1e-4..3e-3).contains(&share(StellarStage::BlackHole)));
+        for stage in [StellarStage::BrownDwarf, StellarStage::WhiteDwarf, StellarStage::NeutronStar, StellarStage::BlackHole] {
+            let s = all.iter().find(|s| s.star.stage == stage && s.kind.companion_mass.is_none()).unwrap();
+            let a = body.up_to(Level::Galaxy).star(StarRef::Star(s.id));
+            let Scene::System(sys) = v.scene(&a, false).unwrap() else { panic!("{stage:?}: a system") };
+            assert!(serde_json::to_string(&sys).is_ok());
+            let star = &sys.stars[0];
+            match stage {
+                StellarStage::NeutronStar => assert!(star.kind == "neutron_star" && star.notes.iter().any(|n| n.contains("every")), "{:?}", star.notes),
+                StellarStage::BlackHole => assert!(star.kind == "black_hole" && star.notes.iter().any(|n| n.contains("horizon")), "{:?}", star.notes),
+                StellarStage::BrownDwarf => assert_eq!(star.kind, "brown_dwarf"),
+                _ => assert_eq!(star.kind, "white_dwarf"),
+            }
+        }
+        // The star view shows them all, dark ones without a magnitude.
+        let Scene::Stars(st) = v.scene(&body, true).unwrap() else { panic!("stars") };
+        for k in ["brown_dwarf", "white_dwarf"] {
+            assert!(st.stars.iter().any(|s| s.kind == k), "{k} in 15 pc");
+        }
+        assert!(st.stars.iter().filter(|s| matches!(s.kind, "neutron_star" | "black_hole")).all(|s| s.absolute_v.is_none()));
+        assert!(serde_json::to_string(&st).is_ok());
     }
 }

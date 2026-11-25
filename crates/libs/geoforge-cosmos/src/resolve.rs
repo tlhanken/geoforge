@@ -18,7 +18,7 @@ use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_core::body::{BodyContext, SolarSystem, StellarStage};
 use geoforge_core::galactic::{StarEdits, StarId, UniverseSite};
 use geoforge_core::seed::Seed;
-use geoforge_core::Archetype;
+use geoforge_core::{Archetype, Key};
 use std::fmt;
 
 /// The seed of what the real universe generates: the Milky Way's stars and the Solar
@@ -106,12 +106,34 @@ pub fn system(address: &Address, field: &Starfield) -> Result<Generated, Unresol
         }
         StarRef::Star(id) => system_at(field, &id).ok_or_else(|| Unresolved::Missing(format!("star {id} in {}", field.galaxy().name)))?.map_err(Unresolved::Barren)?,
     };
-    g.system.root.placement = Some(address);
-    if let Some(site) = g.system.root.site.as_mut() {
+    place(&mut g.system, address, field);
+    Ok(g)
+}
+
+/// The system at `address` as [`system`] makes it, a barren one too: its tree, and its focus
+/// if it has a solid body (a lone black hole's system is its hole alone).
+///
+/// # Errors
+/// If the address stops above a system or the star is not in the field.
+pub fn system_or_barren(address: &Address, field: &Starfield) -> Result<(SolarSystem, Option<Key>), Unresolved> {
+    match system(address, field) {
+        Ok(g) => Ok((g.system, Some(g.focus))),
+        Err(Unresolved::Barren(b)) => {
+            let mut sys = *b.system;
+            place(&mut sys, address.up_to(Level::System), field);
+            Ok((sys, None))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Mark `system` as the one at `address` of `field`'s galaxy.
+fn place(system: &mut SolarSystem, address: Address, field: &Starfield) {
+    system.root.placement = Some(address);
+    if let Some(site) = system.root.site.as_mut() {
         site.universe = Some(address.universe);
         site.galaxy.clone_from(&field.galaxy().name);
     }
-    Ok(g)
 }
 
 /// The body at `address` of its `system` (the address's, as [`system`] makes it): for the

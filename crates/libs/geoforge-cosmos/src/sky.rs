@@ -16,7 +16,7 @@
 //! hold; the rest join the glow.
 
 use crate::draw::Draw;
-use crate::sectors::bins::{bright_edge, BINS};
+use crate::sectors::bins::{bright_edge, BINS, LIT_BINS};
 use crate::sectors::dust::DustView;
 use crate::starfield::Starfield;
 use geoforge_core::body::{SolarSystem, Star, StellarStage};
@@ -146,7 +146,7 @@ pub struct Neighbourhood {
 pub fn neighbourhood(field: &Starfield, observer: &Observer, limit: f64) -> Neighbourhood {
     let here = observer.position_pc;
     // A sky's count grows as density × 10^(0.6 m): a crowd costs magnitudes off the limit.
-    let crowd = field.sectors().density(here, 0..BINS) / (CROWDING * SUN_DENSITY);
+    let crowd = field.sectors().density(here, 0..LIT_BINS) / (CROWDING * SUN_DENSITY);
     let limit = if crowd > 1.0 { limit - crowd.log10() / 0.6 } else { limit };
     let candidates = field.visible(here, limit, MAX_PC);
     let reach = candidates.iter().map(|s| s.distance_pc(here)).fold(0.0, f64::max).min(MAX_PC);
@@ -295,6 +295,13 @@ const SOLAR_BOLOMETRIC: f64 = 4.74;
 /// Flower (1996), −0.07 for the Sun.
 #[must_use]
 pub fn bolometric_correction(t: f64) -> f64 {
+    // Brown dwarfs, below 2000 K, from Pecaut & Mamajek (2013)'s table: −6 at the L
+    // dwarfs' start, falling 5 mag a halving of temperature (a 1000 K T dwarf at M_V ≈ 28).
+    // (The fit itself is good only above ~3200 K: late M dwarfs come out up to a few
+    // magnitudes too faint.)
+    if t < 2000.0 {
+        return -6.0 - 5.0 * (2000.0 / t.max(100.0)).log2();
+    }
     let x = t.clamp(2000.0, 60_000.0).log10();
     let c: &[f64] = if x < 3.70 {
         &[-0.190_537_291_496_456e5, 0.155_144_866_764_412e5, -0.421_278_819_301_717e4, 0.381_476_328_422_343e3]

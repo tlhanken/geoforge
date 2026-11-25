@@ -32,6 +32,7 @@ pub mod binary;
 mod draw;
 mod dynamics;
 mod moons;
+pub mod remnants;
 
 pub mod census;
 pub mod constellations;

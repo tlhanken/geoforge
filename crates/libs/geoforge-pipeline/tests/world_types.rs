@@ -220,3 +220,33 @@ fn a_seed_is_the_same_world_at_any_resolution() {
     assert!(agree > 0.9, "land and sea agree on {:.0}% of cells", 100.0 * agree);
     assert!(corr > 0.85, "heights correlate {corr:.2}");
 }
+
+/// A pulsar's planet, lit only by its neutron star's glow (PSR B1257+12's are): every layer
+/// either runs or is skipped with a reason, and the world comes out frozen and airless or
+/// nearly so; the neutron star is a radio pulsar or quiet, and recycled by holding planets.
+#[test]
+fn a_pulsar_planet_runs_end_to_end() {
+    let galaxy = geoforge_cosmos::galaxy::Galaxy::milky_way();
+    let found = (0..5000u64).find_map(|s| {
+        let mut ph = geoforge_cosmos::population::draw(&galaxy, Seed(s));
+        (ph.primary_mass, ph.age_gyr) = (12.0, 3.0);
+        ph.companions.clear();
+        let g = geoforge_cosmos::galactic::build(Seed(s), &ph).ok()?;
+        let ns = g.system.nodes.iter().find(|n| matches!(&n.node, geoforge_core::body::NodeKind::Star(st) if st.stage == geoforge_core::body::StellarStage::NeutronStar))?;
+        Some((g.system.clone(), g.focus, ns.key))
+    });
+    let (system, focus, ns) = found.expect("a pulsar with planets within 5000 draws");
+    let notes = geoforge_cosmos::remnants::notes(&system, ns);
+    assert!(notes.iter().any(|n| n.starts_with("millisecond pulsar")), "{notes:?}");
+    let body = geoforge_cosmos::any_body(&system, focus).unwrap();
+    assert!(body.irradiance.flux_w_m2 < 1.0, "a pulsar barely lights it: {} W/m²", body.irradiance.flux_w_m2);
+    let mut w = world("pulsar", Some(body), None);
+    let (products, _) = pipe::generate(&mut w, &GenerateOptions::default(), |_| {}).unwrap();
+    assert!(products.elevation().is_some(), "it has a surface");
+    let plan = pipe::plan(&w).unwrap();
+    assert!(plan.layers.iter().all(|lp| lp.implementation.is_some() || lp.not_applicable.is_some()), "every layer runs or says why not");
+    if let Some(t) = products.temperature() {
+        let mean = t.values.iter().map(|&v| f64::from(v)).sum::<f64>() / t.values.len() as f64;
+        assert!(mean < -150.0, "frozen: {mean} °C");
+    }
+}

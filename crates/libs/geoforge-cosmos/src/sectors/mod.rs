@@ -189,9 +189,10 @@ impl Sectors {
     /// and the young groups'.
     #[must_use]
     pub fn near(&self, p: [f64; 3], radius_pc: f64, faintest: f64) -> Vec<GalacticStar> {
-        let bins = 0..=bins::bin_of(faintest).min(BINS - 1);
+        // The dark bin once the query reaches past the lit ones.
+        let top = if faintest >= bins::bright_edge(bins::DARK) { bins::DARK } else { bins::bin_of(faintest) };
         let reach = |_: usize| radius_pc;
-        let mut out = self.gather(p, bins, &reach);
+        let mut out = self.gather(p, 0..=top, &reach);
         out.retain(|s| s.absolute_v <= faintest && s.distance_pc(p) <= radius_pc);
         out
     }
@@ -290,8 +291,11 @@ mod tests {
     fn densities_at_the_sun() {
         let s = mw();
         let sun = [8200.0, 0.0, 25.0];
-        let all = s.density(sun, 0..BINS);
+        let all = s.density(sun, 0..bins::LIT_BINS);
         assert!((0.06..0.10).contains(&all), "{all} systems per pc³");
+        // A brown dwarf to every four stars, and the dark remnants about one in a thousand.
+        let dark = s.density(sun, bins::DARK..BINS);
+        assert!((0.2..0.32).contains(&(dark / all)), "dark bin {dark} against {all}");
         let by = |kind: ComponentKind| s.field.iter().filter(|p| s.galaxy.components[p.component].kind == kind).map(|p| p.mass_msun * p.shape.density(sun) * p.table.total_per_msun()).sum::<f64>();
         let (thin, thick, halo) = (by(ComponentKind::ThinDisk), by(ComponentKind::ThickDisk), by(ComponentKind::Halo));
         assert!((0.01..0.08).contains(&(thick / thin)), "thick {}", thick / thin);
