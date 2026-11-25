@@ -6,7 +6,7 @@
 //! address.
 
 use crate::{Result, Viewer};
-use geoforge_core::address::{GalaxyRef, Level, StarRef};
+use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_core::body::NodeKind;
 use geoforge_core::galactic::UniverseSite;
 use serde::Serialize;
@@ -54,7 +54,48 @@ impl Viewer {
         });
         known.dedup_by(|a, b| a.address == b.address);
         hits.extend(known.into_iter().take(MOST));
+        hits.extend(self.exotic_hits(&q));
         Ok(hits)
+    }
+
+    /// The systems holding the fictional materials whose names contain `q`, among the stars
+    /// around the home system and any already looked at.
+    fn exotic_hits(&self, q: &str) -> Vec<Hit> {
+        let Ok(list) = self.exotics() else { return Vec::new() };
+        let wanted: Vec<&str> = list.materials.iter().filter(|m| m.name.to_lowercase().contains(q)).map(|m| m.name.as_str()).collect();
+        if wanted.is_empty() {
+            return Vec::new();
+        }
+        let (_, focus) = self.start();
+        let home = focus.or_else(|| self.home_star(&self.home()));
+        // The home system first, then its neighbours, then any others looked at.
+        let mut systems: Vec<Address> = home.map(|h| h.up_to(Level::System)).into_iter().collect();
+        if let Some(Ok(crate::scene::Scene::Stars(s))) = home.map(|h| self.scene(&h.up_to(Level::System), true)) {
+            systems.extend(s.stars.iter().filter_map(|st| st.address.parse::<Address>().ok()));
+        }
+        systems.extend(self.exotic.lock().expect("exotic").1.keys().copied());
+        let mut seen = std::collections::HashSet::new();
+        systems.retain(|a| seen.insert(*a));
+        let found = self.exotics_in(&systems);
+        let mut hits = Vec::new();
+        for (a, materials) in systems.iter().zip(found) {
+            for m in materials.iter().filter(|m| wanted.contains(&m.as_str())) {
+                let name = self.system(a).map_or_else(|_| a.to_string(), |g| g.system.root.name);
+                hits.push(Hit { name, kind: "star".into(), address: a.to_string(), note: format!("holds {m} (fictional)") });
+            }
+        }
+        if hits.is_empty() {
+            if let Some(h) = home {
+                hits.extend(wanted.iter().map(|w| Hit {
+                    name: (*w).to_string(),
+                    kind: "material".into(),
+                    address: h.up_to(Level::System).to_string(),
+                    note: "fictional: in no system near here".into(),
+                }));
+            }
+        }
+        hits.truncate(MOST);
+        hits
     }
 
     /// Every name the viewer knows now.

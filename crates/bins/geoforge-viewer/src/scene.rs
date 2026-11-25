@@ -135,6 +135,25 @@ pub struct SystemScene {
     pub bodies: Vec<BodyDot>,
     pub belts: Vec<Belt>,
     pub rings: Vec<Ring>,
+    /// Where its fictional materials are: material, place, and the body to go to.
+    pub exotics: Vec<ExoticFind>,
+}
+
+/// A fictional material found in a system.
+#[derive(Debug, Serialize)]
+pub struct ExoticFind {
+    pub material: String,
+    pub place: String,
+    pub address: Option<String>,
+}
+
+/// A fictional material's deposit on a body's surface.
+#[derive(Debug, Serialize)]
+pub struct Marker {
+    pub material: String,
+    pub colour: [u8; 3],
+    pub lat: f64,
+    pub lon: f64,
 }
 
 /// A planet's rings, in its radii, tilted with its equator.
@@ -223,6 +242,8 @@ pub struct BodyScene {
     /// Generation under way or done, if any.
     pub job: Option<String>,
     pub ring: Option<Ring>,
+    /// Its fictional materials' deposits.
+    pub deposits: Vec<Marker>,
 }
 
 /// One step of the way down to a scene: its address, name, and whether it is the stars
@@ -440,7 +461,21 @@ impl Viewer {
             }
         }
         let rings = sys.nodes.iter().filter(|n| matches!(n.node, NodeKind::Ring(_))).filter_map(|n| n.parent.and_then(|p| ring_of(sys, p))).collect();
-        Ok(SystemScene { address: at.to_string(), name: sys.root.name.clone(), galaxy: at.up_to(Level::Galaxy).to_string(), age_gyr: sys.root.epoch.system_age_gyr, stars, bodies, belts, rings })
+        let exotics = geoforge_cosmos::exotics::in_system(&self.exotics()?, sys, true)
+            .into_iter()
+            .map(|f| ExoticFind { material: f.material, place: f.place, address: f.body.map(|k| at.up_to(Level::System).body(k).to_string()) })
+            .collect();
+        Ok(SystemScene {
+            address: at.to_string(),
+            name: sys.root.name.clone(),
+            galaxy: at.up_to(Level::Galaxy).to_string(),
+            age_gyr: sys.root.epoch.system_age_gyr,
+            stars,
+            bodies,
+            belts,
+            rings,
+            exotics,
+        })
     }
 
     fn body_scene(&self, address: &Address) -> Result<BodyScene> {
@@ -475,6 +510,14 @@ impl Viewer {
             let h = habitable_name(habitability(&body)).unwrap_or("no open water");
             facts.push(["Climate".into(), format!("~{:.0} °C, {:.0}% thawed: {h}", c.mean_c, 100.0 * c.thawed_share)]);
         }
+        let found = geoforge_cosmos::exotics::on_body(&self.exotics()?, &sys, body.key);
+        let mut deposits = Vec::new();
+        for d in found {
+            let n = d.sites.len();
+            let note = if d.note.is_empty() { String::new() } else { format!(" — {}", d.note) };
+            facts.push([format!("{} (fictional)", d.material), format!("{n} deposit{}, ~{:.0e} t{note}", if n == 1 { "" } else { "s" }, d.tonnes)]);
+            deposits.extend(d.sites.iter().map(|&(lat, lon)| Marker { material: d.material.clone(), colour: d.colour, lat, lon }));
+        }
         Ok(BodyScene {
             address: address.to_string(),
             name: body.name.clone(),
@@ -485,6 +528,7 @@ impl Viewer {
             facts,
             job: self.jobs.lock().expect("jobs").get(address).cloned(),
             ring: address.body.and_then(|k| ring_of(&sys, k)),
+            deposits,
         })
     }
 

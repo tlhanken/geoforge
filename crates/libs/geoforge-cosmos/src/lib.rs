@@ -32,6 +32,7 @@ pub mod asteroids;
 pub mod binary;
 mod draw;
 mod dynamics;
+pub mod exotics;
 mod moons;
 pub mod remnants;
 

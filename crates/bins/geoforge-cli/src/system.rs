@@ -47,6 +47,18 @@ pub fn show_text(w: &World) -> R<String> {
                 writeln!(out, "  {:<14}   {note}", "")?;
             }
         }
+        // The universe's fictional materials, if it lists any.
+        let exotics = match &w.universe {
+            Some(u) => geoforge_store::UniverseDir::open(u)?.exotics()?,
+            None => geoforge_core::exotics::Exotics::default(),
+        };
+        let finds = geoforge_cosmos::exotics::in_system(&exotics, &sys, true);
+        if !finds.is_empty() {
+            writeln!(out, "  fictional materials:")?;
+            for f in finds {
+                writeln!(out, "    {} — {}", f.material, f.place)?;
+            }
+        }
     }
     writeln!(
         out,

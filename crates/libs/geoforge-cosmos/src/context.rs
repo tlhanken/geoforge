@@ -197,6 +197,13 @@ pub fn belt_member_made(system: &SolarSystem, belt: Key, index: u64) -> Option<(
     Some((ctx, made))
 }
 
+/// The frost line of the star or stars belt `belt` circles, AU (infinite round a neutron
+/// star, whose planets formed from rock); `None` if it circles no star.
+#[must_use]
+pub fn frost_line_of(system: &SolarSystem, belt: Key) -> Option<f64> {
+    host(system, system.node(belt)?.parent?).map(|h| h.frost_au)
+}
+
 /// Diameter of the `index`-th largest member: from N(>D) = count · (D/min)^(1−q).
 fn member_diameter_km(pop: &Population, index: u64) -> f64 {
     let law = pop.size_law;

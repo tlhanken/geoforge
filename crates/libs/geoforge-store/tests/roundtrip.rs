@@ -285,3 +285,23 @@ fn painting_the_pole_in_a_cap() {
         }
     }
 }
+
+/// A new universe's exotics.toml is a commented template that lists nothing; written, it is
+/// read and checked; a fault is named.
+#[test]
+fn fictional_materials_are_read_and_checked() {
+    let dir = tmp("exotics");
+    let u = geoforge_store::UniverseDir::create(&dir, geoforge_core::Address::universe(geoforge_core::Seed(3))).unwrap();
+    assert!(u.exotics().unwrap().materials.is_empty(), "the template lists nothing");
+    let template = std::fs::read_to_string(dir.join("exotics.toml")).unwrap();
+    // Its example, its '#' marks removed.
+    let example = &template[template.find("# [[material]]").unwrap()..];
+    let uncommented: String = example.lines().map(|l| l.strip_prefix('#').unwrap_or(l).trim_start()).map(|l| format!("{l}\n")).collect();
+    std::fs::write(dir.join("exotics.toml"), &uncommented).unwrap();
+    let list = u.exotics().unwrap();
+    assert_eq!(list.materials[0].name, "Xylarium");
+    assert_eq!(list.materials[0].found[0].stars, [geoforge_core::body::StellarStage::NeutronStar]);
+    std::fs::write(dir.join("exotics.toml"), uncommented.replace("\"M\"", "\"Q\"")).unwrap();
+    assert!(u.exotics().unwrap_err().to_string().contains("'Q'"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

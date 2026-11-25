@@ -122,6 +122,20 @@ function ringTexture() {
   return new THREE.CanvasTexture(c);
 }
 const RING = ringTexture();
+
+// A diamond outline, to mark the stars whose systems hold a fictional material.
+function diamondTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,255,255,1)';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.moveTo(32, 4); g.lineTo(60, 32); g.lineTo(32, 60); g.lineTo(4, 32); g.closePath();
+  g.stroke();
+  return new THREE.CanvasTexture(c);
+}
+const DIAMOND = diamondTexture();
 const HABITABLE = { temperate: [110, 230, 140], habitable: [90, 170, 220] };
 
 function points(positions, colours, size, opts = {}) {
@@ -231,6 +245,31 @@ function drawStars(s, reframe) {
   scene.add(ring);
   if (reframe) aim(s.radius_pc * 0.35);
   markHabitable(s);
+  markExotics(s);
+}
+
+// Diamond the systems holding a fictional material (in its colour), once the server has
+// worked them out; nothing if the universe lists none.
+async function markExotics(s) {
+  let found;
+  try {
+    found = await api(`/api/exotics?at=${encodeURIComponent(s.address)}`);
+  } catch (e) {
+    return;
+  }
+  if (state.scene !== s) return;
+  s.exotics = found;
+  const colour = new Map((found.materials || []).map((m) => [m.name, m.colour]));
+  for (const h of found.systems || []) {
+    const st = s.stars.find((x) => x.address === h.address);
+    if (!st) continue;
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: DIAMOND, color: rgb(colour.get(h.materials[0]) || [190, 110, 255]), depthWrite: false, transparent: true, sizeAttenuation: false }));
+    m.position.set(st.position_pc[0], st.position_pc[2], -st.position_pc[1]);
+    m.scale.setScalar(0.036);
+    scene.add(m);
+    pickables.push({ object: m, go: () => go(st.address), label: `${st.name} · ${h.materials.join(', ')} (fictional)` });
+  }
+  panel(s);
 }
 
 // Circle the systems with a world of open water (green: temperate, like Earth; blue: water
@@ -404,6 +443,12 @@ function drawBody(s, reframe) {
   if (state.flat) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(4, 2), new THREE.MeshBasicMaterial({ map }));
     scene.add(m);
+    for (const d of s.deposits) {
+      const pin = new THREE.Sprite(new THREE.SpriteMaterial({ map: DIAMOND, color: rgb(d.colour), depthWrite: false, transparent: true, sizeAttenuation: false }));
+      pin.position.set(d.lon / 90, d.lat / 90, 0.01);
+      pin.scale.setScalar(0.03);
+      scene.add(pin);
+    }
     controls.enableRotate = false;
     if (reframe) { camera.position.set(0, 0, 3.2); controls.target.set(0, 0, 0); controls.update(); }
   } else {
@@ -411,12 +456,29 @@ function drawBody(s, reframe) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }));
     scene.add(m);
     spinning = m;
+    // Fictional deposits, pinned where they are (they turn with the globe).
+    for (const d of s.deposits) {
+      const lat = d.lat * Math.PI / 180, lon = d.lon * Math.PI / 180;
+      const pin = new THREE.Sprite(new THREE.SpriteMaterial({ map: DIAMOND, color: rgb(d.colour), depthWrite: false, transparent: true, sizeAttenuation: false }));
+      pin.position.set(1.01 * Math.cos(lat) * Math.cos(lon), 1.01 * Math.sin(lat), -1.01 * Math.cos(lat) * Math.sin(lon));
+      pin.scale.setScalar(0.03);
+      m.add(pin);
+    }
     if (s.ring) addRing(s.ring, 1, new THREE.Vector3());
     if (reframe) aim(s.ring && s.ring.icy ? 2.2 : 1.1, [0.0, 0.25, 1.0]);
   }
 }
 
 // ---------------------------------------------------------------- the side panel
+
+// The stars panel's rows for fictional materials: how many systems hold each, or the fault
+// in exotics.toml.
+function exoticRows(s) {
+  const x = s.exotics;
+  if (!x) return [];
+  if (x.error) return [['Fictional', x.error]];
+  return (x.materials || []).map((m) => [`${m.name} (fictional)`, `${x.systems.filter((h) => h.materials.includes(m.name)).length} systems ◇`]);
+}
 
 function panel(s) {
   const p = $('panel');
@@ -430,7 +492,7 @@ function panel(s) {
   } else if (s.level === 'stars') {
     const n = (k) => (s.habitable ? String(s.habitable.filter((h) => h.habitability === k).length) : '…');
     const count = (k) => s.stars.filter((st) => st.kind === k).length;
-    p.innerHTML = head('Neighbourhood', s.address) + facts([['Systems', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Of them', `${count('brown_dwarf')} brown dwarfs, ${count('white_dwarf')} white dwarfs, ${count('neutron_star')} neutron stars, ${count('black_hole')} black holes`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ['Ring', '10 light-years']]) +
+    p.innerHTML = head('Neighbourhood', s.address) + facts([['Systems', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Of them', `${count('brown_dwarf')} brown dwarfs, ${count('white_dwarf')} white dwarfs, ${count('neutron_star')} neutron stars, ${count('black_hole')} black holes`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ...exoticRows(s), ['Ring', '10 light-years']]) +
       `<div class="row"><button id="tosys">Open this system</button></div><div class="note">Pick any star to open its system: it is generated as you look. Circled: systems with a world of open water, <span style="color:#6ee68c">green</span> temperate like Earth, <span style="color:#5aaadc">blue</span> colder or hotter.</div>`;
     $('tosys').onclick = () => go(s.address);
   } else if (s.level === 'system') {
@@ -438,8 +500,10 @@ function panel(s) {
     const what = (st) => (st.kind === 'black_hole' ? 'black hole' : `${st.spectral}, ${Math.round(st.temperature_k)} K`);
     const notes = s.stars.flatMap((st) => st.notes.map((n) => [st.name, n]));
     p.innerHTML = head(s.name, s.address) + facts([['Star', star ? what(star) : '—'], ...s.stars.slice(1).map((st) => [st.name, what(st)]), ...notes, ...s.belts.filter((b) => b.mix).map((b) => [b.name, `${b.inner_au.toFixed(1)}–${b.outer_au.toFixed(1)} AU: ${b.mix}`]), ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
+      (s.exotics.length ? `<h3>Fictional materials</h3><ul class="finds">${s.exotics.map((f, i) => `<li>${f.address ? `<a href="#" data-find="${i}">` : ''}${esc(f.material)}: ${esc(f.place)}${f.address ? '</a>' : ''}</li>`).join('')}</ul>` : '') +
       `<div class="row"><button id="near">Stars around</button></div><div class="note">Distances are squeezed (√ of AU); moons on rings by their planet. ★ is the system's most Earth-like body; ✓ a temperate world, ~ one with open water but colder or hotter.</div>`;
     $('near').onclick = () => go(s.address, { stars: true });
+    for (const a of p.querySelectorAll('[data-find]')) a.onclick = (e) => { e.preventDefault(); go(s.exotics[Number(a.dataset.find)].address); };
   } else if (s.level === 'body') {
     const layerOpts = s.layers.map((l) => `<option ${l === state.layer ? 'selected' : ''}>${esc(l)}</option>`).join('');
     const make = s.made

@@ -13,6 +13,7 @@ pub mod server;
 
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_core::body::SolarSystem;
+use geoforge_core::exotics::Exotics;
 use geoforge_core::Key;
 use geoforge_cosmos::resolve::{self, GalaxyAt};
 use geoforge_cosmos::starfield::Starfield;
@@ -73,6 +74,8 @@ pub struct Viewer {
     index: Mutex<Option<Vec<search::Hit>>>,
     /// How habitable each system's most Earth-like body is, once worked out.
     habitable: Mutex<HashMap<Address, Habitability>>,
+    /// The fictional materials in each system, once worked out, for the list as it was then.
+    exotic: Mutex<(Exotics, HashMap<Address, Vec<String>>)>,
 }
 
 impl Viewer {
@@ -85,6 +88,7 @@ impl Viewer {
             jobs: Mutex::new(HashMap::new()),
             index: Mutex::new(None),
             habitable: Mutex::new(HashMap::new()),
+            exotic: Mutex::new((Exotics::default(), HashMap::new())),
         })
     }
 
@@ -214,6 +218,38 @@ impl Viewer {
         let mut known = self.habitable.lock().expect("habitable");
         known.extend(found);
         systems.iter().map(|a| known.get(&a.up_to(Level::System)).copied().unwrap_or(Habitability::None)).collect()
+    }
+
+    /// The universe's fictional materials, read afresh so edits show at once.
+    ///
+    /// # Errors
+    /// If `exotics.toml` is unreadable or fails its checks.
+    pub fn exotics(&self) -> Result<Exotics> {
+        Ok(self.universe.read().expect("universe lock").exotics()?)
+    }
+
+    /// The fictional materials of each of `systems` ([`geoforge_cosmos::exotics::names_in`]),
+    /// worked out in parallel the first time they are asked about while the list is the same;
+    /// none if the list is unreadable.
+    pub fn exotics_in(&self, systems: &[Address]) -> Vec<Vec<String>> {
+        use rayon::prelude::*;
+        let list = self.exotics().unwrap_or_default();
+        if list.is_empty() {
+            return vec![Vec::new(); systems.len()];
+        }
+        let missing: Vec<Address> = {
+            let mut known = self.exotic.lock().expect("exotic");
+            if known.0 != list {
+                *known = (list.clone(), HashMap::new());
+            }
+            systems.iter().map(|a| a.up_to(Level::System)).filter(|a| !known.1.contains_key(a)).collect()
+        };
+        let found: Vec<(Address, Vec<String>)> = missing.par_iter().map(|a| (*a, self.system(a).map(|g| geoforge_cosmos::exotics::names_in(&list, &g.system)).unwrap_or_default())).collect();
+        let mut known = self.exotic.lock().expect("exotic");
+        if known.0 == list {
+            known.1.extend(found);
+        }
+        systems.iter().map(|a| known.1.get(&a.up_to(Level::System)).cloned().unwrap_or_default()).collect()
     }
 
     /// Any world made in `address`'s system.
@@ -364,5 +400,40 @@ mod every_kind {
         }
         assert!(st.stars.iter().filter(|s| matches!(s.kind, "neutron_star" | "black_hole")).all(|s| s.absolute_v.is_none()));
         assert!(serde_json::to_string(&st).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod fictional {
+    use super::*;
+    use crate::scene::Scene;
+    use geoforge_core::Seed;
+
+    /// A universe's fictional materials show where they are: deposits pinned on a world and
+    /// told in its facts, finds listed in its system, flags on the stars around, search
+    /// finding the systems; a faulty list is reported, not fatal.
+    #[test]
+    fn fictional_materials_show_where_they_are() {
+        let dir = std::env::temp_dir().join(format!("geoforge-viewer-exotics-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut u = UniverseDir::create(&dir, Address::universe(Seed(7))).unwrap();
+        let w = geoforge_pipeline::create_at(&mut u, &Address::universe(Seed(7)), None, geoforge_core::grid::GridSpec::Equirect { width: 64, height: 32 }).unwrap();
+        let body = w.manifest.address.unwrap();
+        std::fs::write(dir.join("exotics.toml"), "[[material]]\nname = \"Aurorite\"\nnote = \"a glowing crystal\"\ncolour = \"#ff40a0\"\n[[material.found]]\nin = \"world\"\nchance = 1.0\n").unwrap();
+        let v = Viewer::open(&dir).unwrap();
+        let Scene::Body(b) = v.scene(&body, false).unwrap() else { panic!("body") };
+        assert!(b.facts.iter().any(|f| f[0] == "Aurorite (fictional)" && f[1].contains("glowing")), "{:?}", b.facts);
+        assert!(!b.deposits.is_empty() && b.deposits.iter().all(|d| d.colour == [0xff, 0x40, 0xa0]));
+        let Scene::System(sys) = v.scene(&body.up_to(Level::System), false).unwrap() else { panic!("system") };
+        assert!(sys.exotics.iter().any(|f| f.material == "Aurorite" && f.address.as_deref() == Some(body.to_string().as_str())));
+        let Scene::Stars(st) = v.scene(&body, true).unwrap() else { panic!("stars") };
+        let around: Vec<Address> = st.stars.iter().take(40).filter_map(|s| s.address.parse().ok()).collect();
+        let found = v.exotics_in(&around);
+        assert!(found.iter().filter(|m| !m.is_empty()).count() >= 10, "most systems have a world");
+        let hits = v.search("auror").unwrap();
+        assert!(hits.iter().any(|h| h.note.contains("Aurorite") && h.address == body.up_to(Level::System).to_string()));
+        std::fs::write(dir.join("exotics.toml"), "[[material]]\nname = \"\"\n").unwrap();
+        assert!(v.exotics().is_err() && v.exotics_in(&around).iter().all(Vec::is_empty));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

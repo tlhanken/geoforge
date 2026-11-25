@@ -416,6 +416,24 @@ pub fn of(system: &SolarSystem, key: Key) -> Option<Asteroid> {
     crate::context::belt_member_made(system, Key(belt), index).map(|(_, made)| made)
 }
 
+/// The share of belt `pop`'s members of the types `kind` admits, at frost line `frost_au`
+/// (the shares by distance averaged over the belt).
+#[must_use]
+pub fn kind_share(pop: &Population, frost_au: f64, kind: impl Fn(Taxon) -> bool) -> f64 {
+    if pop.composition.fraction(Species::Ice) > 0.3 {
+        return f64::from(u8::from(kind(Taxon::Icy)));
+    }
+    const STEPS: usize = 16;
+    (0..STEPS)
+        .map(|k| {
+            let a = pop.inner_au + (pop.outer_au - pop.inner_au) * (k as f64 + 0.5) / STEPS as f64;
+            let s = shares(relative(a, frost_au));
+            Taxon::ALL[..6].iter().zip(s).filter(|(t, _)| kind(**t)).map(|(_, w)| w).sum::<f64>()
+        })
+        .sum::<f64>()
+        / STEPS as f64
+}
+
 /// The mix of types in belt `belt` of `system`, from its `sample` largest members past the
 /// first hundred (whose few would skew it): shares, largest first.
 #[must_use]

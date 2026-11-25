@@ -70,6 +70,26 @@ const GALAXY_MODEL: &str = "galaxy.json";
 const STAR_EDITS: &str = "stars.json";
 const CONSTELLATIONS: &str = "constellations.json";
 const UNIVERSE: &str = "universe.json";
+/// In a universe directory: its fictional materials, written by hand.
+const EXOTICS: &str = "exotics.toml";
+/// What a new universe's `exotics.toml` says: how to write one, with an example left off.
+const EXOTICS_TEMPLATE: &str = r##"# Fictional materials of this universe. They appear only as deposits and markers, flagged
+# fictional, and change nothing else that is made. Each is drawn from its own stream (keyed
+# by its name), so adding or editing one moves no other. Remove the '#' marks to try this one.
+#
+# [[material]]
+# name = "Xylarium"
+# note = "a metastable superheavy alloy"
+# colour = "#7fffd4"
+#
+# [[material.found]]
+# in = "asteroid"             # asteroid | world | nebula
+# kinds = ["M"]               # asteroid: S C M V P D icy; world: rocky icy ocean giant small;
+#                             # nebula: emission reflection dark planetary supernova_remnant
+# stars = ["neutron_star"]    # only round these stars (main_sequence, subgiant, giant,
+#                             # supergiant, white_dwarf, neutron_star, black_hole, brown_dwarf)
+# chance = 0.002              # per asteroid, world or nebula of those kinds
+"##;
 
 /// `world.toml`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -144,7 +164,24 @@ impl UniverseDir {
         std::fs::create_dir_all(root)?;
         let u = Self { root: root.to_path_buf(), doc: UniverseDoc { universe: universe.up_to(Level::Universe), focus: None } };
         u.save()?;
+        if !root.join(EXOTICS).exists() {
+            std::fs::write(root.join(EXOTICS), EXOTICS_TEMPLATE)?;
+        }
         Ok(u)
+    }
+
+    /// The universe's fictional materials (`exotics.toml`; none if there is no such file).
+    ///
+    /// # Errors
+    /// If the file is unreadable, not TOML of the list's shape, or fails its checks.
+    pub fn exotics(&self) -> Result<geoforge_core::exotics::Exotics> {
+        let path = self.root.join(EXOTICS);
+        if !path.exists() {
+            return Ok(geoforge_core::exotics::Exotics::default());
+        }
+        let list: geoforge_core::exotics::Exotics = toml::from_str(&std::fs::read_to_string(&path)?).map_err(|e| StoreError::Invalid(format!("{}: {e}", path.display())))?;
+        list.validate()?;
+        Ok(list)
     }
 
     /// # Errors
