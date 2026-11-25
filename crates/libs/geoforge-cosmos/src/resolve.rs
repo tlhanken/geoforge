@@ -67,6 +67,27 @@ impl GalaxyAt {
     pub fn starfield(&self, edits: StarEdits) -> Starfield {
         Starfield::new(&self.model, self.stars_seed, edits)
     }
+
+    /// Its dark halo's mass, M☉ (the Milky Way's, 1.3×10¹², for the real one).
+    #[must_use]
+    pub fn halo_msun(&self) -> f64 {
+        self.generated.as_ref().map_or(crate::nuclei::MILKY_WAY_HALO_MSUN, |g| g.halo_msun)
+    }
+
+    /// Its centre: its black hole and how active it is (Sgr A* for the real Milky Way).
+    #[must_use]
+    pub fn nucleus(&self) -> crate::nuclei::Nucleus {
+        match self.generated {
+            None => crate::nuclei::milky_way(),
+            Some(_) => crate::nuclei::nucleus(&self.model, self.stars_seed),
+        }
+    }
+
+    /// Its globular clusters.
+    #[must_use]
+    pub fn globulars(&self) -> Vec<crate::nuclei::Globular> {
+        crate::nuclei::globulars(&self.model, self.halo_msun(), self.stars_seed)
+    }
 }
 
 /// The galaxy at `address`.

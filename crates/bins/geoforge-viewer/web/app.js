@@ -177,7 +177,14 @@ function drawUniverse(s, reframe) {
     const big = g.stellar_msun > 2e10;
     if (g.home || big) marker(new THREE.Vector3(...g.position_mpc), g.colour, s.radius_mpc * (g.home ? 0.05 : 0.03), g.home ? `${g.name} (home)` : g.name, g.address ? () => go(g.address) : null, { dim: !g.home });
   });
-  pickables.push({ object: p, pick: (i) => s.galaxies[i].address && go(s.galaxies[i].address), label: (i) => `${s.galaxies[i].name} · ${s.galaxies[i].kind} · ${s.galaxies[i].stellar_msun.toExponential(1)} M☉` });
+  pickables.push({ object: p, pick: (i) => s.galaxies[i].address && go(s.galaxies[i].address), label: (i) => `${s.galaxies[i].name} · ${s.galaxies[i].kind} · ${s.galaxies[i].stellar_msun.toExponential(1)} M☉${s.galaxies[i].active ? ' · ' + s.galaxies[i].active : ''}` });
+  // Active nuclei ringed: violet for Seyferts and quasars, dim for LINERs.
+  for (const g of s.galaxies.filter((x) => x.active && !/LINER/.test(x.active))) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: rgb([200, 140, 255]), depthWrite: false, transparent: true, sizeAttenuation: false }));
+    m.position.set(...g.position_mpc);
+    m.scale.setScalar(/quasar/.test(g.active) ? 0.04 : 0.025);
+    scene.add(m);
+  }
   if (reframe) aim(s.radius_mpc * 0.6);
 }
 
@@ -201,6 +208,19 @@ function drawGalaxy(s, reframe) {
     if (g) g.names.push(sys.name); else groups.push({ p, names: [sys.name], address: sys.address });
   }
   for (const g of groups) marker(g.p, [255, 230, 120], s.radius_kpc * 0.04, g.names.join(', '), () => go(g.address, { stars: true }));
+  // Globular clusters: warm points, each telling about itself.
+  for (const c of s.globulars) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: rgb([255, 215, 150]), depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.position.set(c.position_kpc[0], c.position_kpc[2], -c.position_kpc[1]);
+    m.scale.setScalar(s.radius_kpc * 0.012);
+    scene.add(m);
+    pickables.push({ object: m, go: () => showNebula(s, c), label: `${c.name} · globular cluster` });
+  }
+  // The centre's black hole.
+  const hole = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: rgb([255, 170, 90]), depthWrite: false, transparent: true, sizeAttenuation: false }));
+  hole.scale.setScalar(0.03);
+  scene.add(hole);
+  pickables.push({ object: hole, go: () => {}, label: `Centre: ${s.centre}` });
   if (reframe) aim(s.radius_kpc * 0.6, [0.15, 1.0, 0.35]);
   markNebulae(s);
 }
@@ -208,7 +228,7 @@ function drawGalaxy(s, reframe) {
 // ---------------------------------------------------------------- nebulae
 
 const NEBULA_COLOUR = { emission: [255, 80, 120], reflection: [100, 150, 255], dark: [120, 95, 70], planetary: [80, 230, 200], supernova_remnant: [255, 150, 170] };
-const NEBULA_KIND = { emission: 'emission nebula', reflection: 'reflection nebula', dark: 'dark cloud', planetary: 'planetary nebula', supernova_remnant: 'supernova remnant' };
+const NEBULA_KIND = { emission: 'emission nebula', reflection: 'reflection nebula', dark: 'dark cloud', planetary: 'planetary nebula', supernova_remnant: 'supernova remnant', globular: 'globular cluster' };
 
 // Fetch the nebulae round the scene (a galaxy's home star, or a system) and draw them: in a
 // galaxy as glows by kind, round a system as thin spheres where they reach into the view.
@@ -539,16 +559,19 @@ function panel(s) {
   const head = (title, sub) => `<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>`;
   if (s.picked) {
     const n = s.picked;
-    p.innerHTML = head(n.name, NEBULA_KIND[n.kind]) + facts([...n.facts, ['Distance', `${Math.round(n.distance_pc * 3.2616)} ly from ${s.level === 'galaxy' ? 'the home star' : 'here'}`]]) +
-      `<div class="row">${n.star ? '<button id="nebstar">Its star</button>' : ''}<button id="back">Back</button></div><div class="note">Nebulae are not places of their own: each is named by the stars or cloud that make it.</div>`;
+    const note = n.kind === 'globular' ? 'Its light and place are drawn; its stars are not yet generated one by one.' : 'Nebulae are not places of their own: each is named by the stars or cloud that make it.';
+    p.innerHTML = head(n.name, NEBULA_KIND[n.kind]) + facts([...n.facts, ['Distance', `${Math.round(n.distance_pc * 3.2616).toLocaleString()} ly from ${s.level === 'galaxy' ? 'the home star' : 'here'}`]]) +
+      `<div class="row">${n.star ? '<button id="nebstar">Its star</button>' : ''}<button id="back">Back</button></div><div class="note">${note}</div>`;
     if ($('nebstar')) $('nebstar').onclick = () => go(n.star, { stars: true });
     $('back').onclick = () => { s.picked = null; panel(s); };
     return;
   }
   if (s.level === 'universe') {
-    p.innerHTML = head(s.name, s.address) + facts([['Galaxies shown', `${s.galaxies.length} within ${s.radius_mpc} Mpc`], ['Pick', 'a galaxy to go in']]);
+    const active = (re) => s.galaxies.filter((g) => g.active && re.test(g.active)).length;
+    p.innerHTML = head(s.name, s.address) + facts([['Galaxies shown', `${s.galaxies.length} within ${s.radius_mpc} Mpc`], ['Active nuclei', `${active(/quasar/)} quasars, ${active(/Seyfert/)} Seyferts, ${active(/LINER/)} LINERs`], ['Pick', 'a galaxy to go in']]) +
+      `<div class="note">Ringed in <span style="color:#c88cff">violet</span>: galaxies with a Seyfert nucleus or a quasar.</div>`;
   } else if (s.level === 'galaxy') {
-    p.innerHTML = head(s.name, s.address) + facts([['Type', s.kind], ['Stars', `${s.stellar_msun.toExponential(2)} M☉`], ['Disk to', `${s.radius_kpc.toFixed(1)} kpc`]]) +
+    p.innerHTML = head(s.name, s.address) + facts([['Type', s.kind], ['Stars', `${s.stellar_msun.toExponential(2)} M☉`], ['Disk to', `${s.radius_kpc.toFixed(1)} kpc`], ['Centre', s.centre], ['Globular clusters', String(s.globulars.length)]]) +
       (s.nebulae ? facts([['Nebulae', `${s.nebulae.length} within ${Math.round(3000 * 3.2616).toLocaleString()} ly of the home star`]]) : '') +
       `<div class="note">Gold marks: systems made here (or the default star). Pick one to see the stars around it. Round the home star, nebulae glow by kind: <span style="color:#ff5078">emission</span>, <span style="color:#6496ff">reflection</span>, <span style="color:#50e6c8">planetary</span>, <span style="color:#ff96aa">supernova remnants</span>, <span style="color:#a08060">dark clouds</span>.</div>`;
   } else if (s.level === 'stars') {

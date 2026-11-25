@@ -64,6 +64,8 @@ pub struct GalaxyDot {
     pub radius_kpc: f64,
     pub colour: [u8; 3],
     pub home: bool,
+    /// What its active nucleus is, if it is active ("Seyfert nucleus", "quasar").
+    pub active: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +82,9 @@ pub struct GalaxyScene {
     pub young: Vec<f32>,
     /// The systems made in it, and the star it centres on.
     pub systems: Vec<SystemDot>,
+    /// What sits at its centre ([`crate::nebulae::centre_line`]).
+    pub centre: String,
+    pub globulars: Vec<crate::nebulae::DeepSkyDot>,
 }
 
 #[derive(Debug, Serialize)]
@@ -312,6 +317,7 @@ impl Viewer {
                         radius_kpc: g.half_light_kpc * 2.0,
                         colour: type_colour(g.morphology),
                         home: g.id == h.id,
+                        active: active(&g.nucleus()),
                     })
                     .collect()
             }
@@ -364,7 +370,20 @@ impl Viewer {
                 });
             }
         }
-        Ok(GalaxyScene { address: galaxy.to_string(), name: model.name.clone(), kind: model.morphology.label(), stellar_msun: model.mass_msun(), radius_kpc: model.edge_kpc, cloud, young, systems })
+        let home = systems.first().map_or([0.0; 3], |s| s.position_kpc.map(|v| f64::from(v) * 1000.0));
+        let globulars = crate::nebulae::globular_dots(&g.at, home);
+        Ok(GalaxyScene {
+            address: galaxy.to_string(),
+            name: model.name.clone(),
+            kind: model.morphology.label(),
+            stellar_msun: model.mass_msun(),
+            radius_kpc: model.edge_kpc,
+            cloud,
+            young,
+            systems,
+            centre: crate::nebulae::centre_line(&g.at.nucleus()),
+            globulars,
+        })
     }
 
     fn stars_scene(&self, address: &Address) -> Result<StarsScene> {
@@ -584,6 +603,7 @@ fn real_galaxies(universe: &Address) -> Vec<GalaxyDot> {
         radius_kpc: 15.0,
         colour: type_colour(geoforge_cosmos::Galaxy::milky_way().morphology),
         home: true,
+        active: None,
     }];
     let sol = geoforge_cosmos::sol::archetype(geoforge_cosmos::resolve::REAL_SEED, geoforge_core::Archetype::Earth).0;
     let observer = geoforge_cosmos::sky::Observer::of_system(&sol, 8.2);
@@ -600,6 +620,8 @@ fn real_galaxies(universe: &Address) -> Vec<GalaxyDot> {
                 radius_kpc: g.scale_deg.to_radians() * g.distance_pc * 7.0 / 1000.0,
                 colour: [200, 210, 230],
                 home: false,
+                // The real galaxies' nuclei are not modelled.
+                active: None,
             });
         }
     }
@@ -632,4 +654,9 @@ fn class_name(c: BodyClass) -> &'static str {
         BodyClass::IceGiant => "ice giant",
         BodyClass::SmallBody => "small body",
     }
+}
+
+/// A nucleus's activity, if it is active.
+fn active(n: &geoforge_cosmos::nuclei::Nucleus) -> Option<String> {
+    (n.activity != geoforge_cosmos::nuclei::Activity::Quiet).then(|| format!("{}{}", n.activity.label(), if n.jets { ", radio jets" } else { "" }))
 }

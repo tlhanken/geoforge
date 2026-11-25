@@ -11,7 +11,7 @@
 //!                                         {materials: [{name, colour}], systems: [{address,
 //!                                         materials}]}, or {error} if exotics.toml is faulty
 //! GET  /api/nebulae?at=ADDRESS            the nebulae round a galaxy's home star or round a
-//!                                         system (nebulae::NebulaDot), nearest first
+//!                                         system (nebulae::DeepSkyDot), nearest first
 //! GET  /api/texture?at=ADDRESS&layer=NAME&width=W    a map as PNG
 //! POST /api/make?at=ADDRESS                make the body's world (and focus it)
 //! POST /api/generate?at=ADDRESS            generate its layers, in the background

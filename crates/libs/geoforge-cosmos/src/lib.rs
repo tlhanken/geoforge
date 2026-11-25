@@ -35,6 +35,7 @@ mod dynamics;
 pub mod exotics;
 mod moons;
 pub mod nebulae;
+pub mod nuclei;
 pub mod remnants;
 
 pub mod census;

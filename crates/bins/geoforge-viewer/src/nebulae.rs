@@ -1,6 +1,7 @@
 //! Nebulae as the viewer shows them ([`geoforge_cosmos::nebulae`]): round a galaxy's home star
 //! for its view, round a system for the stars around it. They are not places of their own:
-//! each is named by what makes it and leads to the star that lights or left it.
+//! each is named by what makes it and leads to the star that lights or left it. A galaxy's
+//! globular clusters are drawn the same way ([`globular_dots`]).
 
 use crate::{star_id, Result, ViewError, Viewer};
 use geoforge_core::address::{Address, Level, StarRef};
@@ -12,11 +13,11 @@ pub const GALAXY_REACH_PC: f64 = 3000.0;
 /// How far round a system the stars around it list nebulae, pc.
 pub const STARS_REACH_PC: f64 = 500.0;
 
-/// A nebula to draw and tell about.
+/// A nebula or globular cluster to draw and tell about.
 #[derive(Debug, Clone, Serialize)]
-pub struct NebulaDot {
+pub struct DeepSkyDot {
     pub id: String,
-    /// emission, reflection, dark, planetary or supernova_remnant.
+    /// emission, reflection, dark, planetary, supernova_remnant or globular.
     pub kind: &'static str,
     pub name: String,
     /// Where it is in the galaxy, kpc, and from the centre asked about, pc.
@@ -38,7 +39,7 @@ impl Viewer {
     ///
     /// # Errors
     /// If the galaxy or system cannot be generated, or has no place.
-    pub fn nebulae(&self, address: &Address) -> Result<Vec<NebulaDot>> {
+    pub fn nebulae(&self, address: &Address) -> Result<Vec<DeepSkyDot>> {
         let g = self.galaxy(address)?;
         let galaxy = address.up_to(Level::Galaxy);
         let (centre, reach) = if address.level() == Level::Galaxy {
@@ -71,7 +72,7 @@ impl Viewer {
                 for m in &materials {
                     facts.push([format!("{m} (fictional)"), "found here".into()]);
                 }
-                NebulaDot {
+                DeepSkyDot {
                     id: n.id.to_string(),
                     kind: n.kind.code(),
                     name: n.name.clone(),
@@ -113,7 +114,7 @@ fn stage_name(stage: geoforge_core::body::StellarStage) -> &'static str {
 
 /// The nebulae of `found` whose names (or fictional materials) hold `q`, as search hits
 /// leading to their stars (a dark cloud, which has none, to `galaxy`).
-pub(crate) fn named(found: &[NebulaDot], q: &str, galaxy: &Address) -> Vec<crate::search::Hit> {
+pub(crate) fn named(found: &[DeepSkyDot], q: &str, galaxy: &Address) -> Vec<crate::search::Hit> {
     found
         .iter()
         .filter(|n| n.name.to_lowercase().contains(q) || n.materials.iter().any(|m| m.to_lowercase().contains(q)))
@@ -130,4 +131,41 @@ pub(crate) fn named(found: &[NebulaDot], q: &str, galaxy: &Address) -> Vec<crate
 
 fn kind_label(code: &str) -> &'static str {
     NebulaKind::ALL.into_iter().find(|k| k.code() == code).map_or("nebula", NebulaKind::label)
+}
+
+/// `galaxy`'s globular clusters as dots, their distances from `centre` (pc).
+#[must_use]
+pub fn globular_dots(galaxy: &geoforge_cosmos::resolve::GalaxyAt, centre: [f64; 3]) -> Vec<DeepSkyDot> {
+    galaxy
+        .globulars()
+        .into_iter()
+        .map(|g| DeepSkyDot {
+            id: format!("gc{}", g.index),
+            kind: "globular",
+            name: g.name.clone(),
+            position_kpc: g.position_pc.map(|v| v / 1000.0),
+            offset_pc: [0, 1, 2].map(|k| g.position_pc[k] - centre[k]),
+            distance_pc: g.distance_pc(centre),
+            radius_pc: 3.0 * g.half_light_pc,
+            facts: vec![
+                ["Kind".into(), "globular cluster".into()],
+                ["Stars".into(), format!("{:.1e} M☉", g.mass_msun)],
+                ["Age".into(), format!("{:.1} billion years", g.age_gyr)],
+                ["Metals [Fe/H]".into(), format!("{:+.2}", g.metallicity_dex)],
+                ["Half its light within".into(), format!("{:.1} pc", g.half_light_pc)],
+                ["From the centre".into(), format!("{:.1} kpc", g.distance_pc([0.0; 3]) / 1000.0)],
+            ],
+            star: None,
+            materials: Vec::new(),
+        })
+        .collect()
+}
+
+/// What sits at `galaxy`'s centre, in a line: "black hole of 4.3×10⁶ M☉, quiet".
+#[must_use]
+pub fn centre_line(n: &geoforge_cosmos::nuclei::Nucleus) -> String {
+    match n.black_hole_msun {
+        None => "no central black hole".into(),
+        Some(m) => format!("black hole of {m:.1e} M☉, {}{}", n.activity.label(), if n.jets { ", with radio jets" } else { "" }),
+    }
 }

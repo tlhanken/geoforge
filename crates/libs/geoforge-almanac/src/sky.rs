@@ -164,6 +164,21 @@ pub struct NebulaObject {
     pub surface_brightness: Option<f64>,
 }
 
+/// A globular cluster of the home galaxy in the sky.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClusterObject {
+    pub name: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+    /// Integrated visual magnitude through the dust.
+    pub v: f64,
+    /// The radius holding most of its light, degrees.
+    pub radius_deg: f64,
+    pub distance_ly: f64,
+    pub mass_msun: f64,
+    pub metallicity_dex: f64,
+}
+
 /// How far off nebulae are looked for, pc.
 pub const NEBULA_REACH_PC: f64 = 2500.0;
 
@@ -423,6 +438,27 @@ impl Sky {
             *v = (0.25 * self.zodiacal_dust * along * (-beta / wide).exp()) as f32;
         }
         out
+    }
+
+    /// The globular clusters of `galaxy` (this sky's) brighter than `limit`, brightest first.
+    #[must_use]
+    pub fn globulars(&self, galaxy: &geoforge_cosmos::resolve::GalaxyAt, field: &Starfield, limit: f64) -> Vec<ClusterObject> {
+        geoforge_cosmos::nuclei::seen(&galaxy.globulars(), field, &self.frame.observer, limit)
+            .into_iter()
+            .map(|g| {
+                let (ra, dec) = self.frame.equatorial.ra_dec(g.direction);
+                ClusterObject {
+                    name: g.cluster.name,
+                    ra_deg: ra,
+                    dec_deg: dec,
+                    v: g.v,
+                    radius_deg: g.radius_deg,
+                    distance_ly: g.distance_pc * LY_PER_PC,
+                    mass_msun: g.cluster.mass_msun,
+                    metallicity_dex: g.cluster.metallicity_dex,
+                }
+            })
+            .collect()
     }
 
     /// The nebulae in this sky within [`NEBULA_REACH_PC`]: the lit ones brighter than

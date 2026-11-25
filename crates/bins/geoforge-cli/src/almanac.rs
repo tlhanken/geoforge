@@ -236,6 +236,15 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
             println!("  {:<32} {:<17} {v:>5}  {:>7.0} ly  {:>5.2}° across  RA {:>5.1}° Dec {:>+5.1}°", n.name, n.kind, n.distance_ly, 2.0 * n.radius_deg, n.ra_deg, n.dec_deg);
         }
     }
+    // The home galaxy's globular clusters.
+    let galaxy = sys.root.placement.and_then(|a| geoforge_cosmos::resolve::galaxy(&a).ok());
+    let clusters = galaxy.as_ref().map(|g| s.globulars(g, &field, NEBULA_LIMIT)).unwrap_or_default();
+    if !clusters.is_empty() {
+        println!("Globular clusters (to magnitude {NEBULA_LIMIT:.0}):");
+        for c in clusters.iter().take(12) {
+            println!("  {:<24} {:>5.1}  {:>7.0} ly  {:.1e} M☉  [Fe/H] {:>+5.2}  RA {:>5.1}° Dec {:>+5.1}°", c.name, c.v, c.distance_ly, c.mass_msun, c.metallicity_dex, c.ra_deg, c.dec_deg);
+        }
+    }
     println!("The system:");
     for o in &s.bodies {
         let name = o.name.clone().unwrap_or_default();
@@ -288,7 +297,19 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
             .map(|o| geoforge_store::render::SkyPoint { ra_deg: o.ra_deg, dec_deg: o.dec_deg, v: o.v, temperature_k: o.temperature_k, ring: matches!(o.kind, Kind::Planet | Kind::Moon) })
             .collect();
         let zodiacal = s.zodiacal(gw, gh);
-        let patches: Vec<geoforge_store::render::SkyPatch> = nebulae.iter().filter_map(sky_patch).collect();
+        let mut patches: Vec<geoforge_store::render::SkyPatch> = nebulae.iter().filter_map(sky_patch).collect();
+        patches.extend(clusters.iter().map(|c| {
+            let arcsec = c.radius_deg * 3600.0;
+            let sb = c.v + 2.5 * (std::f64::consts::PI * arcsec * arcsec).log10();
+            geoforge_store::render::SkyPatch {
+                ra_deg: c.ra_deg,
+                dec_deg: c.dec_deg,
+                radius_deg: c.radius_deg,
+                colour: [255, 225, 170],
+                strength: 10f64.powf(-0.4 * (sb - 21.0)).min(1.5) as f32,
+                shell: false,
+            }
+        }));
         let chart = geoforge_store::render::SkyChart { glow: &glow, zodiacal: &zodiacal, glow_width: gw, patches: &patches, points: &points, path: &s.ecliptic, lines: &lines };
         let img = geoforge_store::render::render_sky(width, &chart);
         let png = dir.join("sky.png");

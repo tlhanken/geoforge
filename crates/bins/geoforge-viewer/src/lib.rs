@@ -466,6 +466,11 @@ mod nebulae_seen {
         assert!(wide.iter().filter(|n| n.kind == "emission").all(|n| n.materials == ["Glimmer"] && n.facts.iter().any(|f| f[0] == "Glimmer (fictional)")));
         let near = v.nebulae(&body.up_to(Level::System)).unwrap();
         assert!(near.windows(2).all(|p| p[0].distance_pc <= p[1].distance_pc) && near.iter().all(|n| n.distance_pc <= nebulae::STARS_REACH_PC));
+        // Its centre and globular clusters; active nuclei among the universe's galaxies.
+        let crate::scene::Scene::Galaxy(gs) = v.scene(&body.up_to(Level::Galaxy), false).unwrap() else { panic!("galaxy") };
+        assert!(gs.centre.starts_with("black hole of") && gs.globulars.len() > 20, "{} with {} globulars", gs.centre, gs.globulars.len());
+        let crate::scene::Scene::Universe(un) = v.scene(&body.up_to(Level::Universe), false).unwrap() else { panic!("universe") };
+        assert!(un.galaxies.iter().any(|g| g.active.is_some()) && un.galaxies.iter().filter(|g| g.active.is_some()).count() < un.galaxies.len() / 2);
         let first = wide.iter().find(|n| n.star.is_some()).unwrap();
         let hits = v.search(&first.name.to_lowercase()).unwrap();
         assert!(hits.iter().any(|h| h.kind == "nebula" && Some(&h.address) == first.star.as_ref()));

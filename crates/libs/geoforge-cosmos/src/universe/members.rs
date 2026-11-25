@@ -94,6 +94,12 @@ impl UniverseGalaxy {
         self.seed.child(b"stars")
     }
 
+    /// Its centre: its black hole and how active it is ([`crate::nuclei`]).
+    #[must_use]
+    pub fn nucleus(&self) -> crate::nuclei::Nucleus {
+        crate::nuclei::nucleus(&self.model(), self.stars_seed())
+    }
+
     /// Its galaxy model, to draw its stars from: the preset of its type (the Milky Way's for
     /// a barred Sbc) scaled to its stellar mass and its size against the size a galaxy of
     /// the preset's type and mass has, and named.
