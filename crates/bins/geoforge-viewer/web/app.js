@@ -437,7 +437,7 @@ function panel(s) {
     const star = s.stars[0];
     const what = (st) => (st.kind === 'black_hole' ? 'black hole' : `${st.spectral}, ${Math.round(st.temperature_k)} K`);
     const notes = s.stars.flatMap((st) => st.notes.map((n) => [st.name, n]));
-    p.innerHTML = head(s.name, s.address) + facts([['Star', star ? what(star) : '—'], ...s.stars.slice(1).map((st) => [st.name, what(st)]), ...notes, ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
+    p.innerHTML = head(s.name, s.address) + facts([['Star', star ? what(star) : '—'], ...s.stars.slice(1).map((st) => [st.name, what(st)]), ...notes, ...s.belts.filter((b) => b.mix).map((b) => [b.name, `${b.inner_au.toFixed(1)}–${b.outer_au.toFixed(1)} AU: ${b.mix}`]), ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
       `<div class="row"><button id="near">Stars around</button></div><div class="note">Distances are squeezed (√ of AU); moons on rings by their planet. ★ is the system's most Earth-like body; ✓ a temperate world, ~ one with open water but colder or hotter.</div>`;
     $('near').onclick = () => go(s.address, { stars: true });
   } else if (s.level === 'body') {

@@ -198,6 +198,9 @@ pub fn build(world: &World, opts: &Options) -> Result<Report> {
     if let Some(t) = stat("temperature", "global_mean_c") {
         figs.push((format!("{t:.1} °C"), "global mean (Earth 14.5)".into()));
     }
+    if let Some(a) = system.as_ref().and_then(|s| geoforge_cosmos::asteroids::of(s, world.manifest.focus)) {
+        figs.push((format!("{}-type", a.taxon.code()), a.leading(4)));
+    }
     if let Some(l) = stat("elevation", "land_fraction") {
         figs.push((format!("{:.0}%", 100.0 * l), "land (Earth 29%)".into()));
     }

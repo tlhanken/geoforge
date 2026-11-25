@@ -1,6 +1,7 @@
 //! The handoff to the surface pipeline: a [`BodyContext`] for any body of a system, including
 //! belt members generated on demand.
 
+use crate::asteroids::{self, Asteroid};
 use crate::draw::Draw;
 use crate::worlds::{interior_for, regulate_co2, Setting};
 use geoforge_core::body::{
@@ -145,6 +146,12 @@ pub fn body_context(system: &SolarSystem, key: Key) -> Option<BodyContext> {
 /// are stored as populations, never as lists of bodies.
 #[must_use]
 pub fn belt_member(system: &SolarSystem, belt: Key, index: u64) -> Option<BodyContext> {
+    belt_member_made(system, belt, index).map(|(ctx, _)| ctx)
+}
+
+/// A belt member with what it is made of (see [`crate::asteroids`]).
+#[must_use]
+pub fn belt_member_made(system: &SolarSystem, belt: Key, index: u64) -> Option<(BodyContext, Asteroid)> {
     let node = system.node(belt)?;
     let NodeKind::Belt(pop) = &node.node else { return None };
     let star = host(system, node.parent?)?;
@@ -152,17 +159,26 @@ pub fn belt_member(system: &SolarSystem, belt: Key, index: u64) -> Option<BodyCo
     let mut d = Draw::new(system.root.seed.child_u64(b"belt-member", key.0));
     let diameter_km = member_diameter_km(pop, index);
     let icy = pop.composition.fraction(Species::Ice) > 0.3;
-    let density = if icy { 1.5 } else { 2.6 };
+    let rotation_h = d.range(4.0, 20.0);
+    let obliquity_deg = d.range(0.0, 60.0);
+    let mut orbit = Elements {
+        a_au: d.range(pop.inner_au, pop.outer_au),
+        e: d.range(0.0, 0.2),
+        i_deg: d.range(0.0, 15.0),
+        lan_deg: d.range(0.0, 360.0),
+        argp_deg: d.range(0.0, 360.0),
+        m0_deg: d.range(0.0, 360.0),
+    };
+    let made = asteroids::member(system.root.seed.child_u64(b"belt", belt.0), pop, index, diameter_km, star.frost_au, &mut orbit);
     let radius_km = diameter_km / 2.0;
-    let mass_kg = 4.0 / 3.0 * std::f64::consts::PI * (radius_km * 1000.0).powi(3) * density * 1000.0;
+    let mass_kg = 4.0 / 3.0 * std::f64::consts::PI * (radius_km * 1000.0).powi(3) * made.density_g_cc * 1000.0;
     // Round (dwarf planets) from about 800 km across.
     let class = if diameter_km >= 800.0 { BodyClass::Terrestrial } else { BodyClass::SmallBody };
-    let ext = BodyExterior { class, mass_kg, radius_km, rotation_h: d.range(4.0, 20.0), obliquity_deg: d.range(0.0, 60.0) };
-    let a_au = d.range(pop.inner_au, pop.outer_au);
-    let orbit = Elements { a_au, e: d.range(0.0, 0.2), i_deg: d.range(0.0, 15.0), lan_deg: d.range(0.0, 360.0), argp_deg: d.range(0.0, 360.0), m0_deg: d.range(0.0, 360.0) };
+    let ext = BodyExterior { class, mass_kg, radius_km, rotation_h, obliquity_deg };
+    let a_au = orbit.a_au;
     let flux = flux_w_m2(star.luminosity_solar, a_au) + star.others_flux_w_m2;
     let setting = Setting { flux_w_m2: flux, icy: icy || a_au > star.frost_au, tidally_heated: false };
-    Some(BodyContext {
+    let ctx = BodyContext {
         key,
         name: format!("{} #{}", node.name, index + 1),
         exterior: ext,
@@ -177,7 +193,8 @@ pub fn belt_member(system: &SolarSystem, belt: Key, index: u64) -> Option<BodyCo
         },
         tides: Vec::new(),
         epoch: system.root.epoch,
-    })
+    };
+    Some((ctx, made))
 }
 
 /// Diameter of the `index`-th largest member: from N(>D) = count · (D/min)^(1−q).

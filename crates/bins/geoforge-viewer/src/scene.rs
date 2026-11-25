@@ -206,6 +206,8 @@ pub struct Belt {
     pub parent: Option<u64>,
     pub inner_au: f64,
     pub outer_au: f64,
+    /// Its members' types, "C 45%, S 30%, …".
+    pub mix: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -431,7 +433,9 @@ impl Viewer {
                         habitable,
                     });
                 }
-                NodeKind::Belt(p) => belts.push(Belt { name: n.name.clone(), parent: n.parent.map(|k| k.0), inner_au: p.inner_au, outer_au: p.outer_au }),
+                NodeKind::Belt(p) => {
+                    belts.push(Belt { name: n.name.clone(), parent: n.parent.map(|k| k.0), inner_au: p.inner_au, outer_au: p.outer_au, mix: geoforge_cosmos::asteroids::mix_line(sys, n.key) })
+                }
                 _ => {}
             }
         }
@@ -464,6 +468,9 @@ impl Viewer {
         .map(|(k, v)| [k.to_string(), v])
         .to_vec();
         let mut facts = facts;
+        if let Some(a) = geoforge_cosmos::asteroids::of(&sys, body.key) {
+            facts.extend(a.facts(body.exterior.mass_kg).into_iter().map(|(k, v)| [k.to_string(), v]));
+        }
         if let Some(c) = climate_estimate(&body) {
             let h = habitable_name(habitability(&body)).unwrap_or("no open water");
             facts.push(["Climate".into(), format!("~{:.0} °C, {:.0}% thawed: {h}", c.mean_c, 100.0 * c.thawed_share)]);

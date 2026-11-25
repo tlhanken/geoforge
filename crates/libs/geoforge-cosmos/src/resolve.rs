@@ -13,7 +13,7 @@ use crate::starfield::Starfield;
 use crate::system::Generated;
 use crate::universe::{Universe, UniverseGalaxy};
 use crate::worlds::{habitability, Habitability};
-use crate::{body_context, sol};
+use crate::{any_body, sol};
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_core::body::{BodyContext, SolarSystem, StellarStage};
 use geoforge_core::galactic::{StarEdits, StarId, UniverseSite};
@@ -145,12 +145,12 @@ pub fn body(address: &Address, system: &SolarSystem) -> Result<BodyContext, Unre
     let key = address.body.ok_or(Unresolved::Shallow { needs: Level::Body })?;
     let missing = || Unresolved::Missing(format!("body {key} in {}", system.root.name));
     if address.star == Some(StarRef::Sun) {
-        let name = &system.node(key).ok_or_else(missing)?.name;
-        if let Some(a) = Archetype::ALL.into_iter().find(|a| a.real_body() == name) {
+        if let Some(a) = system.node(key).and_then(|n| Archetype::ALL.into_iter().find(|a| a.real_body() == n.name)) {
             return Ok(sol::archetype(REAL_SEED, a).1);
         }
     }
-    body_context(system, key).ok_or_else(missing)
+    // A node of the tree, or a belt's member.
+    any_body(system, key).ok_or_else(missing)
 }
 
 /// The real Solar System as `real/milky-way/sun` holds it: at the 2026 March equinox.

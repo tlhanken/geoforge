@@ -297,6 +297,14 @@ mod tests {
         assert!(v.texture(&body, "koppen", 128).is_err(), "not generated yet");
         let other = sys.bodies.iter().find(|x| !x.made).unwrap();
         assert!(v.texture(&other.address.parse().unwrap(), "appearance", 64).is_ok(), "any body has a face");
+        // A belt's members tell what they are made of; the belt its mix.
+        let generated = v.system(&body.up_to(Level::System)).unwrap().system;
+        let belt = generated.nodes.iter().find(|n| matches!(n.node, geoforge_core::body::NodeKind::Belt(_)) && geoforge_cosmos::belt_member(&generated, n.key, 0).is_some()).unwrap();
+        let member = body.up_to(Level::System).body(geoforge_core::Key((belt.key.0 << 32) | 20));
+        let Scene::Body(m) = v.scene(&member, false).unwrap() else { panic!("member") };
+        let fact = |k: &str| m.facts.iter().find(|f| f[0] == k).map(|f| f[1].clone());
+        assert!(fact("Type").is_some() && fact("Makeup").is_some_and(|x| x.contains('%')) && fact("Density").is_some(), "{:?}", m.facts);
+        assert!(sys.belts.iter().any(|b| b.name == belt.name && b.mix.is_some()));
 
         let crumbs = v.crumbs(&body).unwrap();
         assert_eq!(crumbs.len(), 5);

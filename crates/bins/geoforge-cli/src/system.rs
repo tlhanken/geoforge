@@ -38,7 +38,7 @@ pub fn show_text(w: &World) -> R<String> {
                     format!("{:?} {:.3} M⊕ {:.0} km — {what}", b.class, b.mass_kg / geoforge_core::body::EARTH_MASS_KG, b.radius_km)
                 }
                 NodeKind::Barycenter => "barycentre of the pair".into(),
-                NodeKind::Belt(p) => format!("belt {:.2}–{:.2} AU", p.inner_au, p.outer_au),
+                NodeKind::Belt(p) => format!("belt {:.2}–{:.2} AU{}", p.inner_au, p.outer_au, geoforge_cosmos::asteroids::mix_line(&sys, n.key).map_or_else(String::new, |m| format!(" — {m}"))),
                 NodeKind::Ring(p) => format!("rings {:.0}–{:.0} km", p.inner_au * geoforge_core::body::AU_KM, p.outer_au * geoforge_core::body::AU_KM),
             };
             let mark = if n.key == w.manifest.focus { " ← focus" } else { "" };
