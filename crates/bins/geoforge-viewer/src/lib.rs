@@ -7,6 +7,7 @@
 //! making a body or generating its layers. [`server`] puts it behind a local web server for
 //! the page in `web/` (three.js draws it); everything the page shows is worked out here.
 
+pub mod nebulae;
 pub mod scene;
 pub mod search;
 pub mod server;
@@ -54,6 +55,8 @@ pub struct Galaxy {
     pub field: Starfield,
     /// Its shape as drawn stars, old and young, once asked for ([`scene`]).
     pub cloud: std::sync::OnceLock<(Vec<f32>, Vec<f32>)>,
+    /// The nebulae round its home star, once asked for ([`nebulae`]).
+    pub nebulae: std::sync::OnceLock<Vec<geoforge_cosmos::nebulae::Nebula>>,
 }
 
 /// A system as the viewer shows it: its tree, and its most Earth-like body if it has a solid
@@ -128,7 +131,7 @@ impl Viewer {
         }
         let field = at.starfield(u.star_edits(&key)?);
         drop(u);
-        let g = Arc::new(Galaxy { at, field, cloud: std::sync::OnceLock::new() });
+        let g = Arc::new(Galaxy { at, field, cloud: std::sync::OnceLock::new(), nebulae: std::sync::OnceLock::new() });
         self.galaxies.lock().expect("galaxy cache").insert(key, Arc::clone(&g));
         Ok(g)
     }
@@ -434,6 +437,38 @@ mod fictional {
         assert!(hits.iter().any(|h| h.note.contains("Aurorite") && h.address == body.up_to(Level::System).to_string()));
         std::fs::write(dir.join("exotics.toml"), "[[material]]\nname = \"\"\n").unwrap();
         assert!(v.exotics().is_err() && v.exotics_in(&around).iter().all(Vec::is_empty));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod nebulae_seen {
+    use super::*;
+    use geoforge_core::Seed;
+
+    /// Round universe 7's home star: nebulae of several kinds in its galaxy's view, the
+    /// nearest round its system within the reach, nearest first, each leading to a star (dark
+    /// clouds aside); search finds one by name; a fictional material in emission nebulae shows
+    /// in their facts.
+    #[test]
+    fn nebulae_round_home() {
+        let dir = std::env::temp_dir().join(format!("geoforge-viewer-nebulae-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut u = UniverseDir::create(&dir, Address::universe(Seed(7))).unwrap();
+        let w = geoforge_pipeline::create_at(&mut u, &Address::universe(Seed(7)), None, geoforge_core::grid::GridSpec::Equirect { width: 64, height: 32 }).unwrap();
+        let body = w.manifest.address.unwrap();
+        std::fs::write(dir.join("exotics.toml"), "[[material]]\nname = \"Glimmer\"\n[[material.found]]\nin = \"nebula\"\nkinds = [\"emission\"]\nchance = 1.0\n").unwrap();
+        let v = Viewer::open(&dir).unwrap();
+        let wide = v.nebulae(&body.up_to(Level::Galaxy)).unwrap();
+        let kinds: std::collections::BTreeSet<&str> = wide.iter().map(|n| n.kind).collect();
+        assert!(kinds.len() >= 4 && wide.len() > 50, "{kinds:?}, {}", wide.len());
+        assert!(wide.iter().all(|n| (n.kind == "dark") == n.star.is_none() && n.distance_pc <= nebulae::GALAXY_REACH_PC));
+        assert!(wide.iter().filter(|n| n.kind == "emission").all(|n| n.materials == ["Glimmer"] && n.facts.iter().any(|f| f[0] == "Glimmer (fictional)")));
+        let near = v.nebulae(&body.up_to(Level::System)).unwrap();
+        assert!(near.windows(2).all(|p| p[0].distance_pc <= p[1].distance_pc) && near.iter().all(|n| n.distance_pc <= nebulae::STARS_REACH_PC));
+        let first = wide.iter().find(|n| n.star.is_some()).unwrap();
+        let hits = v.search(&first.name.to_lowercase()).unwrap();
+        assert!(hits.iter().any(|h| h.kind == "nebula" && Some(&h.address) == first.star.as_ref()));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

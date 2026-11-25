@@ -227,6 +227,15 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
             );
         }
     }
+    // Nebulae to binoculars' reach (and the dark clouds over a degree).
+    let nebulae = s.nebulae(&field, NEBULA_LIMIT);
+    if !nebulae.is_empty() {
+        println!("Nebulae (to magnitude {NEBULA_LIMIT:.0}, and dark clouds over a degree):");
+        for n in nebulae.iter().take(16) {
+            let v = n.v.map_or("dark".to_string(), |v| format!("{v:>5.1}"));
+            println!("  {:<32} {:<17} {v:>5}  {:>7.0} ly  {:>5.2}° across  RA {:>5.1}° Dec {:>+5.1}°", n.name, n.kind, n.distance_ly, 2.0 * n.radius_deg, n.ra_deg, n.dec_deg);
+        }
+    }
     println!("The system:");
     for o in &s.bodies {
         let name = o.name.clone().unwrap_or_default();
@@ -279,12 +288,33 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
             .map(|o| geoforge_store::render::SkyPoint { ra_deg: o.ra_deg, dec_deg: o.dec_deg, v: o.v, temperature_k: o.temperature_k, ring: matches!(o.kind, Kind::Planet | Kind::Moon) })
             .collect();
         let zodiacal = s.zodiacal(gw, gh);
-        let img = geoforge_store::render::render_sky(width, &glow, &zodiacal, gw, &points, &s.ecliptic, &lines);
-        let chart = dir.join("sky.png");
-        img.save(&chart)?;
+        let patches: Vec<geoforge_store::render::SkyPatch> = nebulae.iter().filter_map(sky_patch).collect();
+        let chart = geoforge_store::render::SkyChart { glow: &glow, zodiacal: &zodiacal, glow_width: gw, patches: &patches, points: &points, path: &s.ecliptic, lines: &lines };
+        let img = geoforge_store::render::render_sky(width, &chart);
+        let png = dir.join("sky.png");
+        img.save(&png)?;
         let json = dir.join("sky.json");
         std::fs::write(&json, serde_json::to_string_pretty(&s)?)?;
-        println!("written {} and {}", chart.display(), json.display());
+        println!("written {} and {}", png.display(), json.display());
     }
     Ok(())
+}
+
+/// Nebulae fainter than this are left off the sky's list and chart.
+const NEBULA_LIMIT: f64 = 9.0;
+
+/// How nebula `n` is drawn on a chart: lit ones by kind, brighter for a higher surface
+/// brightness (full at 21 mag/″², the Milky Way's), dark ones not at all (the glow already
+/// has their dust).
+fn sky_patch(n: &geoforge_almanac::sky::NebulaObject) -> Option<geoforge_store::render::SkyPatch> {
+    let sb = n.surface_brightness?;
+    let strength = 10f64.powf(-0.4 * (sb - 21.0)).min(1.2) as f32;
+    let colour = match n.kind.as_str() {
+        "emission" => [255, 70, 110],
+        "reflection" => [90, 140, 255],
+        "planetary" => [80, 230, 200],
+        "supernova_remnant" => [255, 130, 150],
+        _ => return None,
+    };
+    (strength >= 0.03).then_some(geoforge_store::render::SkyPatch { ra_deg: n.ra_deg, dec_deg: n.dec_deg, radius_deg: n.radius_deg, colour, strength, shell: n.kind == "supernova_remnant" })
 }

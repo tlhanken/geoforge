@@ -2,9 +2,14 @@
 //!
 //! Stars are binned by absolute visual magnitude, one magnitude a bin from −12 to +18 (the
 //! faintest bin takes everything fainter). One more bin, [`DARK`], holds what hardly shines
-//! in visible light or not at all: brown dwarfs, neutron stars and black holes. A bin's reach is how far its brightest stars stay
-//! brighter than a limit with no dust; its cubes are about half that reach on a side, in
-//! powers of two of 8 pc, so a query for a bin around a point visits about 5³ cubes.
+//! in visible light or not at all: brown dwarfs, neutron stars and black holes. Two more
+//! hold the just dead, rare and looked for far off by the nebulae they leave: white dwarfs
+//! born within [`PLANETARY_GYR`] ([`NASCENT_WHITE_DWARFS`]: planetary nebulae's stars) and
+//! neutron stars and black holes born within [`REMNANT_GYR`] ([`NASCENT_COLLAPSED`]:
+//! supernova remnants'); their cubes are 2 kpc on a side. A bin's reach is how far its
+//! brightest stars stay brighter than a limit with no dust; its cubes are about half that
+//! reach on a side, in powers of two of 8 pc, so a query for a bin around a point visits
+//! about 5³ cubes.
 
 /// The brightest bin's bright edge, absolute V.
 pub const BRIGHTEST: f64 = -12.0;
@@ -12,8 +17,19 @@ pub const BRIGHTEST: f64 = -12.0;
 pub const LIT_BINS: usize = 30;
 /// The bin of brown dwarfs and dark remnants, after the lit ones.
 pub const DARK: usize = LIT_BINS;
-/// Number of bins, the dark one included.
-pub const BINS: usize = LIT_BINS + 1;
+/// White dwarfs born within [`PLANETARY_GYR`]: the stars of planetary nebulae.
+pub const NASCENT_WHITE_DWARFS: usize = DARK + 1;
+/// Neutron stars and black holes born within [`REMNANT_GYR`]: the stars of supernova
+/// remnants.
+pub const NASCENT_COLLAPSED: usize = DARK + 2;
+/// Number of bins, the dark and the just-dead ones included.
+pub const BINS: usize = LIT_BINS + 3;
+/// How long a planetary nebula shines, Gyr (~25 kyr: Badenes et al. 2015's 20–30 kyr).
+pub const PLANETARY_GYR: f64 = 2.5e-5;
+/// How long a supernova remnant is seen, Gyr (~100 kyr, until it merges with the gas).
+pub const REMNANT_GYR: f64 = 1e-4;
+/// The level of the just-dead bins' cubes: 8 pc × 2⁸ ≈ 2 kpc.
+const NASCENT_LEVEL: u32 = 8;
 /// The smallest cube's side, pc.
 pub const BASE_PC: f64 = 8.0;
 /// The largest cube's side: 8 pc × 2¹¹ ≈ 16 kpc.
@@ -42,6 +58,9 @@ pub fn reach_pc(v: f64, limit: f64) -> f64 {
 /// The level of bin `b`'s cubes.
 #[must_use]
 pub fn level(b: usize) -> u32 {
+    if b > DARK {
+        return NASCENT_LEVEL;
+    }
     let half = reach_pc(bright_edge(b), SIZING_LIMIT) / 2.0;
     ((half / BASE_PC).log2().round().max(0.0) as u32).min(MAX_LEVEL)
 }
@@ -95,7 +114,8 @@ mod tests {
         assert!((reach_pc(-7.0, 6.5) / 5012.0 - 1.0).abs() < 0.01);
         // Cubes grow with reach and are nested.
         assert!(level(bin_of(-7.0)) > level(bin_of(1.0)) && level(bin_of(1.0)) > level(bin_of(10.0)));
-        assert_eq!(level(BINS - 1), 0);
+        assert_eq!(level(DARK), 0);
+        assert_eq!(level(NASCENT_COLLAPSED), 8);
         let p = [8200.5, -3.2, 25.0];
         let (a, b) = corners(cube_of(p, 4), 4);
         assert!((0..3).all(|k| a[k] <= p[k] && p[k] < b[k]));

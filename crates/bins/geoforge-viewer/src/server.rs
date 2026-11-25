@@ -10,6 +10,8 @@
 //! GET  /api/exotics?at=ADDRESS            the systems around it holding fictional materials:
 //!                                         {materials: [{name, colour}], systems: [{address,
 //!                                         materials}]}, or {error} if exotics.toml is faulty
+//! GET  /api/nebulae?at=ADDRESS            the nebulae round a galaxy's home star or round a
+//!                                         system (nebulae::NebulaDot), nearest first
 //! GET  /api/texture?at=ADDRESS&layer=NAME&width=W    a map as PNG
 //! POST /api/make?at=ADDRESS                make the body's world (and focus it)
 //! POST /api/generate?at=ADDRESS            generate its layers, in the background
@@ -92,6 +94,7 @@ fn handle(viewer: &Arc<Viewer>, rq: Request) {
             let materials: Vec<serde_json::Value> = list.materials.iter().map(|m| serde_json::json!({ "name": m.name, "colour": m.rgb(), "note": m.note })).collect();
             Ok(json(&serde_json::json!({ "materials": materials, "systems": found })))
         }),
+        (Method::Get, "/api/nebulae") => at(viewer, arg("at")).and_then(|a| viewer.nebulae(&a)).map(|n| json(&n)),
         (Method::Get, "/api/search") => viewer.search(&arg("q").unwrap_or_default()).map(|h| json(&h)),
         (Method::Get, "/api/texture") => at(viewer, arg("at")).and_then(|a| {
             let width = arg("width").and_then(|w| w.parse().ok()).unwrap_or(1024);

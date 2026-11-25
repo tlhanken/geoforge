@@ -15,14 +15,17 @@
 //!   2 pc, up to 150 pc, after which they are as good as field;
 //! - members are drawn per bin on demand (each bin's draws seeded by the event and the bin),
 //!   from the stars alive at the event's age, so a far observer sees an event's O and B
-//!   stars without generating its dwarfs; none is heavier than half the event.
+//!   stars without generating its dwarfs; none is heavier than half the event. Its just
+//!   dead (the remnants of the last 25 kyr's white dwarfs and 100 kyr's supernovae) are
+//!   drawn from the masses dying at its exact age.
 
 use super::bins;
 use super::field::{cube_seed, place};
-use super::tables::Table;
+use super::tables::{heaviest_alive, Table};
 use super::{GalacticStar, Sectors, YOUNG_GYR};
 use crate::draw::Draw;
 use crate::galaxy::{Galaxy, Prepared};
+use crate::stars::WHITE_DWARF_LIMIT;
 use geoforge_core::galactic::{StarId, StarKind};
 use geoforge_core::seed::Seed;
 
@@ -158,6 +161,9 @@ impl Sectors {
 
     /// The members of `event` (of group cube `cube`) in bin `bin`.
     pub(crate) fn members(&self, cube: [i32; 3], event: &Event, bin: usize) -> Vec<GalacticStar> {
+        if bin > bins::DARK {
+            return self.just_dead(cube, event, bin);
+        }
         let yp = &self.young[event.population];
         let table = yp.table(event.age_gyr);
         let mean = event.mass_msun * table.per_msun[bin];
@@ -171,12 +177,7 @@ impl Sectors {
         let mut out = Vec::new();
         for n in 0..d.poisson(mean) {
             let Some(k) = table.bins[bin].pick(d.u()) else { continue };
-            let offset = if event.bound {
-                let r = event.radius_pc / (d.u().max(1e-12).powf(-2.0 / 3.0) - 1.0).max(1e-12).sqrt();
-                d.direction().map(|v| v * r.min(event.extent_pc()))
-            } else {
-                [0, 1, 2].map(|_| (event.radius_pc * d.gauss()).clamp(-event.extent_pc(), event.extent_pc()))
-            };
+            let offset = offset(&mut d, event);
             if k.initial_mass > 0.5 * event.mass_msun {
                 continue;
             }
@@ -186,6 +187,60 @@ impl Sectors {
             out.push(GalacticStar::new(id, position, kind, Some(kind_of)));
         }
         out
+    }
+}
+
+impl Sectors {
+    /// The members of `event` that died within the just-dead bin `bin`'s window, its exact
+    /// age: white dwarfs within 25 kyr, neutron stars and black holes within 100 kyr.
+    fn just_dead(&self, cube: [i32; 3], event: &Event, bin: usize) -> Vec<GalacticStar> {
+        let imf = &self.galaxy().imf;
+        let (lo, hi) = imf.range();
+        let (window, (from_m, to_m)) = if bin == bins::NASCENT_WHITE_DWARFS { (bins::PLANETARY_GYR, (lo, WHITE_DWARF_LIMIT)) } else { (bins::REMNANT_GYR, (WHITE_DWARF_LIMIT, hi)) };
+        // Those born between the heaviest still alive now and the heaviest alive a window ago.
+        let m_lo = heaviest_alive(event.age_gyr, (lo, hi)).max(from_m);
+        let m_hi = heaviest_alive((event.age_gyr - window).max(0.0), (lo, hi)).min(to_m).min(0.5 * event.mass_msun);
+        if m_lo >= m_hi {
+            return Vec::new();
+        }
+        const STEPS: usize = 24;
+        let span = (m_hi / m_lo).ln();
+        let masses: Vec<f64> = (0..=STEPS).map(|i| m_lo * (span * i as f64 / STEPS as f64).exp()).collect();
+        let mut cumulative = vec![0.0];
+        for w in masses.windows(2) {
+            let mid = (w[0] * w[1]).sqrt();
+            cumulative.push(cumulative.last().copied().unwrap_or(0.0) + imf.density(mid) * (w[1] - w[0]));
+        }
+        let expected = event.mass_msun * cumulative[STEPS] / imf.mean_mass();
+        let seed = cube_seed(self.seed(), b"members", bin, cube).child_u64(b"event", u64::from(event.index));
+        let mut d = Draw::new(seed);
+        let kind_of = self.galaxy().components[self.young[event.population].component].kind;
+        let metallicity_dex = self.galaxy().metallicity(self.young[event.population].component, event.centre, event.age_gyr, event.scatter);
+        (0..d.poisson(expected))
+            .map(|n| {
+                let u = d.u() * cumulative[STEPS];
+                let i = cumulative.partition_point(|&c| c < u).clamp(1, STEPS);
+                let t = (u - cumulative[i - 1]) / (cumulative[i] - cumulative[i - 1]).max(1e-300);
+                let initial_mass = masses[i - 1] + t * (masses[i] - masses[i - 1]);
+                let position = {
+                    let o = offset(&mut d, event);
+                    [0, 1, 2].map(|k| event.centre[k] + o[k])
+                };
+                let kind = StarKind { initial_mass, age_gyr: event.age_gyr, metallicity_dex, companion_mass: None };
+                let id = StarId::Group { bin: bin as u8, cube, event: event.index, n: n as u32 };
+                GalacticStar::new(id, position, kind, Some(kind_of))
+            })
+            .collect()
+    }
+}
+
+/// Where a member of `event` is from its centre: a Plummer sphere if bound, a Gaussian if not.
+fn offset(d: &mut Draw, event: &Event) -> [f64; 3] {
+    if event.bound {
+        let r = event.radius_pc / (d.u().max(1e-12).powf(-2.0 / 3.0) - 1.0).max(1e-12).sqrt();
+        d.direction().map(|v| v * r.min(event.extent_pc()))
+    } else {
+        [0, 1, 2].map(|_| (event.radius_pc * d.gauss()).clamp(-event.extent_pc(), event.extent_pc()))
     }
 }
 

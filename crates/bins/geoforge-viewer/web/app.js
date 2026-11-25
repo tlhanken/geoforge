@@ -202,6 +202,58 @@ function drawGalaxy(s, reframe) {
   }
   for (const g of groups) marker(g.p, [255, 230, 120], s.radius_kpc * 0.04, g.names.join(', '), () => go(g.address, { stars: true }));
   if (reframe) aim(s.radius_kpc * 0.6, [0.15, 1.0, 0.35]);
+  markNebulae(s);
+}
+
+// ---------------------------------------------------------------- nebulae
+
+const NEBULA_COLOUR = { emission: [255, 80, 120], reflection: [100, 150, 255], dark: [120, 95, 70], planetary: [80, 230, 200], supernova_remnant: [255, 150, 170] };
+const NEBULA_KIND = { emission: 'emission nebula', reflection: 'reflection nebula', dark: 'dark cloud', planetary: 'planetary nebula', supernova_remnant: 'supernova remnant' };
+
+// Fetch the nebulae round the scene (a galaxy's home star, or a system) and draw them: in a
+// galaxy as glows by kind, round a system as thin spheres where they reach into the view.
+async function markNebulae(s) {
+  let found;
+  try {
+    found = await api(`/api/nebulae?at=${encodeURIComponent(s.address)}`);
+  } catch (e) {
+    return;
+  }
+  if (state.scene !== s) return;
+  s.nebulae = found;
+  for (const n of found) {
+    const c = NEBULA_COLOUR[n.kind];
+    const label = `${n.name} · ${NEBULA_KIND[n.kind]}${n.materials.length ? ' · ' + n.materials.join(', ') + ' (fictional)' : ''}`;
+    if (s.level === 'galaxy') {
+      const p = new THREE.Vector3(n.position_kpc[0], n.position_kpc[2], -n.position_kpc[1]);
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: DOT, color: rgb(c), depthWrite: false, transparent: true, opacity: n.kind === 'dark' ? 0.5 : 0.9, blending: n.kind === 'dark' ? THREE.NormalBlending : THREE.AdditiveBlending }));
+      m.position.copy(p);
+      m.scale.setScalar(s.radius_kpc * 0.008 + 4 * n.radius_pc / 1000);
+      scene.add(m);
+      pickables.push({ object: m, go: () => showNebula(s, n), label });
+    } else if (n.distance_pc - n.radius_pc <= s.radius_pc) {
+      const p = new THREE.Vector3(n.offset_pc[0], n.offset_pc[2], -n.offset_pc[1]);
+      const m = new THREE.Mesh(new THREE.SphereGeometry(n.radius_pc, 32, 16), new THREE.MeshBasicMaterial({ color: rgb(c), transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide }));
+      m.position.copy(p);
+      scene.add(m);
+      labels.push({ position: p, text: n.name, dim: true });
+    }
+  }
+  panel(s);
+}
+
+// Tell about nebula `n` in the side panel, until the scene changes or Back is pressed.
+function showNebula(s, n) {
+  s.picked = n;
+  panel(s);
+}
+
+// The side panel's rows for the nebulae listed round a stars scene: the nearest few, each a
+// link that tells about it.
+function nebulaList(s) {
+  if (!s.nebulae || !s.nebulae.length) return '';
+  const near = s.nebulae.filter((n) => n.kind !== 'dark' || n.distance_pc < 200).slice(0, 6);
+  return `<h3>Nebulae within ${Math.round(500 * 3.2616)} ly</h3><ul class="finds">${near.map((n, i) => `<li><a href="#" data-neb="${i}">${esc(n.name)}</a>: ${esc(NEBULA_KIND[n.kind])}, ${Math.round(n.distance_pc * 3.2616)} ly</li>`).join('')}</ul>`;
 }
 
 const KIND_NAME = { star: 'star', white_dwarf: 'white dwarf', brown_dwarf: 'brown dwarf', neutron_star: 'neutron star', black_hole: 'black hole' };
@@ -246,6 +298,7 @@ function drawStars(s, reframe) {
   if (reframe) aim(s.radius_pc * 0.35);
   markHabitable(s);
   markExotics(s);
+  markNebulae(s);
 }
 
 // Diamond the systems holding a fictional material (in its colour), once the server has
@@ -477,24 +530,35 @@ function exoticRows(s) {
   const x = s.exotics;
   if (!x) return [];
   if (x.error) return [['Fictional', x.error]];
-  return (x.materials || []).map((m) => [`${m.name} (fictional)`, `${x.systems.filter((h) => h.materials.includes(m.name)).length} systems ◇`]);
+  return (x.materials || []).map((m) => [m.name, x.systems.filter((h) => h.materials.includes(m.name)).length]).filter(([, n]) => n > 0).map(([name, n]) => [`${name} (fictional)`, `${n} systems ◇`]);
 }
 
 function panel(s) {
   const p = $('panel');
   const facts = (rows) => `<dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
   const head = (title, sub) => `<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>`;
+  if (s.picked) {
+    const n = s.picked;
+    p.innerHTML = head(n.name, NEBULA_KIND[n.kind]) + facts([...n.facts, ['Distance', `${Math.round(n.distance_pc * 3.2616)} ly from ${s.level === 'galaxy' ? 'the home star' : 'here'}`]]) +
+      `<div class="row">${n.star ? '<button id="nebstar">Its star</button>' : ''}<button id="back">Back</button></div><div class="note">Nebulae are not places of their own: each is named by the stars or cloud that make it.</div>`;
+    if ($('nebstar')) $('nebstar').onclick = () => go(n.star, { stars: true });
+    $('back').onclick = () => { s.picked = null; panel(s); };
+    return;
+  }
   if (s.level === 'universe') {
     p.innerHTML = head(s.name, s.address) + facts([['Galaxies shown', `${s.galaxies.length} within ${s.radius_mpc} Mpc`], ['Pick', 'a galaxy to go in']]);
   } else if (s.level === 'galaxy') {
     p.innerHTML = head(s.name, s.address) + facts([['Type', s.kind], ['Stars', `${s.stellar_msun.toExponential(2)} M☉`], ['Disk to', `${s.radius_kpc.toFixed(1)} kpc`]]) +
-      `<div class="note">Gold marks: systems made here (or the default star). Pick one to see the stars around it.</div>`;
+      (s.nebulae ? facts([['Nebulae', `${s.nebulae.length} within ${Math.round(3000 * 3.2616).toLocaleString()} ly of the home star`]]) : '') +
+      `<div class="note">Gold marks: systems made here (or the default star). Pick one to see the stars around it. Round the home star, nebulae glow by kind: <span style="color:#ff5078">emission</span>, <span style="color:#6496ff">reflection</span>, <span style="color:#50e6c8">planetary</span>, <span style="color:#ff96aa">supernova remnants</span>, <span style="color:#a08060">dark clouds</span>.</div>`;
   } else if (s.level === 'stars') {
     const n = (k) => (s.habitable ? String(s.habitable.filter((h) => h.habitability === k).length) : '…');
     const count = (k) => s.stars.filter((st) => st.kind === k).length;
     p.innerHTML = head('Neighbourhood', s.address) + facts([['Systems', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Of them', `${count('brown_dwarf')} brown dwarfs, ${count('white_dwarf')} white dwarfs, ${count('neutron_star')} neutron stars, ${count('black_hole')} black holes`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ...exoticRows(s), ['Ring', '10 light-years']]) +
+      nebulaList(s) +
       `<div class="row"><button id="tosys">Open this system</button></div><div class="note">Pick any star to open its system: it is generated as you look. Circled: systems with a world of open water, <span style="color:#6ee68c">green</span> temperate like Earth, <span style="color:#5aaadc">blue</span> colder or hotter.</div>`;
     $('tosys').onclick = () => go(s.address);
+    for (const a of p.querySelectorAll('[data-neb]')) a.onclick = (e) => { e.preventDefault(); showNebula(s, s.nebulae.filter((n) => n.kind !== 'dark' || n.distance_pc < 200)[Number(a.dataset.neb)]); };
   } else if (s.level === 'system') {
     const star = s.stars[0];
     const what = (st) => (st.kind === 'black_hole' ? 'black hole' : `${st.spectral}, ${Math.round(st.temperature_k)} K`);

@@ -80,7 +80,7 @@ focus {}: radius {:.0} km, g {:.2} m/s², day {:.1} h, obliquity {:.1}°, flux {
             geoforge_cosmos::worlds::Habitability::Habitable => "habitable",
             geoforge_cosmos::worlds::Habitability::None => "not habitable",
         };
-        writeln!(out, "climate estimate: mean {:.1} °C, {:.0}% of the surface above freezing: {h}", c.mean_c, 100.0 * c.thawed_share)?;
+        writeln!(out, "climate estimate: mean {:.1} °C, {:.0}% of the surface above freezing: {h}", c.mean_c, (100.0 * c.thawed_share).max(0.0))?;
     }
     if body.interior.has_atmosphere() {
         let rot = body.exterior.rotation_h;

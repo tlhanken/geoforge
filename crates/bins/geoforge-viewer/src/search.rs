@@ -54,7 +54,25 @@ impl Viewer {
         });
         known.dedup_by(|a, b| a.address == b.address);
         hits.extend(known.into_iter().take(MOST));
-        hits.extend(self.exotic_hits(&q));
+        let mut found = self.exotic_hits(&q);
+        // Nebulae round the home galaxy's home star, by name or by what they hold.
+        let galaxy = self.home().up_to(Level::Galaxy);
+        if let Ok(nebulae) = self.nebulae(&galaxy) {
+            found.extend(crate::nebulae::named(&nebulae, &q, &galaxy).into_iter().take(MOST));
+        }
+        // A fictional material found nowhere near is still named, so the list is seen read.
+        if found.is_empty() {
+            let (_, focus) = self.start();
+            if let (Ok(list), Some(at)) = (self.exotics(), focus.or_else(|| self.home_star(&galaxy))) {
+                found.extend(list.materials.iter().filter(|m| m.name.to_lowercase().contains(&q)).map(|m| Hit {
+                    name: m.name.clone(),
+                    kind: "material".into(),
+                    address: at.up_to(Level::System).to_string(),
+                    note: "fictional: in no system or nebula near here".into(),
+                }));
+            }
+        }
+        hits.extend(found);
         Ok(hits)
     }
 
@@ -82,16 +100,6 @@ impl Viewer {
             for m in materials.iter().filter(|m| wanted.contains(&m.as_str())) {
                 let name = self.system(a).map_or_else(|_| a.to_string(), |g| g.system.root.name);
                 hits.push(Hit { name, kind: "star".into(), address: a.to_string(), note: format!("holds {m} (fictional)") });
-            }
-        }
-        if hits.is_empty() {
-            if let Some(h) = home {
-                hits.extend(wanted.iter().map(|w| Hit {
-                    name: (*w).to_string(),
-                    kind: "material".into(),
-                    address: h.up_to(Level::System).to_string(),
-                    note: "fictional: in no system near here".into(),
-                }));
             }
         }
         hits.truncate(MOST);

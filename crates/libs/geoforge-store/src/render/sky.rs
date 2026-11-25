@@ -1,5 +1,5 @@
-//! Star charts: an equirectangular sky with the galaxy's glow, stars by magnitude and
-//! colour, planets circled, the star's yearly path and the world's constellations.
+//! Star charts: an equirectangular sky with the galaxy's glow, nebulae, stars by magnitude
+//! and colour, planets circled, the star's yearly path and the world's constellations.
 
 use image::{Rgb, RgbImage};
 
@@ -15,14 +15,41 @@ pub struct SkyPoint {
     pub ring: bool,
 }
 
-/// An equirectangular sky chart `width` wide (half as tall): RA 360° at the left edge to 0°
-/// at the right, as the sky looks from below, Dec +90° at the top. `glow` is a grid
-/// `glow_width` wide (0–1), drawn as the galaxy's haze, and `zodiacal` the same grid of the
-/// zodiacal light (in the glow's units), drawn warm; `path` (RA, Dec) a dotted line (the
-/// star's yearly path); `lines` constellation lines between (RA, Dec) ends, along great
-/// circles. Lines every 30°, the equator brighter.
+/// A nebula on a sky chart: a soft patch of `colour`, `strength` (0–1, its surface
+/// brightness against the night's) and `radius_deg`; a `shell` is brightest at its edge (a
+/// supernova remnant's).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkyPatch {
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+    pub radius_deg: f64,
+    pub colour: [u8; 3],
+    pub strength: f32,
+    pub shell: bool,
+}
+
+/// What a sky chart shows: `glow` a grid `glow_width` wide (0–1) of the galaxy's haze,
+/// `zodiacal` the same grid of the zodiacal light (in the glow's units), drawn warm;
+/// `patches` the nebulae, under the stars; `points` the stars and bodies; `path` (RA, Dec) a
+/// dotted line (the star's yearly path); `lines` constellation lines between (RA, Dec)
+/// ends, along great circles.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SkyChart<'a> {
+    pub glow: &'a [f32],
+    pub zodiacal: &'a [f32],
+    pub glow_width: usize,
+    pub patches: &'a [SkyPatch],
+    pub points: &'a [SkyPoint],
+    pub path: &'a [(f64, f64)],
+    pub lines: &'a [[(f64, f64); 2]],
+}
+
+/// An equirectangular sky chart of `chart`, `width` wide (half as tall): RA 360° at the left
+/// edge to 0° at the right, as the sky looks from below, Dec +90° at the top. Lines every
+/// 30°, the equator brighter.
 #[must_use]
-pub fn render_sky(width: u32, glow: &[f32], zodiacal: &[f32], glow_width: usize, points: &[SkyPoint], path: &[(f64, f64)], lines: &[[(f64, f64); 2]]) -> RgbImage {
+pub fn render_sky(width: u32, chart: &SkyChart) -> RgbImage {
+    let SkyChart { glow, zodiacal, glow_width, patches, points, path, lines } = *chart;
     let height = width / 2;
     let glow_height = glow.len() / glow_width.max(1);
     let mut acc = vec![[0f32; 3]; (width * height) as usize];
@@ -43,6 +70,9 @@ pub fn render_sky(width: u32, glow: &[f32], zodiacal: &[f32], glow_width: usize,
         }
     }
     let to_px = |ra: f64, dec: f64| ((1.0 - ra.rem_euclid(360.0) / 360.0) * f64::from(width), (90.0 - dec) / 180.0 * f64::from(height));
+    for p in patches {
+        patch(&mut acc, width, height, p);
+    }
     for &(ra, dec) in path {
         let (x, y) = to_px(ra, dec);
         splat(&mut acc, width, height, x, y, 1.0, [110.0, 90.0, 40.0]);
@@ -108,6 +138,36 @@ fn draw_point(acc: &mut [[f32; 3]], width: u32, height: u32, x: f64, y: f64, p: 
         for k in 0..64 {
             let a = std::f64::consts::TAU * f64::from(k) / 64.0;
             splat(acc, width, height, x + r * a.cos(), y + r * a.sin(), 0.5, [120.0, 200.0, 140.0]);
+        }
+    }
+}
+
+/// Add nebula `p`: a soft disc, or a shell, at least a pixel and a half across.
+fn patch(acc: &mut [[f32; 3]], width: u32, height: u32, p: &SkyPatch) {
+    let px_per_deg = f64::from(width) / 360.0;
+    let r_px = (p.radius_deg * px_per_deg).max(1.5);
+    let (cx, cy) = ((1.0 - p.ra_deg.rem_euclid(360.0) / 360.0) * f64::from(width), (90.0 - p.dec_deg) / 180.0 * f64::from(height));
+    // RA squeezes toward the poles: a patch spans 1/cos(Dec) more columns.
+    let stretch = 1.0 / p.dec_deg.to_radians().cos().max(0.05);
+    let reach_y = (1.6 * r_px).ceil() as i64;
+    let reach_x = (1.6 * r_px * stretch).ceil().min(f64::from(width) / 2.0) as i64;
+    let c = p.colour.map(|v| f32::from(v) * 0.5 * p.strength);
+    for dy in -reach_y..=reach_y {
+        let py = cy.floor() as i64 + dy;
+        if py < 0 || py >= i64::from(height) {
+            continue;
+        }
+        for dx in -reach_x..=reach_x {
+            let px = (cx.floor() as i64 + dx).rem_euclid(i64::from(width));
+            let (ex, ey) = ((cx.floor() + dx as f64 + 0.5 - cx) / stretch, py as f64 + 0.5 - cy);
+            let r = (ex * ex + ey * ey).sqrt() / r_px;
+            let w = if p.shell { (-((r - 0.9) / 0.15).powi(2)).exp() } else { (-2.0 * r * r).exp() } as f32;
+            if w > 0.01 {
+                let a = &mut acc[(py as u32 * width + px as u32) as usize];
+                for k in 0..3 {
+                    a[k] += c[k] * w;
+                }
+            }
         }
     }
 }

@@ -147,6 +147,26 @@ pub struct Sky {
     pub frame: Frame,
 }
 
+/// A nebula in the sky.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NebulaObject {
+    pub name: String,
+    /// emission, reflection, dark, planetary or supernova_remnant.
+    pub kind: String,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
+    /// Integrated visual magnitude through the dust; `None` for a dark cloud.
+    pub v: Option<f64>,
+    /// Its angular radius, degrees.
+    pub radius_deg: f64,
+    pub distance_ly: f64,
+    /// Surface brightness, V magnitudes per square arcsecond (a dark sky is about 22).
+    pub surface_brightness: Option<f64>,
+}
+
+/// How far off nebulae are looked for, pc.
+pub const NEBULA_REACH_PC: f64 = 2500.0;
+
 /// The stars of `world`'s galaxy as it has them: its own galaxy model if it has one, its
 /// edits over them.
 ///
@@ -402,6 +422,31 @@ impl Sky {
             let wide = 10.0 + 20.0 * (elongation.clamp(20.0, 90.0) - 20.0) / 70.0;
             *v = (0.25 * self.zodiacal_dust * along * (-beta / wide).exp()) as f32;
         }
+        out
+    }
+
+    /// The nebulae in this sky within [`NEBULA_REACH_PC`]: the lit ones brighter than
+    /// `limit`, the dark clouds over a degree; brightest first, dark clouds last by size.
+    #[must_use]
+    pub fn nebulae(&self, field: &Starfield, limit: f64) -> Vec<NebulaObject> {
+        let mut out: Vec<NebulaObject> = geoforge_cosmos::nebulae::seen(field, &self.frame.observer, NEBULA_REACH_PC, limit)
+            .into_iter()
+            .map(|n| {
+                let (ra, dec) = self.frame.equatorial.ra_dec(n.direction);
+                let arcsec = n.radius_deg * 3600.0;
+                NebulaObject {
+                    name: n.nebula.name,
+                    kind: n.nebula.kind.code().into(),
+                    ra_deg: ra,
+                    dec_deg: dec,
+                    v: n.v,
+                    radius_deg: n.radius_deg,
+                    distance_ly: n.distance_pc * LY_PER_PC,
+                    surface_brightness: n.v.map(|v| v + 2.5 * (std::f64::consts::PI * arcsec * arcsec).log10()),
+                }
+            })
+            .collect();
+        out.sort_by(|a, b| a.v.unwrap_or(f64::INFINITY).total_cmp(&b.v.unwrap_or(f64::INFINITY)).then(b.radius_deg.total_cmp(&a.radius_deg)));
         out
     }
 

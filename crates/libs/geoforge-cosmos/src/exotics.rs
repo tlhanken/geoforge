@@ -5,6 +5,7 @@
 use crate::asteroids;
 use crate::context::{belt_member_made, body_context};
 use crate::draw::Draw;
+use crate::nebulae::Nebula;
 use geoforge_core::body::{BodyClass, NodeKind, ShellKind, SolarSystem, Species, StellarStage};
 use geoforge_core::exotics::{Exotics, Found, Host, Material};
 use geoforge_core::key::Key;
@@ -131,6 +132,25 @@ pub fn in_system(exotics: &Exotics, system: &SolarSystem, examples: bool) -> Vec
     out
 }
 
+/// The fictional materials nebula `n` holds (a rule's `stars` names the stage of the star
+/// that lights it or left it).
+#[must_use]
+pub fn in_nebula<'a>(exotics: &'a Exotics, n: &Nebula) -> Vec<&'a Material> {
+    let stage = n.star_stage.into_iter().collect::<Vec<_>>();
+    exotics
+        .materials
+        .iter()
+        .filter(|m| {
+            m.found.iter().enumerate().any(|(r, f)| {
+                f.host == Host::Nebula
+                    && f.admits(n.kind.code())
+                    && f.admits_stars(&stage)
+                    && unit(n.seed.child(b"exotic").child(m.name.trim().to_lowercase().as_bytes()).child_u64(b"rule", r as u64)) < f.chance
+            })
+        })
+        .collect()
+}
+
 /// The names of every material found in `system` (no scan of belts).
 #[must_use]
 pub fn names_in(exotics: &Exotics, system: &SolarSystem) -> Vec<String> {
@@ -237,5 +257,17 @@ mod tests {
         assert_eq!(kinds("Earth"), ["rocky", "ocean"]);
         assert_eq!(kinds("Jupiter"), ["giant"]);
         assert_eq!(kinds("Europa"), ["icy"]);
+    }
+
+    /// Nebulae hold a material by kind and by the stage of their star.
+    #[test]
+    fn found_in_nebulae() {
+        let sectors = crate::sectors::Sectors::new(&crate::galaxy::Galaxy::milky_way(), Seed(5));
+        let sun = [sectors.galaxy().reference_kpc * 1000.0, 0.0, 20.0];
+        let all = crate::nebulae::near(&sectors, sun, 800.0);
+        let ex = list(vec![Found { host: Host::Nebula, kinds: vec!["emission".into()], stars: vec![], chance: 1.0 }]);
+        assert!(all.iter().all(|n| in_nebula(&ex, n).is_empty() != (n.kind == crate::nebulae::NebulaKind::Emission)));
+        let pulsars = list(vec![Found { host: Host::Nebula, kinds: vec![], stars: vec![StellarStage::NeutronStar], chance: 1.0 }]);
+        assert!(all.iter().filter(|n| !in_nebula(&pulsars, n).is_empty()).all(|n| n.star_stage == Some(StellarStage::NeutronStar)));
     }
 }

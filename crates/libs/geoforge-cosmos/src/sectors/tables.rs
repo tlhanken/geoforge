@@ -8,15 +8,19 @@
 //! ([`BROWN_DWARFS_PER_STAR`]), their masses by their own mass function. Neutron stars,
 //! black holes and brown dwarfs go in the [`DARK`] bin. Brown dwarfs' mass (~2% of the
 //! stars') is left out of the populations' mass, so the lit bins' counts are as without them.
+//! Two more strata sample the just dead — white dwarfs born within [`PLANETARY_GYR`], neutron
+//! stars and black holes within [`REMNANT_GYR`] — into bins of their own, so the few there
+//! are can be found far off; the dead stratum's share of them (some 10⁻⁵ of its weight) is
+//! left in it.
 //! Each kind may have an unresolved companion of the same age, as often as the galaxy's
 //! systems do (mass ratios flat; Duchêne & Kraus 2013).
 
-use super::bins::{bin_of, BINS, DARK};
+use super::bins::{bin_of, BINS, DARK, NASCENT_COLLAPSED, NASCENT_WHITE_DWARFS, PLANETARY_GYR, REMNANT_GYR};
 use crate::draw::Draw;
 use crate::galaxy::Imf;
 use crate::population::{brown_dwarf_mass_function, multiple_fraction, BROWN_DWARFS_PER_STAR};
 use crate::sky::absolute_v;
-use crate::stars::{end_of_life_gyr, evolve};
+use crate::stars::{end_of_life_gyr, evolve, WHITE_DWARF_LIMIT};
 use geoforge_core::seed::Seed;
 use rayon::prelude::*;
 
@@ -70,7 +74,7 @@ pub struct Table {
 }
 
 /// The heaviest star still shining `age_gyr` after its birth, M☉.
-fn heaviest_alive(age_gyr: f64, (lo, hi): (f64, f64)) -> f64 {
+pub(crate) fn heaviest_alive(age_gyr: f64, (lo, hi): (f64, f64)) -> f64 {
     if end_of_life_gyr(hi) > age_gyr {
         return hi;
     }
@@ -173,6 +177,34 @@ impl Table {
                 })
                 .collect::<Vec<_>>(),
         );
+        // The just dead: born heavy enough to die within the ages, and dead within the window.
+        let nascent = (alive / 20).max(1);
+        for (bin, (from_m, to_m), window, label) in
+            [(NASCENT_WHITE_DWARFS, (lo, WHITE_DWARF_LIMIT), PLANETARY_GYR, b"just dead wd".as_slice()), (NASCENT_COLLAPSED, (WHITE_DWARF_LIMIT, hi), REMNANT_GYR, b"just dead cc".as_slice())]
+        {
+            let (m_lo, m_hi) = (heaviest_alive(a1, (lo, hi)).max(from_m), to_m.min(hi));
+            if m_lo >= m_hi {
+                continue;
+            }
+            let span = (m_hi / m_lo).ln();
+            samples.extend(
+                (0..nascent)
+                    .into_par_iter()
+                    .filter_map(|i| {
+                        let mut d = Draw::new(seed.child(label).child_u64(b"kind", i as u64));
+                        let m = m_lo * (d.u() * span).exp();
+                        let t = end_of_life_gyr(m) + d.u() * window;
+                        if t < a0 || t > a1 {
+                            return None;
+                        }
+                        let w = imf.density(m) * m * span * density(t) * window / nascent as f64;
+                        let mut s = sample(&mut d, m, t, w, feh, lo);
+                        s.3 = Some(bin);
+                        Some(s)
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        }
         Self::from_samples(&samples, present.max(1e-300))
     }
 

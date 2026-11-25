@@ -189,8 +189,8 @@ impl Sectors {
     /// and the young groups'.
     #[must_use]
     pub fn near(&self, p: [f64; 3], radius_pc: f64, faintest: f64) -> Vec<GalacticStar> {
-        // The dark bin once the query reaches past the lit ones.
-        let top = if faintest >= bins::bright_edge(bins::DARK) { bins::DARK } else { bins::bin_of(faintest) };
+        // The dark and just-dead bins once the query reaches past the lit ones.
+        let top = if faintest >= bins::bright_edge(bins::DARK) { BINS - 1 } else { bins::bin_of(faintest) };
         let reach = |_: usize| radius_pc;
         let mut out = self.gather(p, 0..=top, &reach);
         out.retain(|s| s.absolute_v <= faintest && s.distance_pc(p) <= radius_pc);
@@ -211,7 +211,7 @@ impl Sectors {
     }
 
     /// The field and group stars of `bins` within `reach(bin)` of `p`.
-    fn gather(&self, p: [f64; 3], bins: std::ops::RangeInclusive<usize>, reach: &(dyn Fn(usize) -> f64 + Sync)) -> Vec<GalacticStar> {
+    pub(crate) fn gather(&self, p: [f64; 3], bins: std::ops::RangeInclusive<usize>, reach: &(dyn Fn(usize) -> f64 + Sync)) -> Vec<GalacticStar> {
         let mut out = Vec::new();
         // Field: by level, so a cube's cells serve all its bins.
         let mut by_level: Vec<(u32, Vec<usize>)> = Vec::new();

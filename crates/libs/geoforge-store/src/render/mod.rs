@@ -16,7 +16,7 @@ mod weather;
 
 pub use globe::render_globe;
 pub use maps::{chance_legend, gray_chances, gray_quantity, quantity_legend, render_chances, render_classes, render_quantity, Gray16, CLASS_SEA};
-pub use sky::{render_sky, render_sky_key, star_rgb, SkyPoint};
+pub use sky::{render_sky, render_sky_key, star_rgb, SkyChart, SkyPatch, SkyPoint};
 pub use weather::render_weather;
 
 use crate::edit::{hsv, key_color};

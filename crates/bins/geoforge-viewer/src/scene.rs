@@ -508,7 +508,7 @@ impl Viewer {
         }
         if let Some(c) = climate_estimate(&body) {
             let h = habitable_name(habitability(&body)).unwrap_or("no open water");
-            facts.push(["Climate".into(), format!("~{:.0} °C, {:.0}% thawed: {h}", c.mean_c, 100.0 * c.thawed_share)]);
+            facts.push(["Climate".into(), format!("~{:.0} °C, {:.0}% thawed: {h}", c.mean_c, (100.0 * c.thawed_share).max(0.0))]);
         }
         let found = geoforge_cosmos::exotics::on_body(&self.exotics()?, &sys, body.key);
         let mut deposits = Vec::new();
