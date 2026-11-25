@@ -278,7 +278,8 @@ pub fn sky(w: &World, day: f64, to: Option<&Path>, width: u32) -> R<()> {
             .chain(s.bodies.iter().filter(|b| b.v <= geoforge_cosmos::sky::NAKED_EYE))
             .map(|o| geoforge_store::render::SkyPoint { ra_deg: o.ra_deg, dec_deg: o.dec_deg, v: o.v, temperature_k: o.temperature_k, ring: matches!(o.kind, Kind::Planet | Kind::Moon) })
             .collect();
-        let img = geoforge_store::render::render_sky(width, &glow, gw, &points, &s.ecliptic, &lines);
+        let zodiacal = s.zodiacal(gw, gh);
+        let img = geoforge_store::render::render_sky(width, &glow, &zodiacal, gw, &points, &s.ecliptic, &lines);
         let chart = dir.join("sky.png");
         img.save(&chart)?;
         let json = dir.join("sky.json");

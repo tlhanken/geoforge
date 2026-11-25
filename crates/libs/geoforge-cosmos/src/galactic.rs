@@ -20,11 +20,13 @@ use crate::context::{belt_member, body_context};
 use crate::draw::Draw;
 use crate::dynamics;
 use crate::galaxy::Galaxy;
+use crate::moons;
 use crate::planets::{self, binary_survival, p_type_limit, s_type_limit, Architecture, Belt, Disk};
 use crate::population::{draw as draw_phenotype, Companion, Phenotype};
 use crate::spin::{self, set_body};
 use crate::stars::{birth_luminosity, evolve};
-use crate::system::{big_moon_orbit_km, hill_km, moon, moon_system, planet_radius_earth, Generated, MoonSpec, MOON_HILL_SHARE, ROMAN};
+use crate::system::{hill_km, planet_radius_earth, Generated, MOON_HILL_SHARE, ROMAN};
+use crate::worlds::{habitability, Habitability};
 use geoforge_core::body::{
     BodyClass, BodyContext, BodyExterior, Composition, Elements, Epoch, NodeKind, OrbitalNode, Population, PowerLaw, SolarSystem, Species, Star, StellarStage, SystemRoot, TectonicRegime, AU_KM,
     EARTH_MASS_KG, EARTH_RADIUS_KM, SOLAR_MASS_KG,
@@ -161,26 +163,9 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     for p in &planets {
         let (ext, hill) = (&p.ext, hill_km(p.a_au, p.ext.mass_kg, p.host_mass));
         let locked = p.a_au < tidal_lock_au(p.host_mass, age);
-        let moons = match ext.class {
-            BodyClass::GasGiant => {
-                let count = 2 + (d.u() * 4.0) as usize;
-                moon_system(&mut d, &mut keys, p.key, &p.name, ext, count, 2e-4)
-            }
-            BodyClass::IceGiant => {
-                let count = (d.u() * 3.0) as usize;
-                moon_system(&mut d, &mut keys, p.key, &p.name, ext, count, 1e-4)
-            }
-            // A big moon from a giant impact, as Earth's: uncommon.
-            BodyClass::Terrestrial if !locked && ext.mass_kg > 0.3 * EARTH_MASS_KG && d.u() < 0.2 => {
-                let mass_kg = ext.mass_kg * d.range(0.004, 0.02);
-                let drawn = d.range(30.0, 80.0) * ext.radius_km;
-                big_moon_orbit_km(drawn, ext, hill)
-                    .map(|a_km| moon(&mut d, keys.fresh(), p.key, ext.mass_kg, MoonSpec { name: format!("{} a", p.name), mass_kg, a_km, density_g_cc: 3.3 }))
-                    .into_iter()
-                    .collect()
-            }
-            _ => Vec::new(),
-        };
+        let belt_ratio = hosts[p.host].arch.asteroid_belt.map(|b| p.a_au / b.0);
+        let (moons, irregular) = moons::moons(&mut d, &mut keys, &moons::Host { key: p.key, name: &p.name, ext, hill_km: hill, locked, belt_ratio }, moons::BIG_MOON_CHANCE);
+        nodes.extend(irregular);
         // Moons survive only well inside the planet's Hill sphere.
         let moons: Vec<OrbitalNode> = moons.into_iter().filter(|m| m.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)).collect();
         if ext.class == BodyClass::Terrestrial && !locked {
@@ -206,6 +191,15 @@ pub fn build(seed: Seed, ph: &Phenotype) -> Result<Generated, Barren> {
     // A locked rocky world with enough air may be held off one face by its thermal tide.
     let locked: Vec<(Key, f64)> = planets.iter().filter(|p| p.ext.class == BodyClass::Terrestrial && p.a_au < tidal_lock_au(p.host_mass, age)).map(|p| (p.key, p.host_mass)).collect();
     spin::thermal_tides(&mut system, &locked);
+    // Rings, by how cold each giant is.
+    let mut ring_draw = Draw::new(seed.child(b"rings"));
+    for p in planets.iter().filter(|p| matches!(p.ext.class, BodyClass::GasGiant | BodyClass::IceGiant)) {
+        let Some(ctx) = body_context(&system, p.key) else { continue };
+        let teq = geoforge_core::derived::equilibrium_temperature_k(ctx.irradiance.flux_w_m2, 0.3);
+        let host = moons::Host { key: p.key, name: &p.name, ext: &p.ext, hill_km: hill_km(p.a_au, p.ext.mass_kg, p.host_mass), locked: false, belt_ratio: None };
+        let key = keys.fresh();
+        system.nodes.extend(moons::rings(&mut ring_draw, key, &host, teq));
+    }
     match focus(&system) {
         Some(focus) => Ok(Generated { system, focus }),
         None => Err(Barren { reason: format!("{sys_name} is {} with nothing solid in orbit", describe_star(&primary)), system: Box::new(system) }),
@@ -363,8 +357,9 @@ fn belts(d: &mut Draw, keys: &mut KeyAllocator, host: Key, sys_name: &str, arch:
     out
 }
 
-/// How Earth-like a body is: liquid water at the surface above all, then plates and air, then
-/// starlight and mass near Earth's. `None` for bodies without a solid surface.
+/// How Earth-like a body is: liquid water at the surface above all, then a temperate climate
+/// (or at least open water: [`habitability`]), then plates and air, then starlight and mass
+/// near Earth's. `None` for bodies without a solid surface.
 #[must_use]
 pub fn earthlike_score(ctx: &BodyContext) -> Option<f64> {
     let i = &ctx.interior;
@@ -377,6 +372,11 @@ pub fn earthlike_score(ctx: &BodyContext) -> Option<f64> {
     if i.has_surface_liquid_water() {
         score += 5.0;
     }
+    score += match habitability(ctx) {
+        Habitability::Temperate => 3.0,
+        Habitability::Habitable => 1.5,
+        Habitability::None => 0.0,
+    };
     if i.regime == TectonicRegime::Plates {
         score += 1.0;
     }
@@ -400,7 +400,9 @@ fn focus(system: &SolarSystem) -> Option<Key> {
     if let Some((key, _)) = best {
         return Some(key);
     }
-    system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Belt(_))).find_map(|b| belt_member(system, b.key, 0)).map(|c| c.key)
+    // A belt round a star, not a giant's irregular moons.
+    let round_a_star = |b: &OrbitalNode| b.parent.and_then(|p| system.node(p)).is_some_and(|p| !matches!(p.node, NodeKind::Body(_)));
+    system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Belt(_)) && round_a_star(n)).find_map(|b| belt_member(system, b.key, 0)).map(|c| c.key)
 }
 
 #[cfg(test)]

@@ -17,6 +17,7 @@ use geoforge_core::body::{BodyClass, NodeKind, SolarSystem};
 use geoforge_core::galactic::UniverseSite;
 use geoforge_cosmos::galaxy::Morphology;
 use geoforge_cosmos::universe::Universe;
+use geoforge_cosmos::worlds::{climate_estimate, habitability, Habitability};
 use serde::Serialize;
 
 /// The universe around its home galaxy, out to this far, Mpc.
@@ -118,6 +119,39 @@ pub struct SystemScene {
     pub stars: Vec<StarBody>,
     pub bodies: Vec<BodyDot>,
     pub belts: Vec<Belt>,
+    pub rings: Vec<Ring>,
+}
+
+/// A planet's rings, in its radii, tilted with its equator.
+#[derive(Debug, Clone, Serialize)]
+pub struct Ring {
+    pub parent: u64,
+    pub inner_r: f64,
+    pub outer_r: f64,
+    /// Normal optical depth: ~0.4 for Saturn's, ~10⁻⁶ for Jupiter's dust.
+    pub depth: f64,
+    /// Ice (bright) rather than dust.
+    pub icy: bool,
+    pub tilt_deg: f64,
+}
+
+/// The rings of `system`'s node `parent`, if any.
+fn ring_of(system: &SolarSystem, parent: geoforge_core::Key) -> Option<Ring> {
+    let NodeKind::Body(planet) = &system.node(parent)?.node else { return None };
+    system.nodes.iter().filter(|n| n.parent == Some(parent)).find_map(|n| match &n.node {
+        NodeKind::Ring(p) => {
+            let r_au = planet.radius_km / geoforge_core::body::AU_KM;
+            Some(Ring {
+                parent: parent.0,
+                inner_r: p.inner_au / r_au,
+                outer_r: p.outer_au / r_au,
+                depth: p.optical_depth(),
+                icy: p.composition.fraction(geoforge_core::body::Species::Ice) > 0.5,
+                tilt_deg: planet.obliquity_deg,
+            })
+        }
+        _ => None,
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -144,6 +178,8 @@ pub struct BodyDot {
     pub orbit_au: Vec<[f32; 3]>,
     pub made: bool,
     pub focus: bool,
+    /// "temperate" or "habitable" for a world with open water ([`habitability`]).
+    pub habitable: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -166,6 +202,7 @@ pub struct BodyScene {
     pub facts: Vec<[String; 2]>,
     /// Generation under way or done, if any.
     pub job: Option<String>,
+    pub ring: Option<Ring>,
 }
 
 /// One step of the way down to a scene: its address, name, and whether it is the stars
@@ -357,6 +394,7 @@ impl Viewer {
                 }),
                 NodeKind::Body(b) => {
                     let a = at.body(n.key);
+                    let habitable = body_of(&a, sys).ok().and_then(|c| habitable_name(habitability(&c)));
                     bodies.push(BodyDot {
                         key: n.key.0,
                         address: a.to_string(),
@@ -368,13 +406,15 @@ impl Viewer {
                         orbit_au: n.elements.map(|e| (0..ORBIT_POINTS).map(|k| e.position_at(360.0 * k as f64 / ORBIT_POINTS as f64).map(|v| v as f32)).collect()).unwrap_or_default(),
                         made: made.contains(&a),
                         focus: n.key == generated.focus,
+                        habitable,
                     });
                 }
                 NodeKind::Belt(p) => belts.push(Belt { name: n.name.clone(), parent: n.parent.map(|k| k.0), inner_au: p.inner_au, outer_au: p.outer_au }),
                 _ => {}
             }
         }
-        Ok(SystemScene { address: at.to_string(), name: sys.root.name.clone(), galaxy: at.up_to(Level::Galaxy).to_string(), age_gyr: sys.root.epoch.system_age_gyr, stars, bodies, belts })
+        let rings = sys.nodes.iter().filter(|n| matches!(n.node, NodeKind::Ring(_))).filter_map(|n| n.parent.and_then(|p| ring_of(sys, p))).collect();
+        Ok(SystemScene { address: at.to_string(), name: sys.root.name.clone(), galaxy: at.up_to(Level::Galaxy).to_string(), age_gyr: sys.root.epoch.system_age_gyr, stars, bodies, belts, rings })
     }
 
     fn body_scene(&self, address: &Address) -> Result<BodyScene> {
@@ -401,6 +441,11 @@ impl Viewer {
         ]
         .map(|(k, v)| [k.to_string(), v])
         .to_vec();
+        let mut facts = facts;
+        if let Some(c) = climate_estimate(&body) {
+            let h = habitable_name(habitability(&body)).unwrap_or("no open water");
+            facts.push(["Climate".into(), format!("~{:.0} °C, {:.0}% thawed: {h}", c.mean_c, 100.0 * c.thawed_share)]);
+        }
         Ok(BodyScene {
             address: address.to_string(),
             name: body.name.clone(),
@@ -410,6 +455,7 @@ impl Viewer {
             layers,
             facts,
             job: self.jobs.lock().expect("jobs").get(address).cloned(),
+            ring: address.body.and_then(|k| ring_of(&sys, k)),
         })
     }
 
@@ -440,7 +486,16 @@ impl Viewer {
     }
 }
 
-fn body_of(address: &Address, system: &SolarSystem) -> Result<geoforge_core::BodyContext> {
+/// A habitability as the page names it, `None` for none.
+fn habitable_name(h: Habitability) -> Option<&'static str> {
+    match h {
+        Habitability::Temperate => Some("temperate"),
+        Habitability::Habitable => Some("habitable"),
+        Habitability::None => None,
+    }
+}
+
+pub(crate) fn body_of(address: &Address, system: &SolarSystem) -> Result<geoforge_core::BodyContext> {
     Ok(geoforge_cosmos::resolve::body(address, system)?)
 }
 

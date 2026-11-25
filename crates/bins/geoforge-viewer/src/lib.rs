@@ -14,6 +14,7 @@ pub mod server;
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_cosmos::resolve::{self, GalaxyAt};
 use geoforge_cosmos::starfield::Starfield;
+use geoforge_cosmos::worlds::{habitability, Habitability};
 use geoforge_store::{UniverseDir, World};
 use std::collections::HashMap;
 use std::path::Path;
@@ -60,13 +61,21 @@ pub struct Viewer {
     pub jobs: Mutex<HashMap<Address, String>>,
     /// The names search looks among, gathered on first need ([`search`]).
     index: Mutex<Option<Vec<search::Hit>>>,
+    /// How habitable each system's most Earth-like body is, once worked out.
+    habitable: Mutex<HashMap<Address, Habitability>>,
 }
 
 impl Viewer {
     /// # Errors
     /// If `dir` holds no universe.
     pub fn open(dir: &Path) -> Result<Self> {
-        Ok(Self { universe: RwLock::new(UniverseDir::open(dir)?), galaxies: Mutex::new(HashMap::new()), jobs: Mutex::new(HashMap::new()), index: Mutex::new(None) })
+        Ok(Self {
+            universe: RwLock::new(UniverseDir::open(dir)?),
+            galaxies: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(HashMap::new()),
+            index: Mutex::new(None),
+            habitable: Mutex::new(HashMap::new()),
+        })
     }
 
     /// The universe (an address at its level) and the focus body, if any.
@@ -175,6 +184,27 @@ impl Viewer {
         Ok(resolve::system(address, &g.field)?)
     }
 
+    /// How habitable the most Earth-like body of each system is ([`habitability`]), the
+    /// systems generated in parallel the first time they are asked about; a system that cannot
+    /// be generated counts as having none.
+    pub fn habitability(&self, systems: &[Address]) -> Vec<Habitability> {
+        use rayon::prelude::*;
+        let missing: Vec<Address> = {
+            let known = self.habitable.lock().expect("habitable");
+            systems.iter().map(|a| a.up_to(Level::System)).filter(|a| !known.contains_key(a)).collect()
+        };
+        let found: Vec<(Address, Habitability)> = missing
+            .par_iter()
+            .map(|a| {
+                let h = self.system(a).ok().and_then(|g| scene::body_of(&a.body(g.focus), &g.system).ok()).map_or(Habitability::None, |b| habitability(&b));
+                (*a, h)
+            })
+            .collect();
+        let mut known = self.habitable.lock().expect("habitable");
+        known.extend(found);
+        systems.iter().map(|a| known.get(&a.up_to(Level::System)).copied().unwrap_or(Habitability::None)).collect()
+    }
+
     /// Any world made in `address`'s system.
     fn made_in(&self, address: &Address) -> Result<Option<World>> {
         let sys = address.up_to(Level::System);
@@ -239,6 +269,12 @@ mod tests {
         assert!(g.systems.iter().any(|s| s.made && s.address == body.up_to(Level::System).to_string()));
         let Scene::Stars(st) = v.scene(&body, true).unwrap() else { panic!("stars") };
         assert_eq!(st.stars.iter().filter(|s| s.centre).count(), 1);
+        // The default body is temperate, and its star is flagged among its neighbours'.
+        let around: Vec<Address> = st.stars.iter().map(|s| s.address.parse().unwrap()).collect();
+        let flags = v.habitability(&around);
+        let centre = st.stars.iter().position(|s| s.centre).unwrap();
+        assert_eq!(flags[centre], Habitability::Temperate);
+        assert_eq!(flags, v.habitability(&around), "cached the same");
         let Scene::System(sys) = v.scene(&body.up_to(Level::System), false).unwrap() else { panic!("system") };
         assert!(sys.bodies.iter().any(|b| b.made && b.focus && b.orbit_au.len() == 96));
         let Scene::Body(b) = v.scene(&body, false).unwrap() else { panic!("body") };

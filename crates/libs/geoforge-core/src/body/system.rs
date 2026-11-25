@@ -220,6 +220,27 @@ pub struct Population {
     pub composition: Composition,
 }
 
+impl PowerLaw {
+    /// Mean of D² over the distribution, km².
+    #[must_use]
+    pub fn mean_square_km2(&self) -> f64 {
+        // ∫ D^k dD from min to max, k ≠ −1 (or ln at −1).
+        let moment = |k: f64| if (k + 1.0).abs() < 1e-9 { (self.max_km / self.min_km).ln() } else { (self.max_km.powf(k + 1.0) - self.min_km.powf(k + 1.0)) / (k + 1.0) };
+        moment(2.0 - self.exponent) / moment(-self.exponent)
+    }
+}
+
+impl Population {
+    /// For a ring, its normal optical depth: the particles' cross-section over the annulus
+    /// they fill. Saturn's rings, 1.6×10¹⁹ particles of 1 cm–10 m, average ~0.4 (the B ring is
+    /// 1–5, the C ring ~0.1); Jupiter's main ring ~10⁻⁶.
+    #[must_use]
+    pub fn optical_depth(&self) -> f64 {
+        let area = std::f64::consts::PI * (self.outer_au.powi(2) - self.inner_au.powi(2)) * super::AU_KM.powi(2);
+        self.count_estimate * std::f64::consts::FRAC_PI_4 * self.size_law.mean_square_km2() / area.max(1e-30)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NodeKind {
@@ -288,5 +309,28 @@ impl SolarSystem {
             Some(NodeKind::Barycenter) => self.children(key).iter().map(|c| self.mass_of(c.key)).sum(),
             _ => 0.0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::body::{Species, AU_KM};
+
+    /// Saturn's rings, as the Solar System gives them: an optical depth of ~0.4 on average.
+    #[test]
+    fn saturns_rings_are_opaque_enough() {
+        let rings = Population {
+            inner_au: 74_658.0 / AU_KM,
+            outer_au: 136_775.0 / AU_KM,
+            count_estimate: 1.6e19,
+            size_law: PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0 },
+            composition: Composition::from_weights(&[(Species::Ice, 1.0)]),
+        };
+        let tau = rings.optical_depth();
+        assert!((0.3..0.6).contains(&tau), "{tau}");
+        // A flat law's mean square is (max² + max·min + min²)/3.
+        let flat = PowerLaw { min_km: 1.0, max_km: 2.0, exponent: 0.0 };
+        assert!((flat.mean_square_km2() - 7.0 / 3.0).abs() < 1e-12);
     }
 }

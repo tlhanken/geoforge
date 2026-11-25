@@ -59,6 +59,14 @@ focus {}: radius {:.0} km, g {:.2} m/s², day {:.1} h, obliquity {:.1}°, flux {
         body.interior.surface_ocean_gel_km(),
         body.interior.surface_pressure_bar()
     )?;
+    if let Some(c) = geoforge_cosmos::worlds::climate_estimate(&body) {
+        let h = match geoforge_cosmos::worlds::habitability(&body) {
+            geoforge_cosmos::worlds::Habitability::Temperate => "temperate",
+            geoforge_cosmos::worlds::Habitability::Habitable => "habitable",
+            geoforge_cosmos::worlds::Habitability::None => "not habitable",
+        };
+        writeln!(out, "climate estimate: mean {:.1} °C, {:.0}% of the surface above freezing: {h}", c.mean_c, 100.0 * c.thawed_share)?;
+    }
     if body.interior.has_atmosphere() {
         let rot = body.exterior.rotation_h;
         if let Some(s) = geoforge_surface::atmosphere::Substellar::for_body(&body) {

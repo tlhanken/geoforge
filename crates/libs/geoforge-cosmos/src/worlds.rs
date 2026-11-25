@@ -194,6 +194,79 @@ fn set_co2(body: &mut BodyContext, p_bar: f64) {
     air.pressure_bar = Some(new_total);
 }
 
+/// A world's climate before its geography: the latitude-band energy balance the climate
+/// layer is built on ([`Radiation`]), by band from pole to pole (on a locked world, from the
+/// star's point round to its antipode). That balance is for sea level; the ground stands
+/// higher, and its mean is taken [`GROUND_COOLING_K`] colder. So taken, it follows the
+/// generated climate's global mean within ~2 K (five generated worlds from −6 to +17 °C).
+/// What it leaves out (where the land lies, mountains, the winds' moisture) moves the bands,
+/// little the balance.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClimateEstimate {
+    /// Global annual mean surface temperature, °C.
+    pub mean_c: f64,
+    /// Share of the surface whose annual mean is above freezing.
+    pub thawed_share: f64,
+}
+
+/// How much colder the ground's mean is than the sea-level balance: land on ~30% of the
+/// surface at a mean ~1.3 km (generated worlds; Earth's 0.84 km), at 6.5 K/km. Fitted on five
+/// generated worlds (their means 0.4–4.1 K colder than the balance).
+pub const GROUND_COOLING_K: f64 = 2.5;
+/// Earth's ice-free share in the same balance: its annual mean freezes poleward of ~60°, so
+/// a temperate world keeps at least three quarters of its surface above freezing (all but
+/// the caps poleward of ~49°).
+pub const TEMPERATE_THAWED_SHARE: f64 = 0.75;
+/// Global means a temperate world lies between, °C (Earth's 14–15).
+pub const TEMPERATE_MEAN_C: (f64, f64) = (5.0, 25.0);
+/// Global mean past which a wet world is too hot to count as habitable, °C: around 50 °C
+/// water vapour reaches the upper air and the ocean is lost to space (the moist greenhouse,
+/// Kasting et al. 1993).
+pub const MOIST_GREENHOUSE_C: f64 = 50.0;
+
+/// How a world could host life like Earth's, by its liquid water.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Habitability {
+    /// No surface water open to the sky (dry, frozen over, boiling, or under an ice shell).
+    None,
+    /// Surface water open somewhere: a cold world with a thawed band, a hot one short of
+    /// losing its ocean.
+    Habitable,
+    /// Earth-like: a global mean of 5–25 °C, and at least three quarters of the surface
+    /// above freezing.
+    Temperate,
+}
+
+/// The climate estimate of a body with a surface and air, `None` otherwise.
+#[must_use]
+pub fn climate_estimate(body: &BodyContext) -> Option<ClimateEstimate> {
+    if !body.interior.has_solid_surface() || body.irradiance.flux_w_m2 <= 0.0 {
+        return None;
+    }
+    let lats: Vec<f64> = (0..36).map(|i| -87.5 + 5.0 * f64::from(i)).collect();
+    let r = Radiation::for_body(body, EARTH_HEAT_TRANSPORT, 0.0);
+    let (t, mean) = if body.is_tidally_locked() { r.substellar_temperature(&lats) } else { r.zonal_temperature(&lats) };
+    let area: f64 = lats.iter().map(|l| l.to_radians().cos()).sum();
+    let thawed = lats.iter().zip(&t).filter(|(_, &ti)| ti > 0.0).map(|(l, _)| l.to_radians().cos()).sum::<f64>() / area;
+    Some(ClimateEstimate { mean_c: mean - GROUND_COOLING_K, thawed_share: thawed })
+}
+
+/// How habitable a body is, by [`climate_estimate`] and its surface water.
+#[must_use]
+pub fn habitability(body: &BodyContext) -> Habitability {
+    if !body.interior.has_surface_liquid_water() || body.interior.regime == TectonicRegime::IceShell {
+        return Habitability::None;
+    }
+    let Some(c) = climate_estimate(body) else { return Habitability::None };
+    if c.thawed_share <= 0.0 || c.mean_c >= MOIST_GREENHOUSE_C {
+        Habitability::None
+    } else if (TEMPERATE_MEAN_C.0..=TEMPERATE_MEAN_C.1).contains(&c.mean_c) && c.thawed_share >= TEMPERATE_THAWED_SHARE {
+        Habitability::Temperate
+    } else {
+        Habitability::Habitable
+    }
+}
+
 /// One line on what a body is: regime, air and water.
 #[must_use]
 pub fn describe(body: &BodyContext) -> String {
@@ -234,6 +307,27 @@ mod tests {
 
     fn rocky(m: f64, s: f64) -> BodyInterior {
         interior_for(Seed(1), &ext(m), &Setting { flux_w_m2: s * 1361.0, icy: false, tidally_heated: false })
+    }
+
+    /// Earth is temperate and its estimate near its 14–15 °C; Mars and Venus have no open
+    /// water; an Earth with ~half its sunlight, carbon cycle and all, is cold but keeps its
+    /// tropics open (Nevai V of universe 12345: −4 °C in its climate layer).
+    #[test]
+    fn habitability_of_known_worlds() {
+        let earth = Archetype::Earth.context(Key(1), "Earth");
+        let c = climate_estimate(&earth).unwrap();
+        assert!((8.0..20.0).contains(&c.mean_c) && c.thawed_share > 0.8, "{c:?}");
+        assert_eq!(habitability(&earth), Habitability::Temperate);
+        for a in [Archetype::Mars, Archetype::Venus, Archetype::Moon, Archetype::Europa] {
+            assert_eq!(habitability(&a.context(Key(1), a.name())), Habitability::None, "{a:?}");
+        }
+        let mut cold = earth.clone();
+        cold.irradiance.flux_w_m2 = 0.55 * 1361.0;
+        cold.interior = rocky(1.0, 0.55);
+        regulate_co2(&mut cold);
+        let c = climate_estimate(&cold).unwrap();
+        assert!(c.mean_c < TEMPERATE_MEAN_C.0 && c.thawed_share > 0.0, "{c:?}");
+        assert_eq!(habitability(&cold), Habitability::Habitable);
     }
 
     #[test]

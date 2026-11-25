@@ -14,6 +14,14 @@ An interactive viewer for a world:
 - inspect a cell's values through every layer;
 - step through the almanac's days.
 
+## 12d. Temperate defaults, habitable systems, moons and rings — done (OpenSpec `habitable-moons-rings`)
+- Done: a climate estimate before generating and habitability grades; default worlds are
+  temperate; the viewer circles habitable systems and marks bodies; moons (regular, inner,
+  captured, irregular, specks); rings on every giant; zodiacal light on the star chart.
+- Next: moons of dwarf planets and belt members; resonant moon chains; narrow ringlets; a
+  rocky planet's passing ring; the planet's own rings as an arc in its sky and their shadow;
+  a "next habitable system" jump in the viewer.
+
 ## 12c. One universe per seed, and the viewer — done (OpenSpec `universe-addresses`)
 - Done: addresses for every galaxy, star's system and body, generated from the seed and
   address alone; galaxy models from generated galaxies; default body by rule; universe

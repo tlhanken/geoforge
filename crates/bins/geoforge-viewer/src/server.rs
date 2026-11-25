@@ -5,12 +5,15 @@
 //! GET  /api/start                          the universe, its focus body and home galaxy
 //! GET  /api/scene?at=ADDRESS[&stars=1]     a scene (scene::Scene as JSON)
 //! GET  /api/search?q=TEXT                  hits (search::Hit)
+//! GET  /api/habitable?at=ADDRESS          the systems around it with a habitable or
+//!                                         temperate world: [{address, habitability}]
 //! GET  /api/texture?at=ADDRESS&layer=NAME&width=W    a map as PNG
 //! POST /api/make?at=ADDRESS                make the body's world (and focus it)
 //! POST /api/generate?at=ADDRESS            generate its layers, in the background
 //! ```
 
-use crate::{Result, ViewError, Viewer};
+use crate::{scene, Result, ViewError, Viewer};
+use geoforge_cosmos::worlds::Habitability;
 use std::sync::Arc;
 use tiny_http::{Header, Method, Request, Response, Server};
 
@@ -62,6 +65,17 @@ fn handle(viewer: &Arc<Viewer>, rq: Request) {
             let mut v = serde_json::to_value(viewer.scene(&a, arg("stars").is_some())?).map_err(|e| ViewError(e.to_string()))?;
             v["crumbs"] = serde_json::to_value(viewer.crumbs(&a)?).map_err(|e| ViewError(e.to_string()))?;
             Ok(json(&v))
+        }),
+        (Method::Get, "/api/habitable") => at(viewer, arg("at")).and_then(|a| {
+            let scene::Scene::Stars(st) = viewer.scene(&a, true)? else { return Err(ViewError("no stars there".into())) };
+            let systems: Vec<geoforge_core::Address> = st.stars.iter().filter_map(|s| s.address.parse().ok()).collect();
+            let found: Vec<serde_json::Value> = systems
+                .iter()
+                .zip(viewer.habitability(&systems))
+                .filter(|(_, h)| *h != Habitability::None)
+                .map(|(a, h)| serde_json::json!({ "address": a.to_string(), "habitability": if h == Habitability::Temperate { "temperate" } else { "habitable" } }))
+                .collect();
+            Ok(json(&found))
         }),
         (Method::Get, "/api/search") => viewer.search(&arg("q").unwrap_or_default()).map(|h| json(&h)),
         (Method::Get, "/api/texture") => at(viewer, arg("at")).and_then(|a| {

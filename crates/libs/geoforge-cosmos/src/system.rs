@@ -179,28 +179,10 @@ pub fn generate_system(seed: Seed) -> Generated {
     // Moons, inside each planet's Hill sphere.
     for (key, nm, ext, a_au) in &planets {
         let hill = hill_km(*a_au, ext.mass_kg, m);
-        let moons = match ext.class {
-            // Galilean-like: 2–5 large moons holding ~2×10⁻⁴ of the planet's mass.
-            BodyClass::GasGiant => {
-                let count = 2 + (d.u() * 4.0) as usize;
-                moon_system(&mut d, &mut keys, *key, nm, ext, count, 2e-4)
-            }
-            // Uranus- or Neptune-like: none to two.
-            BodyClass::IceGiant => {
-                let count = (d.u() * 3.0) as usize;
-                moon_system(&mut d, &mut keys, *key, nm, ext, count, 1e-4)
-            }
-            // The focus world: a large moon half the time.
-            BodyClass::Terrestrial if *key == focus && d.u() < 0.55 => {
-                let mass_kg = ext.mass_kg * d.range(0.004, 0.02);
-                let drawn = d.range(30.0, 80.0) * ext.radius_km;
-                big_moon_orbit_km(drawn, ext, hill)
-                    .map(|a_km| moon(&mut d, keys.fresh(), *key, ext.mass_kg, MoonSpec { name: format!("{nm} a"), mass_kg, a_km, density_g_cc: 3.3 }))
-                    .into_iter()
-                    .collect()
-            }
-            _ => Vec::new(),
-        };
+        // The focus world gets a big moon half the time.
+        let chance = if *key == focus { 0.55 } else { 0.0 };
+        let (moons, irregular) = crate::moons::moons(&mut d, &mut keys, &crate::moons::Host { key: *key, name: nm, ext, hill_km: hill, locked: false, belt_ratio: None }, chance);
+        nodes.extend(irregular);
         nodes.extend(moons.into_iter().filter(|n| n.elements.is_some_and(|e| e.a_au * AU_KM < MOON_HILL_SHARE * hill)));
     }
 
@@ -286,25 +268,6 @@ pub(crate) fn planet_radius_earth(class: BodyClass, mass_e: f64) -> f64 {
         BodyClass::IceGiant => 3.9 * (mass_e / 17.0).powf(0.25),
         BodyClass::GasGiant => 11.2 * (mass_e / 318.0).powf(-0.04),
     }
-}
-
-/// `count` moons sharing `mass_share` of the planet's mass, on a widening ladder of orbits.
-pub(crate) fn moon_system(d: &mut Draw, keys: &mut KeyAllocator, parent: Key, parent_name: &str, p: &BodyExterior, count: usize, mass_share: f64) -> Vec<OrbitalNode> {
-    let weights: Vec<f64> = (0..count).map(|_| d.range(0.3, 1.0)).collect();
-    let total: f64 = weights.iter().sum();
-    let budget = p.mass_kg * mass_share * d.range(0.5, 1.5);
-    let mut a_km = p.radius_km * d.range(5.5, 7.0);
-    let letters = "abcdefgh";
-    weights
-        .iter()
-        .enumerate()
-        .map(|(i, w)| {
-            let spec = MoonSpec { name: format!("{parent_name} {}", &letters[i..=i]), mass_kg: budget * w / total, a_km, density_g_cc: 1.9 };
-            let node = moon(d, keys.fresh(), parent, p.mass_kg, spec);
-            a_km *= d.range(1.5, 2.0);
-            node
-        })
-        .collect()
 }
 
 /// A moon to place.

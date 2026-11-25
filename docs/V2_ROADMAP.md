@@ -431,6 +431,21 @@ Worlds without constellations of their own get figures drawn from the brightest 
 Open: visiting another galaxy's stars, superclusters' filaments, more than one system in a
 world.
 
+## 8i. Temperate defaults, habitable systems, moons and rings — done (November 2026)
+OpenSpec `habitable-moons-rings`. A climate estimate before generating
+(`worlds::climate_estimate`: the band energy balance the climate layer is built on, 2.5 K
+colder for the land; within ~2 K of the generated means) grades every solid world temperate,
+habitable or not (`worlds::habitability`). The default star rule asks first for a Sun-like
+star whose best world is temperate (all eight test seeds find one within 2 s); the Earth-like
+score weighs habitability. The viewer circles systems with open water in the star view
+(green temperate, blue other; `/api/habitable`, ~1 s for 800 systems, cached), marks bodies in
+the system view and gives each body's estimate; `geoforge show` prints it. Moons come from one
+generator (`moons`): 3–6 regular moons for gas giants and 3–5 for ice giants, shared over 2.5
+decades, small inner moons, Triton-like captures for a third of ice giants, irregular moons as
+a population, captured specks beside asteroid belts. Every giant has rings, a quarter of cold
+ones bright ice (`Population::optical_depth`: Saturn's 0.4), drawn banded in the viewer. The
+star chart shows the zodiacal light and gegenschein, scaled by the system's belts.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often

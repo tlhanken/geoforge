@@ -17,11 +17,12 @@ pub struct SkyPoint {
 
 /// An equirectangular sky chart `width` wide (half as tall): RA 360° at the left edge to 0°
 /// at the right, as the sky looks from below, Dec +90° at the top. `glow` is a grid
-/// `glow_width` wide (0–1), drawn as the galaxy's haze; `path` (RA, Dec) a dotted line (the
+/// `glow_width` wide (0–1), drawn as the galaxy's haze, and `zodiacal` the same grid of the
+/// zodiacal light (in the glow's units), drawn warm; `path` (RA, Dec) a dotted line (the
 /// star's yearly path); `lines` constellation lines between (RA, Dec) ends, along great
 /// circles. Lines every 30°, the equator brighter.
 #[must_use]
-pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoint], path: &[(f64, f64)], lines: &[[(f64, f64); 2]]) -> RgbImage {
+pub fn render_sky(width: u32, glow: &[f32], zodiacal: &[f32], glow_width: usize, points: &[SkyPoint], path: &[(f64, f64)], lines: &[[(f64, f64); 2]]) -> RgbImage {
     let height = width / 2;
     let glow_height = glow.len() / glow_width.max(1);
     let mut acc = vec![[0f32; 3]; (width * height) as usize];
@@ -30,7 +31,8 @@ pub fn render_sky(width: u32, glow: &[f32], glow_width: usize, points: &[SkyPoin
         let gx = (f64::from(x) + 0.5) / f64::from(width) * glow_width as f64 - 0.5;
         let gy = (f64::from(y) + 0.5) / f64::from(height) * glow_height as f64 - 0.5;
         let g = bilinear(glow, glow_width, glow_height, gx, gy).powf(0.8) as f32;
-        *a = [6.0 + 70.0 * g, 8.0 + 74.0 * g, 16.0 + 92.0 * g];
+        let z = if zodiacal.len() == glow.len() { bilinear(zodiacal, glow_width, glow_height, gx, gy).min(1.5).powf(0.8) as f32 } else { 0.0 };
+        *a = [6.0 + 70.0 * g + 72.0 * z, 8.0 + 74.0 * g + 62.0 * z, 16.0 + 92.0 * g + 40.0 * z];
         let (ra, dec) = (360.0 * (1.0 - (f64::from(x) + 0.5) / f64::from(width)), 90.0 - 180.0 * (f64::from(y) + 0.5) / f64::from(height));
         let step = 360.0 / f64::from(width);
         let line = |v: f64| (v / 30.0 - (v / 30.0).round()).abs() * 30.0 < step * 0.5;

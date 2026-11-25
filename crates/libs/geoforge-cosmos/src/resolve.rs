@@ -12,6 +12,7 @@ use crate::galaxy::Galaxy;
 use crate::starfield::Starfield;
 use crate::system::Generated;
 use crate::universe::{Universe, UniverseGalaxy};
+use crate::worlds::{habitability, Habitability};
 use crate::{body_context, sol};
 use geoforge_core::address::{Address, GalaxyRef, Level, StarRef};
 use geoforge_core::body::{BodyContext, SolarSystem, StellarStage};
@@ -150,8 +151,9 @@ pub fn default_address(seed: Seed) -> Address {
 ///   ([`Universe::home`]); the real universe: the Sun's system;
 /// - a galaxy: around a point on its reference circle (at an azimuth from its stars' seed),
 ///   the nearest single main-sequence Sun-like star (5,200–6,200 K) whose system's most
-///   Earth-like body has surface water; failing that within 240 pc, the nearest star whose
-///   focus has water, then any star with a solid body;
+///   Earth-like body is temperate ([`Habitability::Temperate`]); failing that within 240 pc,
+///   the nearest such star whose focus has surface water, then the nearest star of any kind
+///   whose focus has, then any star with a solid body;
 /// - a system: its most Earth-like body (its focus).
 ///
 /// # Errors
@@ -182,31 +184,49 @@ fn default_star(g: &GalaxyAt, field: &Starfield) -> Option<Address> {
     let r = g.model.reference_kpc * 1000.0;
     let centre = [r * phi.cos(), r * phi.sin(), 0.0];
     let sunlike = |s: &crate::sectors::GalacticStar| s.kind.companion_mass.is_none() && s.star.stage == StellarStage::MainSequence && (5200.0..6200.0).contains(&s.star.temperature_k);
-    let focus = |id: StarId, wet: bool| -> Option<Address> {
+    // The star's focus, and how habitable it is (`None` for a dry one).
+    let focus = |id: StarId| -> Option<(Address, Option<Habitability>)> {
         let a = g.address.star(StarRef::Star(id));
         let sys = system(&a, field).ok()?;
         let at = a.body(sys.focus);
-        (!wet || body(&at, &sys.system).ok()?.interior.has_surface_liquid_water()).then_some(at)
+        let b = body(&at, &sys.system).ok()?;
+        Some((at, b.interior.has_surface_liquid_water().then(|| habitability(&b))))
     };
     let mut seen = std::collections::HashSet::new();
-    let mut fallback = None;
+    let (mut wet_sunlike, mut wet_any) = (None, None);
     for radius in SEARCH_RADII_PC {
         let mut stars = field.near(centre, radius, 16.0);
         stars.retain(|s| seen.insert(s.id));
         stars.sort_by(|a, b| a.distance_pc(centre).total_cmp(&b.distance_pc(centre)));
-        if let Some(a) = stars.iter().filter(|s| sunlike(s)).find_map(|s| focus(s.id, true)) {
-            return Some(a);
+        for s in stars.iter().filter(|s| sunlike(s)) {
+            match focus(s.id) {
+                Some((a, Some(Habitability::Temperate))) => return Some(a),
+                Some((a, Some(_))) if wet_sunlike.is_none() => wet_sunlike = Some(a),
+                _ => {}
+            }
         }
-        if fallback.is_none() {
-            fallback = stars.iter().take(400).find_map(|s| focus(s.id, true));
+        if wet_any.is_none() {
+            wet_any = stars.iter().take(400).find_map(|s| focus(s.id).and_then(|(a, h)| h.map(|_| a)));
         }
     }
-    fallback.or_else(|| field.near(centre, SEARCH_RADII_PC[0], 16.0).iter().find_map(|s| focus(s.id, false)))
+    wet_sunlike.or(wet_any).or_else(|| field.near(centre, SEARCH_RADII_PC[0], 16.0).iter().find_map(|s| focus(s.id).map(|(a, _)| a)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Universes' default bodies are temperate worlds of Sun-like stars.
+    #[test]
+    fn default_bodies_are_temperate() {
+        for seed in [1, 2, 3, 42, 257, 525, 820, 12345] {
+            let a = default_address(Seed(seed));
+            let field = galaxy(&a).unwrap().starfield(StarEdits::default());
+            let sys = system(&a, &field).unwrap();
+            let b = body(&a, &sys.system).unwrap();
+            assert_eq!(habitability(&b), Habitability::Temperate, "seed {seed}: {a}");
+        }
+    }
 
     /// Every level resolves from the address alone, the same every time; the default body
     /// is a wet world of a Sun-like star in a galaxy like the Milky Way.

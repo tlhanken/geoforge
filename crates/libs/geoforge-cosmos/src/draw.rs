@@ -20,6 +20,10 @@ impl Draw {
         self.n += 1;
         range(self.seed.child_u64(b"draw", self.n), lo, hi)
     }
+    /// A whole number from `lo` to `hi`, both included, equally likely.
+    pub(crate) fn int(&mut self, lo: u32, hi: u32) -> u32 {
+        lo + ((self.u() * f64::from(hi - lo + 1)) as u32).min(hi - lo)
+    }
     pub(crate) fn normal(&mut self, mean: f64, sd: f64) -> f64 {
         let u1 = self.u().max(1e-12);
         let u2 = self.u();

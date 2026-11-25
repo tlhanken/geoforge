@@ -31,6 +31,7 @@
 pub mod binary;
 mod draw;
 mod dynamics;
+mod moons;
 
 pub mod census;
 pub mod constellations;
@@ -104,7 +105,7 @@ mod tests {
             assert!(ctx.interior.has_lithosphere() && ctx.interior.surface_ocean_gel_km() > 1.0);
             let t = balance_temperature_c(&ctx);
             // The thermostat holds weathering, not the mean: fast spinners run colder overall.
-            assert!((5.0..26.0).contains(&t), "seed {s}: balance temperature {t}");
+            assert!((5.0..28.0).contains(&t), "seed {s}: balance temperature {t}");
             assert!((5.0..15.0).contains(&ctx.gravity_m_s2()), "gravity {}", ctx.gravity_m_s2());
             assert!((50.0..1000.0).contains(&ctx.irradiance.year_days), "year {}", ctx.irradiance.year_days);
             // Every body of the tree has a context.
@@ -123,7 +124,7 @@ mod tests {
             let g = generate_system(Seed(s));
             for giant in g.system.nodes.iter().filter(|n| matches!(n.node, NodeKind::Body(b) if b.class == BodyClass::GasGiant)) {
                 let planet = body_context(&g.system, giant.key).unwrap();
-                for m in g.system.children(giant.key) {
+                for m in g.system.children(giant.key).into_iter().filter(|m| matches!(m.node, NodeKind::Body(_))) {
                     found = true;
                     let moon = body_context(&g.system, m.key).unwrap();
                     assert_eq!(moon.irradiance.flux_w_m2, planet.irradiance.flux_w_m2);

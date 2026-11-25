@@ -9,6 +9,10 @@
 //! Coordinates are the world's own right ascension and declination: its equator, and its
 //! northern spring equinox (the present) at RA 0.
 //!
+//! The zodiacal light: dust shed by the system's belts and comets, lit by its star, a glow
+//! along the star's yearly path ([`Sky::zodiacal`]). Its strength is the dust against the
+//! Solar System's, from the belts round its stars ([`zodiacal_dust`]).
+//!
 //! Planets shine by reflected starlight with geometric albedos by class (rocky planets 0.3 —
 //! Earth 0.37, Venus 0.69, Mars 0.17, Mercury 0.14; moons 0.15 — the Moon 0.12, Callisto
 //! 0.20, Europa 0.67; gas giants 0.5 — Jupiter 0.54, Saturn 0.50; ice giants 0.45 — Uranus
@@ -131,6 +135,8 @@ pub struct Sky {
     pub eclipses: Vec<Eclipse>,
     /// The path of the system's brightest star through the year, as (RA, Dec).
     pub ecliptic: Vec<(f64, f64)>,
+    /// Dust lit as zodiacal light, against the Solar System's ([`zodiacal_dust`]).
+    pub zodiacal_dust: f64,
     #[serde(skip)]
     neighbourhood: Neighbourhood,
     #[serde(skip)]
@@ -262,11 +268,43 @@ pub fn sky(system: &SolarSystem, world: Key, day: f64, eclipse_days: f64, field:
         galaxies,
         eclipses: ephemeris::eclipses(system, world, day, eclipse_days),
         ecliptic,
+        zodiacal_dust: zodiacal_dust(system),
         neighbourhood,
         seen,
         seed: system.root.seed,
         frame: place,
     })
+}
+
+/// The Solar System's main belt (~1.5×10⁶ asteroids over 1 km) and Kuiper belt (~10⁹
+/// bodies): the dust that makes Earth's zodiacal light comes about equally from asteroid
+/// collisions and from comets the outer belt sends in (Nesvorný et al. 2010 give comets
+/// more; the split matters little here).
+const SOL_INNER_BELT: f64 = 1.5e6;
+const SOL_OUTER_BELT: f64 = 1e9;
+
+/// How much dust a system has to light, against the Solar System's: half from its belts
+/// within 10 AU·√L of their star (asteroids, Trojans), half from those beyond (comets' source),
+/// each counted against the Sun's and capped at four times it. A system with no belts has
+/// none.
+#[must_use]
+pub fn zodiacal_dust(system: &SolarSystem) -> f64 {
+    let (mut inner, mut outer) = (0.0, 0.0);
+    for n in &system.nodes {
+        let NodeKind::Belt(p) = &n.node else { continue };
+        let Some(star) = n.parent.and_then(|k| system.node(k)) else { continue };
+        let l = match &star.node {
+            NodeKind::Star(s) => s.luminosity_solar,
+            NodeKind::Barycenter => system.children(star.key).iter().filter_map(|c| if let NodeKind::Star(s) = &c.node { Some(s.luminosity_solar) } else { None }).sum(),
+            _ => continue,
+        };
+        if p.outer_au < 10.0 * l.sqrt() {
+            inner += p.count_estimate;
+        } else {
+            outer += p.count_estimate;
+        }
+    }
+    0.5 * (inner / SOL_INNER_BELT).min(4.0) + 0.5 * (outer / SOL_OUTER_BELT).min(4.0)
 }
 
 /// Where `g` is in the sky, and how its major axis lies.
@@ -322,6 +360,51 @@ impl Sky {
 }
 
 impl Sky {
+    /// The zodiacal light on the same grid as [`Sky::glow`], in the glow's units (1 at the
+    /// galaxy's brightest): sunlight scattered by the dust round the star, along its yearly
+    /// path. Along the path it falls off from the star as (90°/ε)² to ε = 90° (Earth's: ~2.3
+    /// power, Leinert et al. 1998) and on to a third by 150°, rising to the gegenschein
+    /// opposite the star; away from the path it fades over 10° near the star widening to 30°
+    /// at quadrature. At 90° from the star on its path, Earth's is a quarter of the Milky
+    /// Way's brightest. It levels off within 30° of the star and fades out by 10°, where only
+    /// twilight would show it.
+    #[must_use]
+    pub fn zodiacal(&self, width: usize, height: usize) -> Vec<f32> {
+        let mut out = vec![0.0f32; width * height];
+        let Some(sun) = self.bodies.iter().find(|b| b.kind == Kind::Sun) else { return out };
+        if self.zodiacal_dust <= 0.0 || self.ecliptic.len() < 4 {
+            return out;
+        }
+        let unit = |ra: f64, dec: f64| {
+            let (r, d) = (ra.to_radians(), dec.to_radians());
+            [d.cos() * r.cos(), d.cos() * r.sin(), d.sin()]
+        };
+        let star = unit(sun.ra_deg, sun.dec_deg);
+        let (a, b) = (self.ecliptic[0], self.ecliptic[self.ecliptic.len() / 4]);
+        let pole = {
+            let (u, v) = (unit(a.0, a.1), unit(b.0, b.1));
+            let c = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+            let n = dot(c, c).sqrt().max(1e-12);
+            c.map(|x| x / n)
+        };
+        for (i, v) in out.iter_mut().enumerate() {
+            let (ra, dec) = chart_coords(i % width, i / width, width, height);
+            let d = unit(ra, dec);
+            let elongation = dot(d, star).clamp(-1.0, 1.0).acos().to_degrees();
+            if elongation < 10.0 {
+                continue;
+            }
+            let beta = dot(d, pole).clamp(-1.0, 1.0).asin().to_degrees().abs();
+            // Nearer than 30° it is lost in twilight, fading out by 10°.
+            let twilight = ((elongation - 10.0) / 20.0).clamp(0.0, 1.0);
+            let along = if elongation <= 90.0 { (90.0 / elongation.max(30.0)).powi(2) * twilight * twilight * (3.0 - 2.0 * twilight) } else { 1.0 - 0.67 * ((elongation - 90.0) / 60.0).min(1.0) }
+                + 0.4 * (-((180.0 - elongation) / 8.0).powi(2)).exp();
+            let wide = 10.0 + 20.0 * (elongation.clamp(20.0, 90.0) - 20.0) / 70.0;
+            *v = (0.25 * self.zodiacal_dust * along * (-beta / wide).exp()) as f32;
+        }
+        out
+    }
+
     /// Where `p` (pc, in the galaxy) lies in this sky: RA, Dec (degrees) and distance (pc).
     #[must_use]
     pub fn radec_of(&self, p: [f64; 3]) -> (f64, f64, f64) {
@@ -567,5 +650,26 @@ mod tests {
         assert!((lmc.surface_brightness - 21.4).abs() < 0.5 && (m31.surface_brightness - 20.3).abs() < 0.7, "{} {}", lmc.surface_brightness, m31.surface_brightness);
         assert_eq!([lmc.seen_with(), m31.seen_with(), named("Centaurus A").seen_with()], ["naked eye", "naked eye", "binoculars"]);
         assert!(s.automatic_constellations().len() > 40);
+    }
+
+    /// Earth's zodiacal light: the Solar System's dust by definition, brightest along the
+    /// Sun's path toward it, gone near the Sun and far off the path, with a gegenschein
+    /// opposite; a system without belts has none.
+    #[test]
+    fn the_zodiacal_light_lies_along_the_suns_path() {
+        let (sys, body) = geoforge_cosmos::sol::archetype(geoforge_core::Seed(1), Archetype::Earth);
+        assert!((zodiacal_dust(&sys) - 1.0).abs() < 1e-9);
+        let field = Starfield::of_system(&sys, None, geoforge_core::galactic::StarEdits::default());
+        let s = sky(&sys, body.key, 0.0, 1.0, &field).unwrap();
+        let z = s.zodiacal(360, 180);
+        // Day 0 is the March equinox: the Sun at RA 0, its path along the equator there.
+        let at = |ra: f64, dec: f64| z[((90.0 - dec).floor() as usize).min(179) * 360 + ((360.0 - ra).floor() as usize).min(359)];
+        let (near, quad, off, anti, beyond) = (at(40.0, 15.0), at(90.0, 23.0), at(90.0, -60.0), at(180.0, 0.0), at(150.0, 10.0));
+        assert!(near > quad && quad > 0.15 && quad < 0.4 && off < 0.2 * quad, "{near} {quad} {off}");
+        assert!(anti > beyond, "gegenschein {anti} over {beyond}");
+        assert_eq!(at(2.0, 0.0), 0.0, "lost in the Sun's glare");
+        let mut bare = sys.clone();
+        bare.nodes.retain(|n| !matches!(n.node, NodeKind::Belt(_)));
+        assert_eq!(zodiacal_dust(&bare), 0.0);
     }
 }

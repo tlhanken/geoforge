@@ -109,6 +109,21 @@ function dotTexture() {
 }
 const DOT = dotTexture();
 
+// A thin ring, to circle the stars whose systems hold a world with open water.
+function ringTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,255,255,1)';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.arc(32, 32, 26, 0, 2 * Math.PI);
+  g.stroke();
+  return new THREE.CanvasTexture(c);
+}
+const RING = ringTexture();
+const HABITABLE = { temperate: [110, 230, 140], habitable: [90, 170, 220] };
+
 function points(positions, colours, size, opts = {}) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -200,6 +215,33 @@ function drawStars(s, reframe) {
   const ring = new THREE.LineLoop(circle(10 / 3.2616, 96), new THREE.LineBasicMaterial({ color: 0x26304a }));
   scene.add(ring);
   if (reframe) aim(s.radius_pc * 0.35);
+  markHabitable(s);
+}
+
+// Circle the systems with a world of open water (green: temperate, like Earth; blue: water
+// open somewhere), once the server has worked them out.
+async function markHabitable(s) {
+  let found;
+  try {
+    found = await api(`/api/habitable?at=${encodeURIComponent(s.address)}`);
+  } catch (e) {
+    return;
+  }
+  if (state.scene !== s) return;
+  s.habitable = found;
+  for (const h of found) {
+    const st = s.stars.find((x) => x.address === h.address);
+    if (!st) continue;
+    const p = new THREE.Vector3(st.position_pc[0], st.position_pc[2], -st.position_pc[1]);
+    // A fixed size on screen, near or far.
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: RING, color: rgb(HABITABLE[h.habitability]), depthWrite: false, transparent: true, sizeAttenuation: false }));
+    m.position.copy(p);
+    m.scale.setScalar(h.habitability === 'temperate' ? 0.045 : 0.028);
+    scene.add(m);
+    pickables.push({ object: m, go: () => go(st.address), label: `${st.name} · ${h.habitability} world` });
+    if (h.habitability === 'temperate' && !st.centre) labels.push({ position: p, text: `${st.name} ✓` });
+  }
+  panel(s);
 }
 
 function circle(r, n) {
@@ -282,7 +324,9 @@ function drawSystem(s, reframe) {
     m.position.copy(p);
     scene.add(m);
     pickables.push({ object: m, go: () => go(b.address), label: `${b.name} · ${b.class}${b.made ? ' · made' : ''}` });
-    if (!around(b) || b.made || b.focus) labels.push({ position: p.clone().add(new THREE.Vector3(0, size, 0)), text: b.name + (b.focus ? ' ★' : ''), dim: !b.made && !b.focus });
+    const r = (s.rings || []).find((x) => x.parent === b.key);
+    if (r) addRing(r, size, p);
+    if (!around(b) || b.made || b.focus || b.habitable) labels.push({ position: p.clone().add(new THREE.Vector3(0, size, 0)), text: b.name + (b.focus ? ' ★' : '') + (b.habitable === 'temperate' ? ' ✓' : b.habitable ? ' ~' : ''), dim: !b.made && !b.focus && !b.habitable });
   }
   for (const belt of s.belts) {
     const pk = where.get(belt.parent) || new THREE.Vector3();
@@ -294,6 +338,26 @@ function drawSystem(s, reframe) {
     scene.add(m);
   }
   if (reframe) aim(Math.min(extent, 60) * 0.75, [0.2, 0.7, 0.9]);
+}
+
+// A planet's rings around a body drawn `size` across at `at`: in its equator, tilted with it;
+// bright ice as opaque as its optical depth makes it, in bands with a gap two thirds out (as
+// moons' resonances clear Saturn's Cassini division); faint dust as a whisper.
+function addRing(r, size, at) {
+  const group = new THREE.Group();
+  const bands = r.icy ? 28 : 1;
+  const base = r.icy ? Math.min(0.8, 1 - Math.exp(-2 * r.depth)) : 0.07;
+  for (let k = 0; k < bands; k++) {
+    const t0 = k / bands, t1 = (k + 1) / bands;
+    const wave = r.icy ? 0.55 + 0.45 * Math.sin(k * 2.7 + r.depth * 10) ** 2 : 1;
+    const gap = r.icy && Math.abs((t0 + t1) / 2 - 0.66) < 0.025 ? 0.12 : 1;
+    const ri = (r.inner_r + (r.outer_r - r.inner_r) * t0) * size, ro = (r.inner_r + (r.outer_r - r.inner_r) * t1) * size;
+    group.add(new THREE.Mesh(new THREE.RingGeometry(ri, ro, 160), new THREE.MeshBasicMaterial({ color: r.icy ? 0xd2c3a5 : 0x96785f, transparent: true, opacity: base * wave * gap, side: THREE.DoubleSide, depthWrite: false })));
+  }
+  group.rotation.x = -Math.PI / 2 + (r.tilt_deg * Math.PI) / 180;
+  group.position.copy(at);
+  scene.add(group);
+  return group;
 }
 
 function drawBody(s, reframe) {
@@ -314,7 +378,8 @@ function drawBody(s, reframe) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }));
     scene.add(m);
     spinning = m;
-    if (reframe) aim(1.1, [0.0, 0.25, 1.0]);
+    if (s.ring) addRing(s.ring, 1, new THREE.Vector3());
+    if (reframe) aim(s.ring && s.ring.icy ? 2.2 : 1.1, [0.0, 0.25, 1.0]);
   }
 }
 
@@ -330,13 +395,14 @@ function panel(s) {
     p.innerHTML = head(s.name, s.address) + facts([['Type', s.kind], ['Stars', `${s.stellar_msun.toExponential(2)} M☉`], ['Disk to', `${s.radius_kpc.toFixed(1)} kpc`]]) +
       `<div class="note">Gold marks: systems made here (or the default star). Pick one to see the stars around it.</div>`;
   } else if (s.level === 'stars') {
-    p.innerHTML = head('Neighbourhood', s.address) + facts([['Stars', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Ring', '10 light-years']]) +
-      `<div class="row"><button id="tosys">Open this system</button></div><div class="note">Pick any star to open its system: it is generated as you look.</div>`;
+    const n = (k) => (s.habitable ? String(s.habitable.filter((h) => h.habitability === k).length) : '…');
+    p.innerHTML = head('Neighbourhood', s.address) + facts([['Stars', `${s.stars.length} within ${(s.radius_pc * 3.2616).toFixed(0)} ly`], ['Temperate', n('temperate')], ['Open water', n('habitable')], ['Ring', '10 light-years']]) +
+      `<div class="row"><button id="tosys">Open this system</button></div><div class="note">Pick any star to open its system: it is generated as you look. Circled: systems with a world of open water, <span style="color:#6ee68c">green</span> temperate like Earth, <span style="color:#5aaadc">blue</span> colder or hotter.</div>`;
     $('tosys').onclick = () => go(s.address);
   } else if (s.level === 'system') {
     const star = s.stars[0];
     p.innerHTML = head(s.name, s.address) + facts([['Star', star ? `${star.spectral}, ${Math.round(star.temperature_k)} K` : '—'], ['Age', `${s.age_gyr.toFixed(2)} Gyr`], ['Bodies', String(s.bodies.length)]]) +
-      `<div class="row"><button id="near">Stars around</button></div><div class="note">Distances are squeezed (√ of AU); moons on rings by their planet. ★ is the system's most Earth-like body.</div>`;
+      `<div class="row"><button id="near">Stars around</button></div><div class="note">Distances are squeezed (√ of AU); moons on rings by their planet. ★ is the system's most Earth-like body; ✓ a temperate world, ~ one with open water but colder or hotter.</div>`;
     $('near').onclick = () => go(s.address, { stars: true });
   } else if (s.level === 'body') {
     const layerOpts = s.layers.map((l) => `<option ${l === state.layer ? 'selected' : ''}>${esc(l)}</option>`).join('');

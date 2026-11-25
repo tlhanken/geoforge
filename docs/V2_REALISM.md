@@ -464,6 +464,16 @@ Their gaps:
 - Tilts wander or hold by a simple rule (a moon's pull against the star's); the chaotic
   zones themselves are not computed. Thermal tides are worked out for air near a bar and
   scaled past 5 bar by one fit to Venus, (p/5 bar)².
+- The climate estimate behind the default world and the viewer's flags is the band energy
+  balance at sea level, taken 2.5 K colder for the land: within ~2 K of the climate layer's
+  global mean on seven worlds (−6 to +20 °C), but blind to where land lies and how high.
+- Moons: regular systems by mass share and a lopsided split; captured giants (Triton) by a
+  fixed third of ice giants; irregular moons as one population each; no moons of dwarf
+  planets, no resonant chains (Io–Europa–Ganymede), no moon migration over time.
+- Rings: one ring system per giant, dust or ice by a draw and the cold; no narrow ringlets
+  (Uranus's), no shepherds' or resonances' gaps beyond the one the viewer draws, no rocky
+  planet's short-lived ring from a moon torn apart.
+- Zodiacal light by belt counts against the Solar System's; its shape is Earth's.
 - A giant's light turns its rocky planets into Venuses, but icy moons do not thaw: icy
   interiors ignore starlight.
 - Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping
