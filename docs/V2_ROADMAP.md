@@ -446,6 +446,40 @@ a population, captured specks beside asteroid belts. Every giant has rings, a qu
 ones bright ice (`Population::optical_depth`: Saturn's 0.4), drawn banded in the viewer. The
 star chart shows the zodiacal light and gegenschein, scaled by the system's belts.
 
+## 8j. Compact objects, asteroids, fictional materials, nebulae, galaxy centres — done (November 2026)
+OpenSpec `compact-objects`, `asteroids-and-fictional-materials`, `nebulae-and-galaxy-centres`.
+- **Compact objects.** A dark bin after the 30 lit ones holds brown dwarfs (a stratum of their
+  own, one per four stars born, by their own mass function; their mass is left out of the
+  populations') and dark remnants. Universe 7's default star has 80,188 stars within 40 pc:
+  15,628 brown dwarfs, 1,885 white dwarfs, 49 neutron stars, 35 black holes. `remnants` tells
+  a neutron star's spin (birth period and field per star, dipole spin-down, death line,
+  magnetars, recycling), a black hole's horizon and whether either feeds. Systems with no
+  solid body open in the viewer.
+- **Asteroids.** `asteroids`: spectral types by distance against the frost line (the Sun's
+  belt's mass shares), meteorite analogs' elements with a ±15% spread, porosity and density by
+  size, families of a third of members sharing type and orbit. Belt mixes in the viewer and
+  CLI; belt members by address.
+- **Fictional materials.** `exotics.toml` in a universe directory (templated on creation)
+  lists materials and where they occur (asteroids by type, worlds by kind, nebulae by kind,
+  optionally round given stars) with a chance each; each material its own stream keyed by
+  name. Deposits and markers only, flagged fictional, in the viewer (pins, facts, finds,
+  flags, search) and `geoforge show`.
+- **Nebulae.** Two more bins hold the just dead (white dwarfs within 25 kyr, neutron stars and
+  black holes within 100 kyr) in 2 kpc cubes. `nebulae::near` finds H II regions round birth
+  events under 10 Myr with ionising stars, reflection nebulae round B stars in gas, dark clouds
+  over 10⁴ M☉, planetary nebulae and supernova remnants round the just dead; within 1 kpc of
+  the Sun's place in a Milky Way: ~21 H II regions, ~17 dark clouds, ~21 planetary nebulae, ~3
+  remnants (0.8 s for 1.5 kpc). Nebulae have no address level: they are named by their maker
+  and lead to its star (the change's design weighs it).
+- **Galaxy centres and globular clusters.** `nuclei`: black holes from classical bulges
+  (Kormendy & Ho) or stars (Reines & Volonteri), all galaxies over 10¹⁰ M☉ holding one and a
+  fifth at 10⁸; activity by an Eddington-ratio draw (a Milky Way-like galaxy: 2.5% Seyferts,
+  20% LINERs; an elliptical 1.5% and 33%); globular systems at 2.9×10⁻⁵ of the halo (a Milky
+  Way halo: ~176, median 3.2 kpc from the centre).
+- **Sky and viewer.** `geoforge sky` lists nebulae and clusters to magnitude 9 and draws them
+  toned by surface brightness; the viewer glows nebulae round the home star, lists those round
+  a system, shows galaxy centres and clusters and rings active galaxies.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often

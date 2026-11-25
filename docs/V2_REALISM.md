@@ -479,6 +479,26 @@ Their gaps:
 - Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping
   and no water lost while the young star was bright.
 - A pulsar's wind does not heat its planets.
+- Brown dwarfs' mass (~2% of the stars') is not counted in the populations' mass. Late M
+  dwarfs come out too faint: the Torres bolometric correction fails below ~3200 K, and only
+  below 2000 K is it replaced (by the L/T/Y sequence).
+- Asteroids: types by the Sun's belt's shares against the frost line, wherever the belt is;
+  elements are each type's meteorite analog with a ±15% spread, not a body's own history;
+  large bodies are made of their meteorites too, though they would have differentiated. Belt
+  sizes follow one power law, so Sol's Kuiper belt gets ~1,000 bodies over 1000 km (real ~10).
+- Nebulae: H II regions are spheres in 100 cm⁻³ gas grown at 10 km/s, lasting while their
+  group is under 10 Myr; reflection nebulae need a cloud or a group under 10 Myr; a
+  supernova remnant's light is the Crab's scaled by age. Brightnesses are good to a magnitude
+  or two. Within 1 kpc of the Sun's place: ~21 H II regions (Sharpless-like regions within a
+  kiloparsec number a few tens), ~21 planetary nebulae (local surveys: a few tens), ~3
+  supernova remnants (Vela, the Cygnus Loop and a few others). The brightest H II regions
+  (V 3–5 within 2 kpc) are about twice as many as the sky's (Orion, Carina, Lagoon,
+  North America).
+- Galaxy centres: black holes by scaling relations with their scatter; activity by a drawn
+  Eddington ratio, classed by luminosity alone (Ho 2008's Seyferts, by line ratios, include
+  fainter nuclei, so ours are fewer: 2.5% of Milky Way-like galaxies against his ~10%).
+  Globular systems: the Milky Way's ~176 against ~160, but nearer its centre (median 3.2 kpc
+  against ~5); their stars are not generated one by one.
 
 ### Other worlds' circulation
 

@@ -4,7 +4,7 @@ The working queue, highest payoff first. Detail and history live in `V2_ROADMAP.
 named in brackets) and the scorecards in `V2_REALISM.md`. Accuracy comes first for now:
 slower is fine. Speed is item 15.
 
-First, as of 24 November 2026: the viewer, names, the sky above one galaxy, mountains,
+First, as of 25 November 2026: the viewer, names, the sky above one galaxy, mountains,
 rivers and other worlds; then the climate and speed items below them.
 
 ## 17. A visualization tool
@@ -13,6 +13,22 @@ An interactive viewer for a world:
 - toggle keys and overlays;
 - inspect a cell's values through every layer;
 - step through the almanac's days.
+
+## 12e. Compact objects, asteroids, fictional materials, nebulae, galaxy centres — done
+(OpenSpec `compact-objects`, `asteroids-and-fictional-materials`, `nebulae-and-galaxy-centres`)
+- Done: brown dwarfs (a quarter as many as stars), neutron stars and black holes in the
+  starfield, their spins, horizons and feeding told, and their systems open in the viewer;
+  belt members with spectral types, meteorite elements, porosity and families; a universe's
+  fictional materials (`exotics.toml`) as deposits and markers only; nebulae of five kinds
+  where their makers are (the just dead as stars of their own bins); galaxy centres (black
+  holes, active nuclei, jets) and globular clusters; nebulae and clusters on the star chart.
+- Next: a broken size law for belts (Sol's Kuiper belt now gets ~1,000 bodies over 1000 km,
+  the real one ~10); late M dwarfs' bolometric correction (they come out too faint, the
+  Torres fit failing below ~3200 K); field core-collapse supernovae outside birth events'
+  remnants counted once; globular clusters' and the galaxy centre's stars drawn one by one;
+  an active nucleus's light in other galaxies' brightness and a quasar's in the sky;
+  fictional materials placed in a system's star or rings; nebulae given an address if they
+  ever gain stored edits (see the change's design).
 
 ## 12d. Temperate defaults, habitable systems, moons and rings — done (OpenSpec `habitable-moons-rings`)
 - Done: a climate estimate before generating and habitability grades; default worlds are

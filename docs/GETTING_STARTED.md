@@ -59,7 +59,31 @@ The viewer zooms from the universe's galaxies into a galaxy (its shape, the syst
 it), the stars around a system, the system's orbits and a body: its true colour on a globe
 or a flat map, and every layer and view once it is generated. Search finds names among what
 is made or nearby; type an address to go anywhere. A body you find can be made, and its
-layers generated, from its panel.
+layers generated, from its panel. Round the home star the galaxy view glows with nebulae
+(emission, reflection, planetary, supernova remnants, dark clouds) and shows the galaxy's
+globular clusters and centre; each tells about itself and leads to its star.
+
+## Your setting's own materials
+
+A universe directory holds `exotics.toml`, a commented list of fictional materials. Each
+names where it is found — in asteroids by type, on worlds by kind, in nebulae by kind,
+optionally only round certain stars — with a chance per candidate:
+
+```toml
+[[material]]
+name = "Xylarium"
+note = "a metastable superheavy alloy"
+colour = "#7fffd4"
+
+[[material.found]]
+in = "asteroid"     # asteroid | world | nebula
+kinds = ["M"]       # S C M V P D icy | rocky icy ocean giant small | emission reflection dark planetary supernova_remnant
+chance = 0.002
+```
+
+They appear only as deposits and markers, always flagged fictional: pinned on a body's
+globe, listed in its system and in `geoforge show`, marked in the star view and found by
+search. Each material draws from its own stream, so the list changes nothing else.
 
 ## Ask about a place
 
