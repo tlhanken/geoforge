@@ -470,7 +470,7 @@ mod tests {
             inner_au: 2.1,
             outer_au: 3.3,
             count_estimate: 1e6,
-            size_law: PowerLaw { min_km: 1.0, max_km: 900.0, exponent: 3.5 },
+            size_law: PowerLaw { min_km: 1.0, max_km: 900.0, exponent: 3.5, knee: None },
             composition: Composition::from_weights(&[(Species::Silicate, 1.0 - ice), (Species::Ice, ice)]),
         }
     }
@@ -541,5 +541,8 @@ mod tests {
         assert!((0.02..0.12).contains(&(metal as f64 / n as f64)), "{metal} metal of {n}");
         let kuiper = sol.by_name("Kuiper Belt").unwrap().key;
         assert_eq!(crate::context::belt_member_made(&sol, kuiper, 3).unwrap().1.taxon, Taxon::Icy);
+        // About ten Kuiper belt objects over 1000 km, as the real belt has.
+        let size = |i: u64| 2.0 * crate::context::belt_member(&sol, kuiper, i).unwrap().exterior.radius_km;
+        assert!(size(8) > 1000.0 && size(12) < 1000.0 && size(0) > 1500.0, "{} {} {}", size(0), size(8), size(12));
     }
 }

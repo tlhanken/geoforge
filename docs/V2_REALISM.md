@@ -479,13 +479,15 @@ Their gaps:
 - Red dwarf worlds get the same air and water rules as Sun-like ones: no flare stripping
   and no water lost while the young star was bright.
 - A pulsar's wind does not heat its planets.
-- Brown dwarfs' mass (~2% of the stars') is not counted in the populations' mass. Late M
-  dwarfs come out too faint: the Torres bolometric correction fails below ~3200 K, and only
-  below 2000 K is it replaced (by the L/T/Y sequence).
+- Brown dwarfs' mass (~2% of the stars') is not counted in the populations' mass. M dwarfs'
+  bolometric corrections come from nearby stars (Ross 128, Proxima, Wolf 359, TRAPPIST-1:
+  within 0.3 mag), interpolated in temperature; metal-poor M dwarfs (Barnard's star) are
+  bluer than the table and come out ~0.5 mag faint.
 - Asteroids: types by the Sun's belt's shares against the frost line, wherever the belt is;
   elements are each type's meteorite analog with a ±15% spread, not a body's own history;
-  large bodies are made of their meteorites too, though they would have differentiated. Belt
-  sizes follow one power law, so Sol's Kuiper belt gets ~1,000 bodies over 1000 km (real ~10).
+  large bodies are made of their meteorites too, though they would have differentiated. Outer
+  belts and Trojans steepen past a knee (Sol's Kuiper belt: 10 bodies over 1000 km; its largest
+  ~1,800 km where Pluto and Eris are 2,400); main belts keep one law (6 over 500 km, real 3).
 - Nebulae: H II regions are spheres in 100 cm⁻³ gas grown at 10 km/s, lasting while their
   group is under 10 Myr; reflection nebulae need a cloud or a group under 10 Myr; a
   supernova remnant's light is the Crab's scaled by age. Brightnesses are good to a magnitude

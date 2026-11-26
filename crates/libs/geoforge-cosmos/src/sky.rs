@@ -291,16 +291,26 @@ pub fn absolute_v(star: &Star) -> Option<f64> {
 /// The Sun's absolute bolometric magnitude (IAU 2015 B2).
 const SOLAR_BOLOMETRIC: f64 = 4.74;
 
+/// M dwarfs' visual bolometric corrections by temperature, from nearby stars' luminosities
+/// and magnitudes (Lacaille 8760, Lalande 21185, Luyten's star, Ross 128, Proxima, Wolf 359,
+/// TRAPPIST-1; with Pecaut & Mamajek 2013's sequence), joined to Torres's fit at 3900 K and to
+/// the L dwarfs at 2000 K.
+const M_DWARFS: [(f64, f64); 9] = [(2000.0, -6.0), (2400.0, -5.75), (2570.0, -5.45), (2800.0, -4.4), (2970.0, -3.6), (3190.0, -2.65), (3380.0, -2.1), (3550.0, -1.6), (3900.0, -1.29)];
+
 /// Visual bolometric correction at effective temperature `t` K: Torres (2010)'s fit to
-/// Flower (1996), −0.07 for the Sun.
+/// Flower (1996) above 3900 K, −0.07 for the Sun; M dwarfs' from [`M_DWARFS`] below it (the
+/// fit runs away there: −6.9 at 2800 K against Wolf 359's −4.4); brown dwarfs' below 2000 K.
 #[must_use]
 pub fn bolometric_correction(t: f64) -> f64 {
     // Brown dwarfs, below 2000 K, from Pecaut & Mamajek (2013)'s table: −6 at the L
     // dwarfs' start, falling 5 mag a halving of temperature (a 1000 K T dwarf at M_V ≈ 28).
-    // (The fit itself is good only above ~3200 K: late M dwarfs come out up to a few
-    // magnitudes too faint.)
     if t < 2000.0 {
         return -6.0 - 5.0 * (2000.0 / t.max(100.0)).log2();
+    }
+    if t < 3900.0 {
+        let w = M_DWARFS.windows(2).find(|w| t <= w[1].0).unwrap_or(&M_DWARFS[M_DWARFS.len() - 2..]);
+        let ((t0, b0), (t1, b1)) = (w[0], w[1]);
+        return b0 + (b1 - b0) * (t - t0) / (t1 - t0);
     }
     let x = t.clamp(2000.0, 60_000.0).log10();
     let c: &[f64] = if x < 3.70 {
@@ -334,9 +344,16 @@ mod tests {
 
     #[test]
     fn bolometric_corrections() {
-        for (t, bc) in [(5772.0, -0.07), (3500.0, -2.0), (10_000.0, -0.4), (30_000.0, -2.9)] {
+        for (t, bc) in [(5772.0, -0.07), (3500.0, -1.75), (10_000.0, -0.4), (30_000.0, -2.9)] {
             assert!((bolometric_correction(t) - bc).abs() < 0.35, "{t} K: {}", bolometric_correction(t));
         }
+        // M dwarfs from their luminosities and magnitudes: Ross 128, Proxima, Wolf 359,
+        // TRAPPIST-1; continuous where the table meets the fit and the L dwarfs.
+        for (t, bc) in [(3190.0, -2.65), (2980.0, -3.77), (2800.0, -4.42), (2566.0, -5.45)] {
+            assert!((bolometric_correction(t) - bc).abs() < 0.3, "{t} K: {}", bolometric_correction(t));
+        }
+        assert!((bolometric_correction(3899.999) - bolometric_correction(3900.0)).abs() < 0.02);
+        assert!((bolometric_correction(1999.999) - bolometric_correction(2000.0)).abs() < 0.01);
     }
 
     fn sun(seed: u64) -> Observer {

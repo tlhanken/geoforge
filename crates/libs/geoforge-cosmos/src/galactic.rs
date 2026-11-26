@@ -247,14 +247,15 @@ struct Placed {
 
 /// The Trojan swarms at a giant's L4 and L5, as one belt: dark, icy rock, the largest a
 /// hundred to 250 km (Jupiter's Hektor, 225 km); about as many as a main belt for a gas giant,
-/// up to ten times more for an ice giant's (Sheppard & Trujillo 2006).
+/// up to ten times more for an ice giant's (Sheppard & Trujillo 2006). Past 50 km the sizes
+/// steepen to D^−5.5, so a gas giant's swarm has a score over 100 km (Jupiter's: ~20).
 pub(crate) fn trojans(d: &mut Draw, key: Key, host: Key, giant: &str, (inner_au, outer_au): Belt) -> OrbitalNode {
     let count = if inner_au > 10.0 { d.range(5.5, 7.0) } else { d.range(5.0, 6.0) };
     let pop = Population {
         inner_au,
         outer_au,
         count_estimate: 10f64.powf(count),
-        size_law: PowerLaw { min_km: 1.0, max_km: d.range(100.0, 250.0), exponent: 3.0 },
+        size_law: PowerLaw::new(1.0, d.range(100.0, 250.0), 3.0).with_knee(50.0, 5.5),
         composition: Composition::from_weights(&[(Species::Silicate, 0.6), (Species::Ice, 0.4)]),
     };
     OrbitalNode { key, name: format!("{giant} Trojans"), parent: Some(host), node: NodeKind::Belt(pop), elements: None, precession: None }
@@ -339,7 +340,7 @@ fn belts(d: &mut Draw, keys: &mut KeyAllocator, host: Key, sys_name: &str, arch:
             inner_au: 0.0,
             outer_au: 0.0,
             count_estimate: 10f64.powf(d.range(5.5, 6.5)),
-            size_law: PowerLaw { min_km: 1.0, max_km: d.range(400.0, 950.0), exponent: 3.5 },
+            size_law: PowerLaw { min_km: 1.0, max_km: d.range(400.0, 950.0), exponent: 3.5, knee: None },
             composition: Composition::from_weights(&[(Species::Silicate, 0.75), (Species::Iron, 0.15), (Species::Ice, 0.10)]),
         };
         out.push(make(keys, format!("{sys_name} Belt"), b, pop));
@@ -349,7 +350,8 @@ fn belts(d: &mut Draw, keys: &mut KeyAllocator, host: Key, sys_name: &str, arch:
             inner_au: 0.0,
             outer_au: 0.0,
             count_estimate: 10f64.powf(d.range(8.0, 9.0)),
-            size_law: PowerLaw { min_km: 1.0, max_km: d.range(1000.0, 2500.0), exponent: 3.0 },
+            // Steepening past 100 km as the Kuiper belt does: ~10 over 1000 km per 10⁹.
+            size_law: PowerLaw::new(1.0, d.range(1000.0, 2500.0), 3.0).with_knee(100.0, 5.0),
             composition: Composition::from_weights(&[(Species::Ice, 0.6), (Species::Silicate, 0.4)]),
         };
         out.push(make(keys, format!("{sys_name} Outer Belt"), b, pop));

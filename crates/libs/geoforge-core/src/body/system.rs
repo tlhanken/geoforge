@@ -202,12 +202,23 @@ pub struct BodyExterior {
     pub obliquity_deg: f64,
 }
 
-/// Size distribution of a belt or ring population.
+/// Size distribution of a belt or ring population: dN/dD ∝ D^−q from `min_km` to `max_km`,
+/// steepening past a knee if it has one (the Kuiper belt's and Trojans' largest bodies are
+/// far fewer than one power law gives: Fraser et al. 2014).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PowerLaw {
     pub min_km: f64,
     pub max_km: f64,
     /// Differential exponent q in dN/dD ∝ D^-q.
+    pub exponent: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knee: Option<Knee>,
+}
+
+/// Where a size distribution steepens, and its differential exponent beyond.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Knee {
+    pub km: f64,
     pub exponent: f64,
 }
 
@@ -221,12 +232,64 @@ pub struct Population {
 }
 
 impl PowerLaw {
+    /// One power law, no knee.
+    #[must_use]
+    pub fn new(min_km: f64, max_km: f64, exponent: f64) -> Self {
+        Self { min_km, max_km, exponent, knee: None }
+    }
+
+    /// This law, steepening to differential `exponent` past `km`.
+    #[must_use]
+    pub fn with_knee(self, km: f64, exponent: f64) -> Self {
+        Self { knee: Some(Knee { km, exponent }), ..self }
+    }
+
     /// Mean of D² over the distribution, km².
     #[must_use]
     pub fn mean_square_km2(&self) -> f64 {
-        // ∫ D^k dD from min to max, k ≠ −1 (or ln at −1).
-        let moment = |k: f64| if (k + 1.0).abs() < 1e-9 { (self.max_km / self.min_km).ln() } else { (self.max_km.powf(k + 1.0) - self.min_km.powf(k + 1.0)) / (k + 1.0) };
-        moment(2.0 - self.exponent) / moment(-self.exponent)
+        // ∫ D^k · n(D) dD over each piece, n continuous at the knee.
+        let span = |a: f64, b: f64, k: f64| {
+            if b <= a {
+                0.0
+            } else if (k + 1.0).abs() < 1e-9 {
+                (b / a).ln()
+            } else {
+                (b.powf(k + 1.0) - a.powf(k + 1.0)) / (k + 1.0)
+            }
+        };
+        let moment = |m: f64| match self.knee.filter(|k| k.km > self.min_km && k.km < self.max_km) {
+            None => span(self.min_km, self.max_km, m - self.exponent),
+            Some(k) => span(self.min_km, k.km, m - self.exponent) + k.km.powf(k.exponent - self.exponent) * span(k.km, self.max_km, m - k.exponent),
+        };
+        moment(2.0) / moment(0.0)
+    }
+
+    /// How many of `total` bodies (all over `min_km`) are larger than `d_km`.
+    #[must_use]
+    pub fn count_above(&self, total: f64, d_km: f64) -> f64 {
+        let d = d_km.max(self.min_km);
+        if d >= self.max_km {
+            return 0.0;
+        }
+        let plain = |d: f64| total * (d / self.min_km).powf(1.0 - self.exponent);
+        match self.knee {
+            Some(k) if d > k.km && k.km > self.min_km => plain(k.km) * (d / k.km).powf(1.0 - k.exponent),
+            _ => plain(d),
+        }
+    }
+
+    /// The diameter of the `rank`-th largest (1 the largest) of `total` bodies, km.
+    #[must_use]
+    pub fn diameter_at_rank(&self, total: f64, rank: f64) -> f64 {
+        let plain = self.min_km * (total / rank).powf(1.0 / (self.exponent - 1.0));
+        let d = match self.knee {
+            Some(k) if k.km > self.min_km && plain > k.km => {
+                let at_knee = total * (k.km / self.min_km).powf(1.0 - self.exponent);
+                k.km * (at_knee / rank).powf(1.0 / (k.exponent - 1.0))
+            }
+            _ => plain,
+        };
+        d.min(self.max_km)
     }
 }
 
@@ -315,6 +378,22 @@ impl SolarSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The Kuiper belt's sizes: 10⁹ over 1 km and 10⁵ over 100 km by D⁻³, then D⁻⁵ to ~10
+    /// over 1000 km; ranks and counts agree, the law is continuous at the knee, and steepening
+    /// lowers the mean square.
+    #[test]
+    fn a_knee_steepens_the_largest() {
+        let plain = PowerLaw::new(1.0, 2400.0, 3.0);
+        let kuiper = plain.with_knee(100.0, 5.0);
+        assert!((kuiper.count_above(1e9, 100.0) / 1e5 - 1.0).abs() < 1e-9);
+        assert!((kuiper.count_above(1e9, 1000.0) - 10.0).abs() < 1e-6 && (plain.count_above(1e9, 1000.0) - 1000.0).abs() < 1e-6);
+        assert!((kuiper.diameter_at_rank(1e9, 10.0) - 1000.0).abs() < 1e-6);
+        assert!((kuiper.diameter_at_rank(1e9, 1e5) - 100.0).abs() < 1e-6 && (kuiper.diameter_at_rank(1e9, 1e7) - 10.0).abs() < 1e-6);
+        assert_eq!(kuiper.diameter_at_rank(1e9, 1.0), 2400.0_f64.min(kuiper.diameter_at_rank(1e9, 1.0)));
+        assert!(kuiper.mean_square_km2() < plain.mean_square_km2());
+        assert_eq!(kuiper.count_above(1e9, 3000.0), 0.0);
+    }
     use crate::body::{Species, AU_KM};
 
     /// Saturn's rings, as the Solar System gives them: an optical depth of ~0.4 on average.
@@ -324,13 +403,13 @@ mod tests {
             inner_au: 74_658.0 / AU_KM,
             outer_au: 136_775.0 / AU_KM,
             count_estimate: 1.6e19,
-            size_law: PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0 },
+            size_law: PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0, knee: None },
             composition: Composition::from_weights(&[(Species::Ice, 1.0)]),
         };
         let tau = rings.optical_depth();
         assert!((0.3..0.6).contains(&tau), "{tau}");
         // A flat law's mean square is (max² + max·min + min²)/3.
-        let flat = PowerLaw { min_km: 1.0, max_km: 2.0, exponent: 0.0 };
+        let flat = PowerLaw { min_km: 1.0, max_km: 2.0, exponent: 0.0, knee: None };
         assert!((flat.mean_square_km2() - 7.0 / 3.0).abs() < 1e-12);
     }
 }

@@ -22,13 +22,20 @@ An interactive viewer for a world:
   fictional materials (`exotics.toml`) as deposits and markers only; nebulae of five kinds
   where their makers are (the just dead as stars of their own bins); galaxy centres (black
   holes, active nuclei, jets) and globular clusters; nebulae and clusters on the star chart.
-- Next: a broken size law for belts (Sol's Kuiper belt now gets ~1,000 bodies over 1000 km,
-  the real one ~10); late M dwarfs' bolometric correction (they come out too faint, the
-  Torres fit failing below ~3200 K); field core-collapse supernovae outside birth events'
-  remnants counted once; globular clusters' and the galaxy centre's stars drawn one by one;
-  an active nucleus's light in other galaxies' brightness and a quasar's in the sky;
-  fictional materials placed in a system's star or rings; nebulae given an address if they
-  ever gain stored edits (see the change's design).
+- Also done since: belt sizes steepen past a knee (Sol's Kuiper belt has ~10 bodies over
+  1000 km, Trojans ~20 over 100 km; `PowerLaw::with_knee`); M dwarfs' bolometric correction
+  from nearby stars (they had come out 1–4 magnitudes too faint below ~3200 K).
+- Next, in the viewer: a "next habitable system" jump; a body's kind told as icy, ocean or
+  rocky (an icy moon now reads "rocky"); nebulae drawn on the star view's backdrop, not only
+  listed; the galaxy centre's black hole drawn so it shows against the bulge.
+- Next, in the cosmos: globular clusters' and the galaxy centre's stars generated one by
+  one; an active nucleus's light in other galaxies' brightness and a quasar's in the sky;
+  field core-collapse supernovae outside birth events counted once; fictional materials in
+  a system's star or rings; nebulae given an address if they ever gain stored edits (see the
+  change's design); the main belt's own knee near 100 km (its largest few are now slightly
+  too many).
+- After these and before the climate items: mountains and rivers (10, 11), then winds,
+  seasons, monsoons and the rain and temperature misses (2, 4, 5, 7), then speed (15).
 
 ## 12d. Temperate defaults, habitable systems, moons and rings — done (OpenSpec `habitable-moons-rings`)
 - Done: a climate estimate before generating and habitability grades; default worlds are

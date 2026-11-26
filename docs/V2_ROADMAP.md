@@ -479,6 +479,9 @@ OpenSpec `compact-objects`, `asteroids-and-fictional-materials`, `nebulae-and-ga
 - **Sky and viewer.** `geoforge sky` lists nebulae and clusters to magnitude 9 and draws them
   toned by surface brightness; the viewer glows nebulae round the home star, lists those round
   a system, shows galaxy centres and clusters and rings active galaxies.
+- **Follow-ups.** Size laws with a knee (`PowerLaw::with_knee`, `count_above`,
+  `diameter_at_rank`): Kuiper belts and Trojans steepen past 100 and 50 km. M dwarfs'
+  bolometric corrections from nearby stars replace Torres's fit below 3900 K.
 
 ## 8b. A system's local environment — next
 

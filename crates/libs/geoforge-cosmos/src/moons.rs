@@ -136,7 +136,7 @@ pub(crate) fn moons(d: &mut Draw, keys: &mut KeyAllocator, host: &Host<'_>, big_
                 inner_au: 0.1 * host.hill_km / AU_KM,
                 outer_au: 0.5 * host.hill_km / AU_KM,
                 count_estimate: count,
-                size_law: PowerLaw { min_km: 1.0, max_km: d.range(60.0, 200.0), exponent: 3.5 },
+                size_law: PowerLaw { min_km: 1.0, max_km: d.range(60.0, 200.0), exponent: 3.5, knee: None },
                 composition: Composition::from_weights(&[(Species::Silicate, 0.5), (Species::Ice, 0.5)]),
             }),
             elements: None,
@@ -171,7 +171,7 @@ pub(crate) fn rings(d: &mut Draw, key: Key, host: &Host<'_>, equilibrium_k: f64)
             p.radius_km * d.range(1.15, 1.3),
             outer,
             10f64.powf(d.range(-0.7, 0.2)),
-            PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0 },
+            PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0, knee: None },
             Composition::from_weights(&[(Species::Ice, 0.95), (Species::Silicate, 0.05)]),
         )
     } else {
@@ -179,7 +179,7 @@ pub(crate) fn rings(d: &mut Draw, key: Key, host: &Host<'_>, equilibrium_k: f64)
             p.radius_km * d.range(1.25, 1.4),
             p.radius_km * d.range(1.8, 3.2),
             10f64.powf(d.range(-6.5, -5.0)),
-            PowerLaw { min_km: 1e-9, max_km: 1e-7, exponent: 3.5 },
+            PowerLaw { min_km: 1e-9, max_km: 1e-7, exponent: 3.5, knee: None },
             Composition::from_weights(&[(Species::Silicate, 0.8), (Species::Ice, 0.2)]),
         )
     };

@@ -172,7 +172,7 @@ pub fn at(seed: Seed, jd_tt: f64) -> SolarSystem {
                 inner_au: 74_658.0 / AU_KM,
                 outer_au: 136_775.0 / AU_KM,
                 count_estimate: 1.6e19,
-                size_law: PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0 },
+                size_law: PowerLaw { min_km: 1e-5, max_km: 0.01, exponent: 3.0, knee: None },
                 composition: Composition::from_weights(&[(Species::Ice, 0.95), (Species::Silicate, 0.05)]),
             };
             nodes.push(OrbitalNode { key: key(), name: "Saturn's rings".into(), parent: Some(planet), node: NodeKind::Ring(rings), elements: None, precession: None });
@@ -188,18 +188,20 @@ pub fn at(seed: Seed, jd_tt: f64) -> SolarSystem {
                 inner_au: 2.1,
                 outer_au: 3.3,
                 count_estimate: 1.5e6,
-                size_law: PowerLaw { min_km: 1.0, max_km: 939.4, exponent: 3.0 },
+                size_law: PowerLaw { min_km: 1.0, max_km: 939.4, exponent: 3.0, knee: None },
                 composition: Composition::from_weights(&[(Species::Silicate, 0.75), (Species::Iron, 0.15), (Species::Ice, 0.10)]),
             };
             nodes.push(OrbitalNode { key: key(), name: "Main Belt".into(), parent: Some(sun), node: NodeKind::Belt(belt), elements: None, precession: None });
         }
     }
-    // ~10⁵ over 100 km; with dN/dD ∝ D⁻³ that is ~10⁹ over 1 km. Pluto is the largest.
+    // ~10⁵ over 100 km; with dN/dD ∝ D⁻³ that is ~10⁹ over 1 km. Past 100 km it steepens to
+    // D⁻⁵ (Fraser et al. 2014), leaving ~10 over 1000 km (Pluto, Eris, Haumea, Makemake,
+    // Gonggong, Quaoar, Sedna, Orcus…). Pluto is the largest.
     let kuiper = Population {
         inner_au: 30.0,
         outer_au: 50.0,
         count_estimate: 1e9,
-        size_law: PowerLaw { min_km: 1.0, max_km: 2376.6, exponent: 3.0 },
+        size_law: PowerLaw::new(1.0, 2376.6, 3.0).with_knee(100.0, 5.0),
         composition: Composition::from_weights(&[(Species::Ice, 0.6), (Species::Silicate, 0.4)]),
     };
     nodes.push(OrbitalNode { key: key(), name: "Kuiper Belt".into(), parent: Some(sun), node: NodeKind::Belt(kuiper), elements: None, precession: None });

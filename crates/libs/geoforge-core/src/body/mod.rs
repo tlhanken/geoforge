@@ -22,7 +22,7 @@ pub use context::{BodyContext, Irradiance, TidalPartner};
 pub use interior::{BodyInterior, Shell, ShellKind, TectonicRegime};
 pub use matter::{Composition, Phase, Species};
 pub use presets::Archetype;
-pub use system::{BodyClass, BodyExterior, Elements, Epoch, GalacticSite, NodeKind, OrbitalNode, Population, PowerLaw, Precession, SolarSystem, Star, StellarStage, SystemRoot};
+pub use system::{BodyClass, BodyExterior, Elements, Epoch, GalacticSite, Knee, NodeKind, OrbitalNode, Population, PowerLaw, Precession, SolarSystem, Star, StellarStage, SystemRoot};
 
 pub const EARTH_MASS_KG: f64 = 5.972e24;
 pub const EARTH_RADIUS_KM: f64 = 6371.0;

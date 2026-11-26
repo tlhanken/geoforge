@@ -204,11 +204,10 @@ pub fn frost_line_of(system: &SolarSystem, belt: Key) -> Option<f64> {
     host(system, system.node(belt)?.parent?).map(|h| h.frost_au)
 }
 
-/// Diameter of the `index`-th largest member: from N(>D) = count · (D/min)^(1−q).
+/// Diameter of the `index`-th largest member, by its size law
+/// ([`geoforge_core::body::PowerLaw::diameter_at_rank`]).
 fn member_diameter_km(pop: &Population, index: u64) -> f64 {
-    let law = pop.size_law;
-    let rank = index as f64 + 1.0;
-    (law.min_km * (pop.count_estimate / rank).powf(1.0 / (law.exponent - 1.0))).min(law.max_km)
+    pop.size_law.diameter_at_rank(pop.count_estimate, index as f64 + 1.0)
 }
 
 /// Any body by key: a node of the tree, or a belt member (as [`belt_member`] keys them).
