@@ -34,8 +34,9 @@ An interactive viewer for a world:
   a system's star or rings; nebulae given an address if they ever gain stored edits (see the
   change's design); the main belt's own knee near 100 km (its largest few are now slightly
   too many).
-- After these and before the climate items: mountains and rivers (10, 11), then winds,
-  seasons, monsoons and the rain and temperature misses (2, 4, 5, 7), then speed (15).
+- Next: the climate items — winds, seasons, monsoons and the rain and temperature misses
+  (2, 4, 5, 7): land runs wet (rivers carry 1.6× Earth's water to the sea) and deserts small —
+  then the rest of mountains and rivers (10, 11), then speed (15).
 
 ## 12d. Temperate defaults, habitable systems, moons and rings — done (OpenSpec `habitable-moons-rings`)
 - Done: a climate estimate before generating and habitability grades; default worlds are
@@ -95,14 +96,21 @@ Languages and cultures in `geoforge-names`.
   shelves amplifying it, as the Bay of Fundy and the Severn), giving mean and spring tidal
   range along every coast; then the water level by date in the almanac.
 
-## 10. Mountains [8e]
+## 10. Mountains [8e] — partly done (OpenSpec `basins-swells-and-dying-rivers`)
+- Done: peaks held below a strength limit (9 km × 1/g); basins and swells on old stable
+  crust; dynamic lift 1200 m. High ground averages 22% of land (Earth 27% with its ice) but
+  varies 8–42% between worlds.
 - Arc height and width from slab age and dip, not noise.
 - A volcanic gap over a flat slab.
 - Some sutures as sag basins rather than belts (the Amazon).
 - Island arcs maturing to 2–2.5 km.
 - Great escarpments (optional).
 
-## 11. Rivers and lakes
+## 11. Rivers and lakes — partly done (OpenSpec `basins-swells-and-dying-rivers`)
+- Done: basins near Earth's sizes (the five largest drain 19% of land, Earth 14%; was 28%);
+  dry basins close where their rivers die out (16.5% of land endorheic, Earth 18%; was 7%);
+  Earth's reference for large rivers corrected to 16.
+- Too many large rivers remain (32 over 10 000 m³/s): the climate's land is too wet (item 2).
 - Breach the lowest pass instead of filling.
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.

@@ -73,6 +73,54 @@ Drainage networks: on the Earth-like world at 1024×512, the exponent of the dra
 distribution (P(A ≥ a) ∝ a^−β) went from 0.66 without erosion to 0.54 with it; Earth's
 networks give about 0.43–0.45.
 
+### Terrain and drainage (November 2026)
+
+Seven worlds at 1024×512 — the Earth archetype (seed 42) and the default bodies of seeds
+2837, 42, 7, 1234, 99 and 12345 (other systems than the table above's) — before and after
+basins and swells, a peak limit and dying desert rivers. Means of the seven; basin shares are
+of each world's land, the largest scaled to Earth's 149 Mkm² of land:
+
+| Quantity | Before | After | Earth |
+|---|---|---|---|
+| Mean land elevation, m | 947 | 881 | 840 (ice included) |
+| Land above 1000 m | 0.249 | 0.221 | 0.27 (ice included) |
+| Highest point, m | 9868 (7330–11 767) | 8904 (6095–10 801) | 8849 |
+| Five largest basins, of land | 0.276 | 0.193 | 0.14 |
+| Largest basin, Earth-scaled, Mkm² | 14.8 | 8.4 | 6.9 (the Amazon) |
+| Land draining to no sea | 0.073 | 0.165 | 0.18 |
+| Lakes over 10 000 km² | 12.3 | 16.6 | 16 |
+| Rivers over 10 000 m³/s to the sea | 28.4 | 29.7 | 16 |
+
+- **Basins and swells.** Old stable crust (cratons, platforms, old orogens) carries broad
+  sags and rises ±~400 m, ~1200 km across (Africa's mosaic of the Congo, Chad, Taoudeni and
+  Kalahari basins between its swells), at 40% within 1000 km of an active margin, where a
+  sinking slab drags the interior down, and in full beyond 3500 km; forelands and rifts keep
+  their own shapes. The dynamic-topography lift far from margins is 1200 m, not 1800. Before,
+  flat interiors drained to one river: the largest basin was 2–6× the Amazon's share. (Swells
+  everywhere split the basins further, to 0.15 of land in the five largest, but put one over
+  Mesopotamia and the Amazon on Earth's real plates.) On Earth's plates the Amazon basin now
+  stands at 289 m (ETOPO1 74; the check allows 300) and Mesopotamia at 189. Run on
+  Earth's own one-degree map, the same hydrology gives the Amazon 6.2 Mkm², the Congo 3.8,
+  the Nile 3.6: the basin sizes come from the terrain, not the drainage code.
+- **Peaks held.** Ranges that rise while they erode stood 10–11.8 km high at Earth's
+  gravity; heights above three-quarters of 9 km (scaled by 1/g) now bend toward it. The two
+  worlds still over 10 km have 0.85× Earth's gravity.
+- **Dying desert rivers.** A basin of 20 000 km² or more whose land yields under 10 mm/yr
+  has no river to the sea (Lake Eyre's basin yields ~3 mm/yr; the Orange, at ~11, still
+  reaches it), so deserts drain to no sea as the Sahara's and Arabia's do. Before, two-thirds
+  or more of land drier than 250 mm drained to the sea by its slope. (Cutting each dry flow
+  line where its catchment reached 20 000 km² closed more land, 13%, but striped flat deserts
+  into parallel basins; whole basins are closed instead.)
+- **Branching.** Measured the same way over 3×10⁴–3×10⁶ km² of catchment, Earth's real
+  one-degree map gives β = 0.85 and the worlds 0.73–0.82 (one with small continents 1.36):
+  the 0.54-against-0.44 gap below compared a whole-land measure with the exponent inside a
+  single network, and does not stand.
+- **Still off.** Rivers over 10 000 m³/s are twice Earth's: the generated worlds run wet
+  (the Earth archetype's land gets 990 mm against 780, and its rivers carry ~60 000 km³ to the
+  sea against 37 000; most of the seven are warmer than Earth). The five largest basins are
+  still 1.4× Earth's share. Some worlds keep 42% of land above 1000 m (seed 1234, at 0.85 g),
+  others 8%.
+
 ## Other worlds
 
 Presets (`--archetype`, real sizes, orbits and air) at 2048×1024, seed 42. Elevation is
@@ -520,17 +568,17 @@ Their gaps:
    than 250 mm is 0.33–0.50, and the 20–30° belt gets 250–630 mm vs ~800. Their continents
    are larger and less broken up than Earth's, which leaves more interior. On Earth's own
    map the desert share is close (0.16 vs 0.14). Grassland is 0.11–0.15 vs 0.08.
-2. **Too many large rivers** (8–38 over 10 000 m³/s vs 8): continents here are bigger and
-   less broken up than Earth's, and runoff is somewhat high.
-3. **Drainage networks branch less than Earth's** (0.54 vs ~0.44); longer erosion flattens
-   the land without improving it, so the remaining gap is likely resolution.
-4. **Some worlds are very high** (s2837: ~60% of land above 1000 m), mostly where little
-   water leaves the continents standing high. Interiors far behind any active margin, on
-   slow plates, are lifted by dynamic topography (`plateau_m`); on Earth's real plates that
-   gives 39% of land above 500 m (ETOPO1 39%) and 11% above 1 km (20%), with Africa high
-   and the Amazon, Mesopotamia and Australia low.
+2. **Too many large rivers** (13–65 over 10 000 m³/s vs 16): the basins are now Earth's
+   sizes, so what is left is the climate's wet land (see *Terrain and drainage*).
+3. **Branching** no longer stands as a gap: measured alike, Earth's real map and the worlds
+   agree (*Terrain and drainage*).
+4. **High ground varies widely** between worlds (8–42% of land above 1000 m; Earth 27% with
+   its ice sheets). Interiors far behind any active margin, on slow plates, are lifted by
+   dynamic topography (`plateau_m`, now 1200 m); on Earth's real plates the old 1800 m gave
+   39% of land above 500 m (ETOPO1 39%) and 11% above 1 km (20%).
 5. **Ocean currents are a diagnostic gyre model**, not a simulation.
-6. **Closed basins depend on terrain** (endorheic land 0–15% vs Earth's 18%).
+6. **Closed basins** are 8–21% of land (mean 16.5%) vs Earth's 18%; a basin closes only as a
+   whole, not where a wetter river runs through a desert.
 7. **The gray greenhouse warms the tropics more than the poles** for added CO₂ (real CO₂
    forcing is flatter), so dim, CO₂-rich worlds have cold high latitudes.
 8. **Mercury's basins come out deep** (−7.6 km vs −5.4 km), and the Moon's highest highlands

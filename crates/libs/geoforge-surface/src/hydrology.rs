@@ -15,7 +15,9 @@
 //!    Depressions under ice (very cold) hold no lakes.
 //! 4. **Rivers**: discharge accumulated downstream; reaches above a threshold form the
 //!    network, ordered by Strahler number.
-//! 5. **Watersheds**: each cell's terminal outlet, the sea or a closed lake.
+//! 5. **Watersheds**: each cell's terminal outlet, the sea or a closed lake. A desert basin
+//!    yielding almost nothing has no river to the sea — its channels die out on the way — so
+//!    it is closed even where its slope runs seaward.
 
 use crate::climate::pet_mm;
 use geoforge_core::grid::{Cell, Grid};
@@ -56,6 +58,11 @@ pub struct HydrologyParams {
     /// Largest area an overflowing lake keeps; bigger basins are taken as partly filled with
     /// sediment and keep only their deepest part, km².
     pub max_open_lake_km2: f64,
+    /// A basin of at least `min_basin_km2` whose land yields less than this on average, mm/yr,
+    /// has no river to the sea: its channels die out in the desert and the basin is closed
+    /// (the Sahara's, Arabia's and Central Asia's: Lake Eyre's basin yields ~3 mm/yr, while the
+    /// Orange, at ~11, still reaches the sea). 0 to keep every basin open by its slope.
+    pub dead_runoff_mm: f64,
 }
 
 impl Default for HydrologyParams {
@@ -71,6 +78,7 @@ impl Default for HydrologyParams {
             lake_evaporation_factor: 1.4,
             arid_channel_loss_per_1000km: 0.35,
             max_open_lake_km2: 80_000.0,
+            dead_runoff_mm: 10.0,
         }
     }
 }
@@ -490,9 +498,17 @@ pub(crate) fn drain(ctx: &RunContext<'_>, inputs: &Products, w: &Water, p: &Hydr
         };
     }
     let mut basin_area = vec![0.0; roots.len()];
+    let mut basin_yield = vec![0.0; roots.len()];
     for c in 0..n {
         if root[c] != NONE {
             basin_area[root[c] as usize] += area_km2[c];
+            basin_yield[root[c] as usize] += runoff[c].max(0.0) * area_km2[c];
+        }
+    }
+    // A dry basin's channels die out before the sea: it drains nowhere.
+    for (i, rt) in roots.iter_mut().enumerate() {
+        if rt.1 && basin_area[i] >= p.min_basin_km2 && basin_yield[i] < p.dead_runoff_mm * basin_area[i] {
+            rt.1 = false;
         }
     }
     let mut big: Vec<usize> = (0..roots.len()).filter(|&i| basin_area[i] >= p.min_basin_km2).collect();

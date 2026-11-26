@@ -483,6 +483,21 @@ OpenSpec `compact-objects`, `asteroids-and-fictional-materials`, `nebulae-and-ga
   `diameter_at_rank`): Kuiper belts and Trojans steepen past 100 and 50 km. M dwarfs'
   bolometric corrections from nearby stars replace Torres's fit below 3900 K.
 
+## 8k. Basins, swells and dying rivers — done (November 2026)
+OpenSpec `basins-swells-and-dying-rivers`. Measured on seven worlds first: the drainage code
+on Earth's own map gives Earth's basin sizes, so the misses were the terrain's.
+- `ElevationParams::basin_swell_m` / `basin_swell_km` (1500 m, 1200 km): broad sags and
+  rises on old stable crust, subdued behind active margins; `plateau_m` 1800 → 1200 m. The
+  five largest basins drain 19% of land (was 28%; Earth 14%), the largest 8.4 Mkm²
+  Earth-scaled (was 14.8; the Amazon 6.9).
+- `ErosionParams::peak_limit_m` (9000 m × 1/g, `erosion::hold_peak`): the highest point
+  averages 8.9 km (was 9.9, up to 11.8).
+- `HydrologyParams::dead_runoff_mm` (10 mm/yr): a basin of 20 000 km² or more yielding less
+  has no river to the sea; 16.5% of land drains to no sea (was 7%; Earth 18%).
+- `stats`: Earth's rivers over 10 000 m³/s are 16, not 8.
+- Test `earthlike_terrain`: the Earth archetype's high ground, peaks, largest basin and
+  closed land against Earth's.
+
 ## 8b. A system's local environment — next
 
 A system's site is only its distance from the galactic centre. Young systems should often

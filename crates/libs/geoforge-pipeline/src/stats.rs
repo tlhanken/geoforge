@@ -167,8 +167,12 @@ pub fn summarize(pr: &Products, grid: &AnyGrid, radius_km: f64, sea: bool) -> Su
         s.insert("river_discharge_to_sea_km3_yr".into(), st(to_sea * 3.155_76e7 / 1e9, Some(37_000.0)));
         s.insert("largest_river_m3_s".into(), st(mouths.first().copied().unwrap_or(0.0), Some(209_000.0)));
         s.insert("second_river_m3_s".into(), st(mouths.get(1).copied().unwrap_or(0.0), Some(41_000.0)));
-        s.insert("rivers_over_10000_m3_s".into(), st(mouths.iter().filter(|&&q| q >= 10_000.0).count() as f64, Some(8.0)));
-        s.insert("rivers_over_1000_m3_s".into(), st(mouths.iter().filter(|&&q| q >= 1000.0).count() as f64, Some(80.0)));
+        // Earth's rivers reaching the sea at over 10 000 m³/s: the Amazon, Ganges–Brahmaputra,
+        // Congo, Orinoco, Yangtze, Río de la Plata, Mississippi, Yenisei, Lena, St Lawrence,
+        // Mekong, Irrawaddy, Ob, Pearl, Tocantins and Amur. (No count of those over 1000 m³/s
+        // to the sea is to hand.)
+        s.insert("rivers_over_10000_m3_s".into(), st(mouths.iter().filter(|&&q| q >= 10_000.0).count() as f64, Some(16.0)));
+        s.insert("rivers_over_1000_m3_s".into(), st(mouths.iter().filter(|&&q| q >= 1000.0).count() as f64, None));
         s.insert("max_strahler".into(), st(rv.edges.iter().map(|e| e.attrs.strahler_order).max().unwrap_or(0).into(), None));
         let by = lk.cells_by_owner();
         let mut la: Vec<(f64, bool)> = by.iter().map(|(k, cs)| (km2(cs.iter().map(|&c| area[c as usize]).sum()), lk.table.get(*k).is_some_and(|l| l.endorheic))).collect();

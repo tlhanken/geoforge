@@ -81,16 +81,27 @@ pub struct ElevationParams {
     /// Dynamic topography: how much higher a continent stands far from every convergent
     /// boundary than right behind one, m (mantle flow drags continents down above sinking
     /// slabs and lifts them far from any: Africa and Brazil's highlands stand high, the
-    /// Amazon and Mesopotamia low).
+    /// Amazon and Mesopotamia low). With the basins and swells on top, 1200 m keeps a quarter
+    /// of the land above 1000 m, as on Earth.
     pub plateau_m: f64,
     /// Width of the continental slope, km.
     pub slope_width_km: f64,
+    /// Basins and swells of stable continents: how far the broad sags and rises stand from
+    /// the mean, m (fractal noise peak; its spread is about a quarter of this). Africa is
+    /// a mosaic of them a thousand kilometres or so across — the Congo, Chad, Taoudeni and
+    /// Kalahari basins between the Ahaggar, Tibesti, Darfur and Bié swells (Burke 1996) — and
+    /// every old continent has its own (Michigan, Williston, Paris, Eyre). They part the
+    /// continents into basins nearer Earth's: with them the five largest drain 19% of the land
+    /// (Earth's 14%), not 28%, and the largest is 1.2× the Amazon's share, not 2×.
+    pub basin_swell_m: f64,
+    /// Their size, km.
+    pub basin_swell_km: f64,
     pub boundaries: BoundaryParams,
 }
 
 impl Default for ElevationParams {
     fn default() -> Self {
-        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 1800.0, slope_width_km: 130.0, boundaries: BoundaryParams::default() }
+        Self { continental_base_m: 250.0, roughness_scale: 1.0, plateau_m: 1200.0, slope_width_km: 130.0, basin_swell_m: 1500.0, basin_swell_km: 1200.0, boundaries: BoundaryParams::default() }
     }
 }
 
@@ -144,6 +155,7 @@ impl Generator for Elevation {
         let age: Vec<f32> = inputs.crust_age().map_or_else(|| vec![80.0; n], |f| f.values.clone());
         let noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value());
         let plateau_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0x0071_A7EA);
+        let basin_noise = TerrainNoise::new(ctx.seed(ProductId::Elevation).value() ^ 0xBA51_5E11);
 
         // Distance to the continent–ocean crust edge, both sides (km).
         let coast: Vec<Cell> = grid.cells().filter(|&c| grid.neighbors(c).iter().any(|nb| crust[nb as usize] != crust[c as usize])).collect();
@@ -265,7 +277,12 @@ impl Generator for Elevation {
                     // (southern and eastern Africa, not the Sahara).
                     let up = (0.65 + 0.45 * plateau_noise.fbm(grid.center(c), 1.1, 3) / 0.3).clamp(0.3, 1.0);
                     let swell = (plateau_noise.fbm(grid.center(c), 2.3, 3) / 0.3).clamp(-0.2, 1.5);
-                    base_cont + p.plateau_m * (far * slow * up - DYNAMIC_LOW_SHARE) + DYNAMIC_NOISE_M * swell
+                    // Basins and swells on old, stable crust; subdued where a sinking slab
+                    // drags the whole interior down (the Amazon), absent in flexural forelands
+                    // (Mesopotamia) and rifts, which have their own shapes.
+                    let stable = matches!(kind, Some(G::Craton | G::Platform | G::PaleoOrogen | G::IntracratonicBasin) | None);
+                    let basins = if stable { p.basin_swell_m * (0.4 + 0.6 * far) * basin_noise.fbm(grid.center(c), r / p.basin_swell_km.max(1.0), 3) } else { 0.0 };
+                    base_cont + p.plateau_m * (far * slow * up - DYNAMIC_LOW_SHARE) + DYNAMIC_NOISE_M * swell + basins
                 };
                 let mut z = if ocean {
                     // Sediment fill (isostatically compensated) thickens with age and toward

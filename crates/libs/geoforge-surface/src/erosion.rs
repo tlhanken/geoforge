@@ -52,12 +52,40 @@ pub struct ErosionParams {
     /// Extra sediment fill of closed land depressions after erosion, m (rifts excepted).
     /// Erosion already breaches sills where rivers are big, so the default is 0.
     pub sediment_fill_m: f64,
+    /// The tallest a peak stands at Earth's gravity, m (scaled by `relief::relief_scale`);
+    /// 0 for no limit. Ranges rising while they erode would otherwise stand 10–11.5 km high:
+    /// Earth's tallest is 8.85 km, Venus's 10.8 km at 0.9 g.
+    pub peak_limit_m: f64,
 }
 
 impl Default for ErosionParams {
     fn default() -> Self {
-        Self { k: 3e-6, m: 0.5, duration_myr: 1.0, steps: 8, hillslope: 0.02, orogen_uplift: 0.5, reference_runoff_mm: 300.0, runoff_exponent: 0.5, budyko_w: 3.0, sediment_fill_m: 0.0 }
+        Self {
+            k: 3e-6,
+            m: 0.5,
+            duration_myr: 1.0,
+            steps: 8,
+            hillslope: 0.02,
+            orogen_uplift: 0.5,
+            reference_runoff_mm: 300.0,
+            runoff_exponent: 0.5,
+            budyko_w: 3.0,
+            sediment_fill_m: 0.0,
+            peak_limit_m: 9000.0,
+        }
     }
+}
+
+/// Heights above three-quarters of `limit` bend over toward `limit`, which none passes: a
+/// range's summits are held by the strength of its rock (and the glaciers that cut them), not
+/// by how fast it rises.
+#[must_use]
+pub fn hold_peak(h: f64, limit: f64) -> f64 {
+    let knee = 0.75 * limit;
+    if limit <= 0.0 || h <= knee {
+        return h;
+    }
+    knee + (limit - knee) * ((h - knee) / (limit - knee)).tanh()
 }
 
 /// Erode `h` (m above sea level; cells below 0 are sea) in place. `erodibility` scales `k`
@@ -212,6 +240,10 @@ impl Generator for Erosion {
             });
             let jitter = crate::hydrology::flat_jitter(grid, ctx.seed(ProductId::Elevation).value() ^ 0xE205);
             erode(grid, &mut field, &erodibility, &uplift, water.as_deref(), &jitter, ctx.radius_km(), p);
+            let limit = p.peak_limit_m * crate::relief::relief_scale(ctx.body);
+            for h in &mut field {
+                *h = hold_peak(f64::from(*h), limit) as f32;
+            }
             if p.sediment_fill_m > 0.0 {
                 sediment_fill(grid, &mut field, inputs.provinces(), p.sediment_fill_m);
             }
@@ -244,6 +276,17 @@ fn sediment_fill(grid: &dyn Grid, field: &mut [f32], provinces: Option<&Partitio
 mod tests {
     use super::*;
     use geoforge_core::grid::EquirectGrid;
+
+    /// Peaks under three-quarters of the limit stand as they are; taller ones bend toward the
+    /// limit, keep their order and never pass it; no limit leaves them alone.
+    #[test]
+    fn peaks_are_held() {
+        assert_eq!(hold_peak(6000.0, 9000.0), 6000.0);
+        assert_eq!(hold_peak(12_000.0, 0.0), 12_000.0);
+        let held: Vec<f64> = [6750.0, 8000.0, 9500.0, 11_500.0, 20_000.0].iter().map(|&h| hold_peak(h, 9000.0)).collect();
+        assert!(held.windows(2).all(|w| w[0] < w[1]) && held.iter().all(|&h| h < 9000.0), "{held:?}");
+        assert!((8500.0..9000.0).contains(&hold_peak(9500.0, 9000.0)));
+    }
 
     /// A tilted plateau draining to a sea strip: erosion cuts valleys but never below sea
     /// level, never raises land, and leaves the sea alone.
