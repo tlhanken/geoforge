@@ -110,7 +110,8 @@ Languages and cultures in `geoforge-names`.
 - Done: basins near Earth's sizes (the five largest drain 19% of land, Earth 14%; was 28%);
   dry basins close where their rivers die out (16.5% of land endorheic, Earth 18%; was 7%);
   Earth's reference for large rivers corrected to 16.
-- Too many large rivers remain (32 over 10 000 m³/s): the climate's land is too wet (item 2).
+- Too many large rivers remain (21–39 over 10 000 m³/s on five worlds at 512): the climate
+  gives land too much of the rain (item 7).
 - Breach the lowest pass instead of filling.
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.
@@ -275,11 +276,26 @@ Still needed:
 - Still to do (tasks 3.x of the change): weather, storms, sky and the ephemeris take
   `Instant` instead of Earth days, and commands take dates in a calendar.
 
-## 7. Rain and temperature misses [8e, V2_REALISM]
-- London: no rain shadow.
-- Land rain is short overall (Buenos Aires and Alice Springs get half their rain).
-- Lima: no stratus deck, 7 °C warm.
-- The East African highlands and the Kazakh steppe are too wet.
+## 7. Rain and temperature misses [8e, 8l, V2_REALISM]
+- Done (OpenSpec `soil-water-and-bulk-evaporation`): land evaporates its soil water
+  (Budyko), the sea by the bulk formula; storm-track eddies at 8 × 10⁵ m²/s; the column's
+  capacity on 60% of the ground's swing; sinking air over land exports its vapour. Rain
+  pattern correlation 0.59 → 0.68 on the model's winds, Köppen by group 61% → 68%; Siberia,
+  Moscow and the Urals get their rain.
+- Next, the largest gain in sight: **moisture flux convergence**. On observed winds it lifts
+  the land's rain correlation 0.65 → 0.74 and the sea's 0.63 → 0.75; on the model's winds it
+  drowns Arabia, because the circulation's divergence is 2.5–3× ERA's and converges into the
+  desert heat lows (item 5). Fix the circulation's divergence first.
+- The land gets too much of the rain (Earth A/B land 1070 mm, observed 860; generated
+  worlds 1090 vs 780): the subtropical sea's column is 20–30% too moist, so the sea
+  evaporates too little (the missing convergence again).
+- No Walker circulation: the East African highlands (Nairobi 5200 mm, observed 840) and the
+  Arabian Sea rise where Earth's air sinks.
+- The western interior and Great Plains on the model's winds (the Rockies 1170 mm, observed
+  410; Dodge City 1690 at one degree, observed 560).
+- London: no rain shadow. Lima: no stratus deck, 7 °C warm.
+- The Ob drains far too much (109 000 m³/s on the model's climate, observed 12 500): West
+  Siberia is now wet, and its basin takes in too much.
 - Antarctic plateau ~17 °C warm, with double the seasonal range.
 
 ## 8. Ocean leftovers [8e]

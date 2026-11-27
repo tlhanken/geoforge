@@ -207,6 +207,75 @@ missing. The changes since:
 | NE Atlantic SST departure, °C | +0.1 | +1.2 | +4.4 |
 | Zonal temperature 25–35°N, °C | 17.1 | 18.4 | 20 |
 
+### Rain (November 2026)
+
+The moisture model's own state was checked against NCEP's June column water as well as
+GPCP's rain, and its misses traced one at a time (`climate::moisture`):
+
+- **Land evaporates its soil water.** Land gave back only the rain that fell on it the
+  step before, so a dry summer interior stayed dry whatever its winter snow or the year's
+  rain: West Siberia's July air held 6 mm of water (NCEP 20). Now each place evaporates what
+  the Budyko curve (Fu, ω 2.6) gives for its year's rain and evaporative demand, spread
+  over the seasons by that demand; the seasons are run again on the rain they made (from a
+  wet start, then twice more from their vapour).
+- **The sea evaporates by the bulk formula**, E = C_E |U| (q_sat − q) with C_E 1.3 × 10⁻³
+  on the column (vapour scale height 2.2 km, gusts 4 m/s), not by relaxing to 85% of
+  saturation within hours: narrow seas no longer load every passing air mass (the Red Sea
+  and the Gulf had fed Arabia's rain).
+- **Storm-track eddies mix vapour at 8 × 10⁵ m²/s** (moist energy-balance models take
+  10⁶), ten times what they did, set in m²/s so the grid does not change it.
+- **The column's capacity follows 60% of the ground's seasonal swing**: winter inversions
+  keep the air above frozen ground warmer than the ground, and a hot surface heats only the
+  lowest kilometre. Warm air over cold winter land had condensed as soon as it arrived.
+- **Windward slopes rain at most twice their surroundings' rate**, not four times.
+- **Sinking air over land exports its vapour** (7 × 10⁻⁷ s⁻¹ per unit of ln(1/ascent),
+  ~0.6 × 10⁻⁶ under a desert's sinking): the divergent outflow beneath subsidence. Without
+  it the Sahara recycled its own rain (Budyko returns all of a desert's) and doubled it.
+
+| Earth A/B, 1024×512, on model / observed air | Before | After |
+|---|---|---|
+| Rain RMSE, mm | 947 / 902 | 857 / 848 |
+| Rain pattern correlation (log) | 0.59 / 0.62 | 0.68 / 0.71 |
+| Land rain, RMSE of log₁₀ | 0.58 / 0.62 | 0.45 / 0.43 |
+| Land rain, correlation of log₁₀ | 0.47 / 0.51 | 0.62 / 0.65 |
+| Köppen, land agreeing (by group) | 35% (61%) / 38% (63%) | 41% (68%) / 42% (69%) |
+| Köppen C, of land (observed 13%) | 20% / 20% | 20% / 17% |
+| Köppen D, of land (observed 25%) | 17% / 17% | 22% / 22% |
+| Station RMSE, log rain | 1.44 / 2.07 | 0.96 / 1.40 |
+| Boreal forest, of land (0.19 on the observed climate) | 0.10 / 0.07 | 0.14 / 0.12 |
+| Cold desert, of land (0.02 on the observed climate) | 0.05 / 0.09 | 0.01 / 0.02 |
+| Moscow, Yakutsk, Riyadh rain on model air, mm (GPCP 870, 355, 124) | 440, 34, 732 | 780, 207, 425 |
+| Column water against NCEP's June, land / sea | — | 0.85 / 0.95 of it, correlation 0.70 / 0.87 |
+
+The Earth climate suite (one degree, model winds) went from 186 to 190 of 253: Cairo, In
+Salah, Yakutsk and Greenland's top now get their rain, Arabia and the eastern US their
+biomes. New gaps: the Great Plains (Dodge City 1690 mm, observed 560), land rain overall
+(1020 mm, observed 780), Phoenix's warmth with its rain, the Cerrado (its rain now right,
+but its highlands swing 14 °C and leave the tropical classes), and South Atlantic storms.
+On five generated Earth-like worlds land drier than 250 mm fell from 0.34 to 0.24 of land
+(Earth 0.20), hot desert from 0.16 to 0.14 (0.14) and boreal forest rose from 0.08 to 0.11
+(0.11); land rain rose from 975 to 1090 mm (780), rivers over 10 000 m³/s from 21 to 28
+(16), and closed basins fell from 13% to 8% of land (18%).
+
+What did not work, and what it showed:
+- **Moisture flux convergence** (the column stretched or squeezed by the wind's
+  divergence): on observed winds it lifts the land's rain correlation from 0.65 to 0.74 and
+  the sea's from 0.63 to 0.75, the largest gain seen. On the model's winds it drowns Arabia
+  and the Sahara (3000 and 1300 mm): their divergence is 2.5–3× ERA's at 850 hPa and
+  correlates 0.3–0.5 with it, and their monsoon inflow converges into the desert heat lows.
+  The circulation's divergence has to be right before the climate can use it.
+- Losing vapour climbing onto high ground (a moist layer 1.5–2.5 km deep) dried the
+  Congo and Tibet to nothing: the vapour never comes back downwind.
+- A higher humidity threshold for rain, slower rain-out or weaker storm-track rain-out
+  each brought the column water closer to NCEP's but moved rain from the sea to the land.
+
+Still missing: the East African highlands (Nairobi 5200 mm, observed 840) and the Arabian
+Sea rain under the model's ascent, which rises there where NCEP's air sinks (no Walker
+circulation); the land gets too much of the rain (land 1070 mm, sea 1150, observed 860 and
+1100), as the subtropical sea's column is 20–30% too moist to evaporate Earth's ocean
+water; the western interiors on the model's winds (the Rockies 1170 mm, observed 410); the
+summer monsoon over India on the model's winds (520 mm, observed 1140).
+
 Stations now in the right Köppen group include:
 - deserts: Cairo, In Salah and Alice Springs;
 - the Mediterranean coasts: Los Angeles and Perth;
@@ -216,19 +285,20 @@ Known misses on Earth's map:
 
 1. **Peru's coast is wet** (1600 mm vs 15). The cold current is a third as cold as observed,
    and the southern summer's rain belt still reaches it.
-2. **The East African highlands are drenched** (Nairobi 5100 mm vs 870). There is no Walker
-   circulation, and nothing makes the Somali coast's flow diverge.
+2. **The East African highlands are drenched** (Nairobi 5200 mm vs 870). There is no Walker
+   circulation, and nothing makes the Somali coast's flow diverge: the model's air rises
+   over Kenya and Somalia where NCEP's sinks 25 mb/day.
 3. **The Indian monsoon is a third as strong as observed.** Mumbai gets 1040 mm vs 2200.
-4. **Eastern continental interiors at 35–45° are dry**: Chicago 430 mm vs 950, Buenos
-   Aires 375 vs 1200, Beijing 350 vs 570. Moist poleward flow from the Gulf of Mexico, the
-   South Atlantic and the South China Sea is too weak. Siberia is dry too (Yakutsk 51 mm vs
-   240).
+4. **Continental interiors** were dry (Chicago 430 mm vs 950, Yakutsk 51 vs 240) until land
+   evaporated its soil water (*Rain*); now the Great Plains and the western interior are
+   wet on the model's winds (Dodge City 1230 mm vs 560, the Rockies 1170 vs 410).
 5. **The North Atlantic Drift brings a quarter of the observed warmth.** London is 7.7 °C
    vs 11.3, Reykjavik −1.4 vs 4.7.
 6. **The Antarctic plateau is 15 °C too warm.** The zonal energy balance does not see the
    ice sheet's albedo, and there is no winter inversion. Yakutsk's winters are too mild for
    the same reason.
-7. **Subtropical oceans get half their rain** (20–30°: 360 mm vs ~700).
+7. **Subtropical oceans get too little rain** (20–30°: 630 mm vs ~700 at one degree; was
+   360).
 8. **Rivers can't be checked on this map.** ETOPO1 at 20 km blocks narrow gorges, so the
    Congo ponds behind its rapids, and the upper Mississippi and middle Yangtze end in closed
    basins. The known cases below burn big rivers into their map and check rivers there.
@@ -564,12 +634,13 @@ Their gaps:
 
 ## Known gaps
 
-1. **Generated worlds now run dry.** Hot desert is 0.05–0.34 of land vs 0.14, land drier
-   than 250 mm is 0.33–0.50, and the 20–30° belt gets 250–630 mm vs ~800. Their continents
-   are larger and less broken up than Earth's, which leaves more interior. On Earth's own
-   map the desert share is close (0.16 vs 0.14). Grassland is 0.11–0.15 vs 0.08.
-2. **Too many large rivers** (13–65 over 10 000 m³/s vs 16): the basins are now Earth's
-   sizes, so what is left is the climate's wet land (see *Terrain and drainage*).
+1. **Generated worlds' land gets too much of the rain** (five worlds at 512: 860–1260 mm,
+   Earth 780; the sea 980–1090, Earth 1100). Land drier than 250 mm is 0.15–0.28 (Earth
+   0.20; was 0.23–0.42 before land evaporated its soil water), hot desert 0.09–0.24 (0.14),
+   grassland 0.06–0.08 (0.08). See *Rain*.
+2. **Too many large rivers** (21–39 over 10 000 m³/s on five worlds at 512, vs 16): the
+   basins are now Earth's sizes, so what is left is the climate's wet land (see *Terrain and
+   drainage* and *Rain*). Closed basins fell with it (8% of land at 512, Earth 18%).
 3. **Branching** no longer stands as a gap: measured alike, Earth's real map and the worlds
    agree (*Terrain and drainage*).
 4. **High ground varies widely** between worlds (8–42% of land above 1000 m; Earth 27% with

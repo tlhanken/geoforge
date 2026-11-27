@@ -85,9 +85,7 @@ const STATIONS: &[Station] = &[
 const EUROPE: &str = "maritime air fades too fast across Europe: Moscow's range is 31 °C (observed 26) and its mean 5 °C cold";
 const SIBERIA: &str = "Siberian winters too mild: Yakutsk's range is 39 °C (observed 58)";
 const MONGOLIA: &str =
-    "with the low winds turned round the Altai and the Tibetan plateau, Mongolia's air comes off the Gobi: no rain at 44–48°N 104–122°E (observed 200–400 mm), and Ulaanbaatar is 4 °C warm";
-const SAHARA: &str =
-    "since the low winds go round high ground the central Sahara gets rain (In Salah 250 mm, 0 with flat-ground winds; observed 15) with its winds at In Salah unchanged: not yet traced";
+    "Ulaanbaatar sits at the edge of its ranges (520 mm, observed 270; 3.0 °C, observed −0.4): with the low winds turned round the Altai and the Tibetan plateau, Mongolia's air comes off the Gobi";
 const SOUTHWEST: &str = "the interior Southwest is drenched by winter storms (Great Basin 1600 mm at 40°N 117°W, observed ~250)";
 const WEST_AFRICA: &str = "the West African monsoon reaches too far north (2500 mm at 13°N 0°E, observed ~600)";
 const ARABIA: &str =
@@ -99,6 +97,10 @@ const ICELAND: &str = "Reykjavik runs 5 °C cold (−0.5 °C): the sea south of 
 const KAZAKHSTAN: &str = "the Kazakh steppe is three times too wet and less continental than observed (990 mm, range 22 °C at 50°N 70°E; observed ~330 mm, 37 °C)";
 const TIBET: &str = "Tibetan summers too warm (warmest month 16 °C at 4900 m, observed ~7) and the monsoon does not climb the plateau";
 const ANTARCTICA: &str = "the Antarctic plateau is ~17 °C too warm";
+const GREAT_PLAINS: &str = "Gulf air turned north along the Rockies' foot drenches the plains (1700 mm at Dodge City, observed 560), wet enough for forest";
+const INTERIORS: &str =
+    "on the model's winds the continental interiors are too wet (the Great Plains, Kazakhstan, the Rockies): 1020 mm, observed 780; on observed winds the land's wet bias is half as large";
+const BRAZIL: &str = "the Brazilian highlands swing 14 °C through the year (observed 4), so their coldest month is under 18 °C and they leave the tropical classes: with its rain now about right (~1500 mm at 15°S 50°W, observed ~1600) the Cerrado reads as temperate grassland, and savanna loses ground";
 const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Moscow", EUROPE),
     ("Yakutsk", SIBERIA),
@@ -111,10 +113,11 @@ const TEMPERATURE_GAPS: &[(&str, &str)] = &[
     ("Cape Town", "Cape Town runs 5 °C warm (21.7 °C; 20.1 on observed winds): its winter air is all maritime, over a sea 1.2 °C warm"),
     (
         "In Salah",
-        "the model's July winds bring Mediterranean air into the central Sahara, maritime in summer and not in winter, which holds the year down to 20 °C; on observed winds In Salah is 24.8 °C",
+        "the model's July winds bring Mediterranean air into the central Sahara, maritime in summer and not in winter, which holds the year down to 21.6 °C; on observed winds In Salah is 24.8 °C",
     ),
     ("Lima", LIMA),
     ("Vostok", ANTARCTICA),
+    ("Phoenix", "Phoenix runs 4 °C cool (19.5 °C): the Southwest's wet bias (600 mm, observed 200) keeps it from heating like a desert"),
 ];
 const RANGE_GAPS: &[(&str, &str)] = &[(
     "Moscow",
@@ -122,32 +125,30 @@ const RANGE_GAPS: &[(&str, &str)] = &[(
 )];
 const RAIN_GAPS: &[(&str, &str)] = &[
     ("London", "no rain shadow in the lee of Britain's hills: London gets west-coast rain"),
-    ("Yakutsk", "the Siberian interior gets an eighth of its rain"),
     ("Phoenix", SOUTHWEST),
     ("Timbuktu", WEST_AFRICA),
     ("Ulaanbaatar", MONGOLIA),
-    ("Cairo", SAHARA),
-    ("In Salah", SAHARA),
     ("Astana", KAZAKHSTAN),
     ("Nairobi", "the East African highlands are drenched (2800 mm, observed 870)"),
     ("Lhasa", TIBET),
     ("Los Angeles", "Los Angeles gets 140 mm (observed 380; 142 mm on observed winds): not yet traced"),
     ("Tehran", "the Alborz's rain spreads to its dry southern foot (745 mm at Tehran; 339 mm on observed winds)"),
-    ("Utqiagvik", "the Arctic coast gets 340 mm (observed 140): not yet traced"),
-    ("Summit, Greenland", "Greenland's top gets 97 mm (observed 250): its mean is −35 °C, 5 °C colder than observed, and the colder air holds less vapour"),
+    ("Utqiagvik", "the Arctic coast gets 305 mm (observed 140): not yet traced"),
     ("Riyadh", ARABIA),
+    ("Dodge City", GREAT_PLAINS),
 ];
 const PLACE_GAPS: &[(&str, &str)] = &[
     ("Amazon", "every one-degree lowland cell on a big river turns wetland: the wetland rule keys on discharge, not on how much of the cell floods"),
-    ("Great Plains", "Gulf air turned north along the Rockies' foot drenches the plains (1000 mm at 40°N 100°W, observed ~500), wet enough for forest"),
+    ("Great Plains", GREAT_PLAINS),
     ("Pampas", PAMPAS),
-    ("Arabia", ARABIA),
     ("Sahel", WEST_AFRICA),
-    ("Eastern US", "the eastern US is too dry for forest (640 mm at 38°N 82°W, observed ~1100)"),
     ("Kazakh steppe", KAZAKHSTAN),
     ("Greece", "Greece is drenched by winter storms (1450 mm at 38°N 22°E, observed 400–1100), too wet for Mediterranean woodland"),
     ("Tibet", TIBET),
+    ("Cerrado", BRAZIL),
 ];
+/// Biome shares that follow a known gap.
+const SHARE_GAPS: &[(&str, &str)] = &[("savanna", BRAZIL)];
 const CLASSIFIER_GAPS: &[(&str, &str)] = &[
     ("Vancouver", "temperate rainforest needs 1500 mm and a range under 14 °C; Vancouver has 1450 mm and 14.5 °C"),
     ("Reykjavik", "mild-winter subpolar climates fall through to temperate forest: boreal needs winters below −3 °C"),
@@ -350,7 +351,7 @@ fn precipitation(s: &mut Scorecard, e: &Earth) {
     for name in ["Mumbai", "Beijing", "Timbuktu"] {
         s.range("precipitation", format!("{name}: summer monsoon, warm-half share"), e.warm_share[e.station(name).1], 0.7..=1.0, "");
     }
-    s.range("precipitation", "land mean (Earth 780)", mean(g, &e.land(), |c| e.precip[c as usize]), 650.0..=950.0, "mm");
+    s.range("precipitation", "land mean (Earth 780)", mean(g, &e.land(), |c| e.precip[c as usize]), 650.0..=950.0, "mm").gap(INTERIORS);
     let both = |lo: f64, hi: f64| [e.sea(lo..=hi, -180.0, 180.0), e.sea(-hi..=-lo, -180.0, 180.0)].concat();
     s.range("precipitation", "subtropical oceans, 20–30° (Earth ~700)", mean(g, &both(20.0, 30.0), |c| e.precip[c as usize]), 450.0..=1000.0, "mm");
     s.range("precipitation", "equatorial oceans, 5°S–10°N (Earth ~2000)", mean(g, &e.sea(-5.0..=10.0, -180.0, 180.0), |c| e.precip[c as usize]), 1500.0..=3000.0, "mm");
@@ -398,7 +399,7 @@ fn biomes(s: &mut Scorecard, e: &Earth) {
         ("savanna", 0.10, 0.20),
         ("mediterranean_woodland", 0.01, 0.04),
     ] {
-        s.range("biomes", format!("{slug}, share of land"), share(slug), lo..=hi, "");
+        s.range("biomes", format!("{slug}, share of land"), share(slug), lo..=hi, "").gap_if_listed(slug, SHARE_GAPS);
     }
     for (name, lat, lon, want) in [
         ("Sahara", 23.0, 10.0, &["hot_desert"][..]),
@@ -583,7 +584,7 @@ fn storm_field(s: &mut Scorecard, e: &Earth) {
     s.range("storms", "mid-latitude lows formed a day, world".to_string(), lows, 3.0..=8.0, "");
 }
 
-const STORM_GAPS: &[(&str, &str)] = &[];
+const STORM_GAPS: &[(&str, &str)] = &[("South Atlantic (20°S 25°W)", SOUTH_ATLANTIC)];
 
 /// The classifier alone, fed station normals: its own errors, apart from the climate's.
 fn classifier(s: &mut Scorecard) {

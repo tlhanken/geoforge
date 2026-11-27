@@ -483,6 +483,24 @@ OpenSpec `compact-objects`, `asteroids-and-fictional-materials`, `nebulae-and-ga
   `diameter_at_rank`): Kuiper belts and Trojans steepen past 100 and 50 km. M dwarfs'
   bolometric corrections from nearby stars replace Torres's fit below 3900 K.
 
+## 8l. Soil water, bulk evaporation and storm-track eddies — done (November 2026)
+OpenSpec `soil-water-and-bulk-evaporation`. The moisture model checked against NCEP's June
+column water as well as GPCP's rain, on observed and on the model's winds (`V2_REALISM`,
+*Rain*):
+- `moisture::soil_evaporation`, `budyko_evaporation`: land evaporates the Budyko share
+  (Fu, ω 2.6) of its year's rain, spread over the seasons by their demand; the seasons run
+  from a wet start, then twice more on the rain they made (`FIRST_RUN_STEPS`,
+  `SOIL_PASSES`, `SOIL_PASS_STEPS`).
+- Sea evaporation by the bulk formula (C_E 1.3 × 10⁻³, vapour scale height 2.2 km, gusts
+  4 m/s); eddy diffusivity 3 × 10⁴ + 8 × 10⁵ × storminess m²/s; the column's capacity on 60%
+  of the seasonal swing; orographic gain 3 → 1; subsidence export over land
+  (7 × 10⁻⁷ s⁻¹ per unit of ln(1/ascent)).
+- `transport::diffuse_rows` runs rows in parallel and takes sub-steps of up to 0.5.
+- Earth A/B: rain correlation 0.59 → 0.68 (model air), 0.62 → 0.71 (observed air);
+  Köppen group 61% → 68%; the Earth climate suite 186 → 190 of 253.
+- Tried and set aside: moisture flux convergence from the winds (needs the circulation's
+  divergence fixed: TODO 7), vapour lost climbing onto high ground, higher rain thresholds.
+
 ## 8k. Basins, swells and dying rivers — done (November 2026)
 OpenSpec `basins-swells-and-dying-rivers`. Measured on seven worlds first: the drainage code
 on Earth's own map gives Earth's basin sizes, so the misses were the terrain's.

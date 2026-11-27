@@ -15,13 +15,14 @@
 //!    circulated around its substellar point instead, without seasons.
 //! 4. **Continentality**: a maritime-air tracer carried by the winds, so west coasts in the
 //!    westerlies are mild and continental interiors have large seasonal swings.
-//! 5. **Moisture**: water vapour carried along the winds on a coarse atmosphere grid;
-//!    evaporation over the sea relaxes it toward saturation, it rains out where air rises
-//!    (convergence zones, windward slopes) or cools, and not where it sinks or warms (the
-//!    Hadley cells' sinking belts, the eastern flanks of the subtropical highs, the poleward
-//!    side of summer heat lows, air off cold water, rain shadows). Sinking air needs to be
-//!    more humid before it rains, and summer land under it bakes. Land recycles part of its
-//!    rain.
+//! 5. **Moisture**: water vapour carried along the winds on a coarse atmosphere grid and
+//!    mixed by the storm tracks' eddies; the sea evaporates into it by the bulk formula, it
+//!    rains out where air rises (convergence zones, windward slopes) or cools, and not where
+//!    it sinks or warms (the Hadley cells' sinking belts, the eastern flanks of the subtropical
+//!    highs, the poleward side of summer heat lows, air off cold water, rain shadows). Sinking
+//!    air needs to be more humid before it rains, and summer land under it bakes. Land
+//!    evaporates what its soil water gives (the Budyko curve on the year's rain, spread over
+//!    the seasons by their demand), so the seasons are run again on the rain they made.
 //!    The global total is set by a water budget scaled with temperature and ocean area.
 //!    Worlds without surface water get none.
 //! 6. **Downscaling** to the world grid: lapse rate on the cell's own elevation (less on
@@ -121,6 +122,12 @@ const PLATEAU_WARMING_C_PER_KM: f64 = 2.0;
 fn plateau_warming(t_sea_level: f64, broad_elevation_m: f64) -> f64 {
     PLATEAU_WARMING_C_PER_KM * ((t_sea_level + 5.0) / 15.0).clamp(0.0, 1.0) * broad_elevation_m.max(0.0) / 1000.0
 }
+
+/// Steps of the moisture model's first run of each season, and of each later run on the soil
+/// water the previous runs' rain left (started from their vapour, so they settle sooner).
+const FIRST_RUN_STEPS: usize = 260;
+const SOIL_PASSES: usize = 2;
+const SOIL_PASS_STEPS: usize = 100;
 
 /// Freezing point of seawater, °C.
 const SEA_FREEZE_C: f64 = -1.8;
@@ -289,9 +296,38 @@ impl Climate {
         }
 
         // 5. Moisture, two solstice seasons; nothing to rain without surface water.
-        let mut seasons = Vec::new();
-        for (k, season) in seasons_def.iter().enumerate() {
-            seasons.push(if wet { moisture::moisture(&atmo, &season_winds[k], &flat_winds[k], season, monsoon, &t_season[k], &t_mean_here, &sst_air, p.rainout, r) } else { vec![0.0; g.len()] });
+        let mut seasons: Vec<Vec<f64>> = vec![vec![0.0; g.len()]; 2];
+        if wet {
+            let air: Vec<moisture::SeasonAir<'_>> = seasons_def
+                .iter()
+                .enumerate()
+                .map(|(k, season)| moisture::SeasonAir {
+                    atmo: &atmo,
+                    wind: &season_winds[k],
+                    flat_wind: &flat_winds[k],
+                    season,
+                    monsoon,
+                    temp: &t_season[k],
+                    temp_mean: &t_mean_here,
+                    sst_air: &sst_air,
+                    rainout: p.rainout,
+                    radius_km: r,
+                })
+                .collect();
+            // Land evaporates from its soil water, which the year's rain sets: the seasons are
+            // run again on the rain they made. The first run starts wet, as if each place's
+            // rain met its evaporative demand, so land that can keep itself wet finds out.
+            let per_year = moisture::steps_per_year(g.res, r);
+            let pet: Vec<[f64; 2]> = (0..g.len()).map(|i| [pet_mm(t_season[0][i]), pet_mm(t_season[1][i])]).collect();
+            let wet_start: Vec<f64> = pet.iter().map(|d| 0.5 * (d[0] + d[1])).collect();
+            let soil = moisture::soil_evaporation(&wet_start, &pet, per_year);
+            let mut runs: Vec<moisture::Run> = air.iter().zip(&soil).map(|(a, e)| moisture::moisture(a, e, None, FIRST_RUN_STEPS)).collect();
+            for _ in 0..SOIL_PASSES {
+                let annual: Vec<f64> = (0..g.len()).map(|i| 0.5 * (runs[0].rain[i] + runs[1].rain[i]) * per_year).collect();
+                let soil = moisture::soil_evaporation(&annual, &pet, per_year);
+                runs = air.iter().zip(&soil).zip(&runs).map(|((a, e), run)| moisture::moisture(a, e, Some(&run.vapour), SOIL_PASS_STEPS)).collect();
+            }
+            seasons = runs.into_iter().map(|run| run.rain).collect();
         }
         let precip: Vec<f64> = seasons[0].iter().zip(&seasons[1]).map(|(a, b)| 0.5 * (a + b)).collect();
         let precip_jan = seasons.pop().expect("two seasons");
@@ -303,7 +339,7 @@ impl Climate {
 impl Generator for Climate {
     type Params = ClimateParams;
     const NAME: &'static str = "climate";
-    const VERSION: u32 = 13;
+    const VERSION: u32 = 14;
     const LAYER: LayerId = LayerId::Climate;
 
     fn needs() -> &'static [ProductId] {
