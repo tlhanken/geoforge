@@ -7,6 +7,31 @@ slower is fine. Speed is item 15.
 First, as of 25 November 2026: the viewer, names, the sky above one galaxy, mountains,
 rivers and other worlds; then the climate and speed items below them.
 
+## 18. Bloomery all the way [proposal 0002]
+The flake is a Bloomery workspace (a33f6a1), but with its opinions turned down. Take them all:
+- **Specifications**: move the OpenSpec changes (15 of them, ~150 requirements, never merged
+  into a living spec) into `.bloomery/specs/`, as areas → features → requirement TOML in
+  EARS form with design notes; tie the ~300 tests to requirement IDs with
+  `#[cfg_attr(any(), bloomery("ID"))]`; map every crate to the feature it owns; turn on
+  `checks.specifications` with `requireCrateOwnership` and untied tests denied. Retire
+  OpenSpec and rewrite the workflow in `CLAUDE.md` and `AGENTS.md` around `bloomery spec`
+  and `bloomery review`.
+- **Layout**: `crates/{bins,libs}` → `packages/rust/{bins,libs}`, as Bloomery scaffolds it.
+- **Code health**: no crate over 5000 production lines (`geoforge-cosmos` and
+  `geoforge-surface` are ~8000 each; split them by layer), then work the soft limits
+  (1500-line crates, cyclomatic 10, 250-token functions, duplication) down and commit the
+  baseline.
+- **Clippy**: no suppressions. Rework the functions behind `too_many_arguments` and
+  `too_many_lines` (parameter structs, smaller steps) and empty the allow list.
+- **Features**: `default-features = false` on every dependency, features named where used;
+  turn `noDefaultFeatures` back on. Dependencies declared once in `[workspace.dependencies]`.
+- **Toolchain and formatting**: nixpkgs' `rustc` only (drop `rust-toolchain.toml`); `nix fmt`
+  (Bloomery's treefmt set) instead of `cargo fmt` and `rustfmt.toml`'s long lines.
+- **Commands**: `bloomery check` is the gate (vulnerabilities, licences, bans, unused
+  dependencies, lock freshness, per-crate tests); `just test`/`just check` call it.
+- First: lock the flake (`nix flake lock`) and run `bloomery check` once as it stands, to see
+  what each of these costs.
+
 ## 17. A visualization tool
 An interactive viewer for a world:
 - pan and zoom the layers;
