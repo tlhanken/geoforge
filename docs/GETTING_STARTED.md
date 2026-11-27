@@ -8,7 +8,9 @@ can ask about any place and any day: what is there, the weather, the sky.
 ## Build
 
 You need Rust (stable, 1.85 or newer; `rustup` installs it). With Nix, `nix develop` gives a
-shell with everything. [`just`](https://github.com/casey/just) is optional but handy.
+shell with everything (the flake is a [Bloomery](https://github.com/actionable-work/bloomery)
+workspace: `nix build` makes `geoforge`, `nix build .#geoforge-viewer` the viewer, and
+`bloomery check` runs the checks). [`just`](https://github.com/casey/just) is optional but handy.
 
 ```bash
 cargo build --release -p geoforge-cli        # or: just build

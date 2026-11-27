@@ -23,6 +23,14 @@ check:
     cargo clippy --release --workspace --all-targets
     cargo fmt --all --check
 
+# The Nix checks (each crate's test, clippy, doc and doctest; licences; formatting).
+nix-check:
+    bloomery check
+
+# Reconcile Cargo.lock and bloomery.lock after changing dependencies or crates.
+sync:
+    bloomery sync
+
 # Format the code.
 fmt:
     cargo fmt --all

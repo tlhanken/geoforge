@@ -2,7 +2,30 @@
 
 - Proposal #: 0002
 - Start Date: 2026-10-11
-- Status: draft
+- Status: implemented (2026-11-26)
+
+## As implemented
+
+The repository had changed since this draft: v1 is gone (one workspace, no `v2/`
+sub-flake), and no crate uses GDAL, so §3 and §4 fell away. What landed:
+
+- `flake.nix`: `bloomery.mkFlake` with `nixpkgs` following Bloomery's, on
+  `x86_64-linux`, `aarch64-linux` and `aarch64-darwin`. The crane, blueprint,
+  rust-overlay, advisory-db, treefmt-nix and systems inputs and `nix/` are removed.
+- `.bloomery/config.toml` (format 3): the release profile from `Cargo.toml` (fat LTO, one
+  codegen unit, opt-level 3); clippy and rustdoc with `-Dwarnings`; the two Clippy lints the
+  code allows (`too_many_arguments`, `too_many_lines`); `noDefaultFeatures` off (the
+  manifests predate it) and Bloomery's specification checks off (the project's specs are
+  OpenSpec); the dev shell adds `just` and `nodejs` (for `npx openspec`).
+- `crates/bins/geoforge-viewer/overrides.nix` adds `web/` to the viewer's source.
+- `bloomery.lock` from `bloomery sync`; `Cargo.lock` unchanged.
+- Toolchain (open question 1): nixpkgs' `rustc`, pinned through `flake.lock`;
+  `rust-toolchain.toml` stays for rustup users.
+
+Checked: the flake evaluates and instantiates all 83 checks, both binaries and the dev
+shell against Bloomery's pinned inputs. Not yet run: the builds themselves and
+`bloomery check` (first run may report code-health, licence or unused-dependency
+findings to settle in the config).
 - Origin: emerged in discussion (deploy geoforge using bloomery, 2026-10-11)
 
 ## Assumptions (unconfirmed — strike in review)

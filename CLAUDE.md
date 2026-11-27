@@ -103,8 +103,13 @@ just view worlds/world-42   # the viewer at http://127.0.0.1:8137/
 just test         # cargo test --release --workspace
 just check        # clippy + rustfmt --check
 just world 42     # make worlds/world-42 and generate it with previews
-nix flake check --keep-going   # the CI checks
+bloomery check    # the Nix checks: each crate's test, clippy, doc and doctest, licences, formatting
+bloomery sync     # after changing dependencies or crates: reconcile Cargo.lock and bloomery.lock
 ```
+The flake is a Bloomery workspace (`flake.nix`, `.bloomery/config.toml`, `bloomery.lock`;
+proposal 0002): every crate is its own Nix derivation built with `rustc`, and each check its
+own derivation. A crate that needs files beyond `src/` and `tests/` says so in an
+`overrides.nix` beside its `Cargo.toml` (the viewer's `web/`).
 Getting started with the command: `docs/GETTING_STARTED.md`. Formatting follows
 `rustfmt.toml` (long lines); run `cargo fmt --all`.
 

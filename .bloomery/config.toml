@@ -1,0 +1,175 @@
+version = 3
+
+[build]
+cargoLock = "Cargo.lock" # Repository-relative path to Cargo.lock.
+cargoToml = "Cargo.toml" # Repository-relative path to the Cargo workspace manifest.
+devPackages = true # Generate dev-profile apps for workspace binaries.
+libPackages = false # Expose <crate>:lib packages for workspace libraries.
+profileName = "release" # Active Cargo profile name for release builds.
+unify = true # Unify workspace features like Cargo's resolver.
+
+[build.flags]
+clippy = ["-Dwarnings"] # Extra rustc flags for clippy runs.
+doc = ["-Dwarnings"] # Extra rustdoc flags for documentation builds.
+doctest = [] # Extra rustdoc flags for doctests.
+rustc = [] # Extra rustc flags for every crate compilation.
+test = [] # Extra rustc flags for unit-test harnesses.
+
+[build.profile.release]
+codegenUnits = 1 # release profile: number of codegen units
+lto = "fat" # release profile: link-time optimization mode
+optLevel = 3 # release profile: optimization level (0-3, s, z)
+
+[build.toolchain]
+cargo = "cargo" # nixpkgs attribute path for cargo.
+clippy = "clippy" # nixpkgs attribute path for clippy.
+lld = "lld" # nixpkgs attribute path for lld.
+mold = "mold" # nixpkgs attribute path for mold.
+rustc = "rustc" # nixpkgs attribute path for rustc.
+stdenv = "stdenv" # nixpkgs attribute path for the C toolchain.
+
+[checks]
+enable = true # Generate workspace checks.
+profile = "dev" # Check graph mode: test-profile workspace crates (dev), every crate (cargo), or the release graph (release).
+
+[checks.bans]
+allow = [] # Package selectors permitted by the package ban check.
+deny = [] # Package selectors rejected by the package ban check.
+enable = true # Check package allowlists, denylists, and exceptions.
+exceptions = [] # Package selectors exempt from package ban rules.
+
+[checks.clippySuppressions]
+allow = ["clippy::too_many_arguments", "clippy::too_many_lines"] # Exact Clippy lint names permitted in inline allow attributes.
+enable = true # Enable the inline Clippy suppression policy check.
+
+[checks.codeHealth]
+baseline = ".bloomery/code-health-summary.json" # Repository-relative reviewed code health snapshot.
+crateSlocLimit = 1500 # Soft production SLOC limit per crate used by code health scoring.
+cyclomaticLimit = 10 # Soft cyclomatic complexity limit used by code health scoring.
+duplicateMinTokens = 64 # Minimum exact token window considered a duplicate (at least 16).
+duplicationFreeRatio = 0.02 # Duplicate body-token fraction without a scoring penalty (0–1).
+enable = true # Enable the source-based code health check.
+functionTokensLimit = 250 # Soft callable body token limit used by code health scoring.
+maxCrateSloc = 5000 # Hard production SLOC limit per crate.
+maxCyclomatic = 40 # Hard per-callable cyclomatic complexity limit.
+maxFunctionTokens = 1000 # Hard per-callable body token limit.
+maxNesting = 8 # Hard per-callable branch nesting limit.
+maxRegression = 2 # Maximum allowed decrease from a reviewed score (0–100 points).
+minCrateScore = 80 # Minimum passing code health score for each crate (0–100).
+minWorkspaceScore = 80 # Minimum passing aggregate code health score (0–100).
+nestingLimit = 4 # Soft branch nesting limit used by code health scoring.
+
+[checks.codeHealth.weights]
+complexity = 25 # Relative code health score weight for cyclomatic complexity.
+crateSize = 30 # Relative code health score weight for production SLOC per crate.
+duplication = 15 # Relative code health score weight for duplicated code.
+nesting = 10 # Relative code health score weight for branch nesting.
+size = 20 # Relative code health score weight for callable body size.
+
+[checks.crates]
+enable = true # Generate per-crate type-check entries.
+
+[checks.licenses]
+allow = [] # SPDX license IDs or license-with-exception pairs allowed by the license check.
+deny = [] # SPDX license IDs or license-with-exception pairs rejected by the license check.
+enable = true # Check dependency license expressions against compatibility policy.
+exceptions = [] # Package selectors exempt from global license allow and deny rules.
+
+[checks.lockFreshness]
+enable = true # Fail evaluation when bloomery.lock is out of date.
+
+[checks.noDefaultFeatures]
+enable = false # Require default features to be disabled on workspace dependencies.
+
+[checks.packages]
+enable = true # Include binary and library build checks.
+
+[checks.specifications]
+enable = false # Enable static specification validation checks.
+maxRequirementsPerTest = 5 # Maximum distinct automated requirement IDs per authored validating site.
+maxTestsPerRequirement = 5 # Maximum distinct authored validating sites per automated requirement.
+maxUntiedTests = 0 # Maximum nonexempt untied sites in deny mode.
+requireCrateOwnership = false # Require an ownership mapping or exclusion for every selected workspace crate.
+untiedTests = "report" # Untied-test policy: off, advisory reporting, or a failing budget.
+
+[checks.unusedDependencies]
+enable = true # Enable the unused Cargo dependency check.
+exceptions = [] # Dependency package names exempt from the unused dependency check.
+
+[checks.vulnerabilities]
+ignoreAdvisories = [] # RustSec advisory IDs suppressed by vulnerability checks.
+
+[checks.vulnerabilities.informational]
+notice = "warn" # Outcome for other informational advisories.
+unknown = "warn" # Outcome for unrecognized advisory categories.
+unmaintained = "warn" # Outcome for unmaintained-crate advisories.
+unsound = "warn" # Outcome for unsoundness advisories.
+
+[checks.workspaceDependencies]
+enable = true # Validate workspace dependency declarations.
+
+[devShell]
+enable = true # Generate the default development shell.
+packages = ["just", "nodejs"] # Additional nixpkgs packages in the development shell.
+shellHook = "" # Shell hook run when entering the development shell.
+
+[formatters]
+
+[formatters.alejandra]
+after = [] # Formatters that must run before the Alejandra formatter.
+before = [] # Formatters that must run after the Alejandra formatter.
+enable = true # Enable the Alejandra Nix formatter.
+
+[formatters.deadnix]
+after = [] # Formatters that must run before the deadnix formatter.
+before = [] # Formatters that must run after the deadnix formatter.
+enable = true # Enable the deadnix Nix formatter.
+
+[formatters.rustfmt]
+after = [] # Formatters that must run before the rustfmt formatter.
+before = [] # Formatters that must run after the rustfmt formatter.
+enable = true # Enable the rustfmt formatter.
+
+[formatters.shellcheck]
+after = [] # Formatters that must run before the shellcheck formatter.
+before = [] # Formatters that must run after the shellcheck formatter.
+enable = true # Enable the shellcheck formatter.
+
+[formatters.shfmt]
+after = [] # Formatters that must run before the shfmt formatter.
+before = [] # Formatters that must run after the shfmt formatter.
+enable = true # Enable the shfmt shell formatter.
+
+[formatters.taplo]
+after = [] # Formatters that must run before the taplo formatter.
+before = [] # Formatters that must run after the taplo formatter.
+enable = true # Enable the taplo TOML formatter.
+
+[formatters.toml-sort]
+after = [] # Formatters that must run before the toml-sort formatter.
+before = [] # Formatters that must run after the toml-sort formatter.
+enable = true # Enable the toml-sort TOML formatter.
+
+[formatters.yamlfmt]
+after = [] # Formatters that must run before the yamlfmt formatter.
+before = [] # Formatters that must run after the yamlfmt formatter.
+enable = true # Enable the yamlfmt formatter.
+
+[scanners]
+
+[scanners.nix]
+enabled = true # Enable the static Nix evidence scanner.
+paths = ["*.nix", "crates/**/*.nix"] # Repository-relative globs for Nix source files.
+testPaths = ["**/*.test.nix"] # Repository-relative globs for Nix test files discovered as candidates.
+
+[scanners.playwright]
+enabled = false # Enable the Playwright evidence scanner.
+paths = ["packages/playwright/**/*.spec.ts", "packages/playwright/**/*.test.ts"] # Repository-relative globs for Playwright test files.
+tag_prefix = "@bloomery:" # Tag prefix that marks Bloomery metadata in Playwright tests.
+
+[scanners.rust]
+enabled = true # Enable the Rust evidence scanner.
+paths = ["crates/**/*.rs"] # Repository-relative globs for Rust source files.
+
+[specs]
+dir = "specs" # Directory inside .bloomery/ that holds the specification tree.
