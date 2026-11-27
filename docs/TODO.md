@@ -4,8 +4,20 @@ The working queue, highest payoff first. Detail and history live in `V2_ROADMAP.
 named in brackets) and the scorecards in `V2_REALISM.md`. Accuracy comes first for now:
 slower is fine. Speed is item 15.
 
-First, as of 25 November 2026: the viewer, names, the sky above one galaxy, mountains,
-rivers and other worlds; then the climate and speed items below them.
+## Where to pick up (27 November 2026)
+The last Earth A/B run (`scripts/real-earth/ab.sh`, page in `V2_REALISM` → *Rain*) puts the
+largest remaining gaps in the model's own circulation. In order:
+1. **The circulation's divergence** (item 5): the model's winds converge 2.5–3× as hard as
+   ERA's at 850 hPa, and into the desert heat lows. Fixing it unlocks moisture flux
+   convergence (item 7), the biggest rain gain measured (land rain correlation 0.65 → 0.74
+   on observed winds), and with it the land/sea rain split and too many big rivers (item 11).
+2. **A Walker circulation** (item 7): East Africa and the Arabian Sea rise where Earth's air
+   sinks.
+3. **Temperatures that follow** (item 4): dry subtropical land 5–9 °C cold, tropical
+   highlands' seasons too wide, Lima warm, Reykjavik cold on the model's winds.
+4. **Inland mountains** (item 10) and **river routing** (item 11).
+5. **Bloomery all the way** (item 18), after `nix flake lock` and a first `bloomery check`.
+Items further down that say "done" are kept as history.
 
 ## 18. Bloomery all the way [proposal 0002]
 The flake is a Bloomery workspace (a33f6a1), but with its opinions turned down. Take them all:
@@ -130,6 +142,10 @@ Languages and cultures in `geoforge-names`.
 - Some sutures as sag basins rather than belts (the Amazon).
 - Island arcs maturing to 2–2.5 km.
 - Great escarpments (optional).
+- Mountains away from plate edges: on PB2002 plates the Rockies average 190 m (observed
+  1720), the Colorado Plateau 255 (2010), the Brazilian highlands 120 (770) and the East
+  African plateau 600 (1260); land above 1 km is 3% of the surface (observed 7%). Uplift
+  comes only at plate boundaries (flat-slab and intraplate uplift, plateaus).
 
 ## 11. Rivers and lakes — partly done (OpenSpec `basins-swells-and-dying-rivers`)
 - Done: basins near Earth's sizes (the five largest drain 19% of land, Earth 14%; was 28%);
@@ -140,6 +156,9 @@ Languages and cultures in `geoforge-names`.
 - Breach the lowest pass instead of filling.
 - The wetland rule keys on discharge, so every big-river cell is wetland.
 - The Great Basin drains to the sea.
+- On Earth's own map (20 km ETOPO1) gorges block big rivers: the Congo carries 3 000–3 700
+  m³/s (observed 41 000) and the Yangtze 2 500–3 000 (30 000) even on observed rain; the
+  Nile 6 500–7 700 (2 800) and the Ob far too much.
 
 ## 14. Other worlds — done but for giants' storms (OpenSpec `systems-and-worlds`, `other-worlds-2`)
 Done: brown dwarfs (a fifth of systems, cooling, M/L/T/Y); planets of wide companions;
@@ -241,12 +260,24 @@ Still needed:
 - the Southern Hemisphere's continental ranges, 5–11 °C too wide at 20–50°S (Australia,
   southern Africa, Argentina; before this change too);
 - Greenland's top, whose range is 51 °C on observed winds (observed 27).
+- Dry subtropical land is cold: Riyadh 19.9 °C on the model's winds, 22.3 on observed winds
+  (observed 26.5), Tehran 9.0 / 11.6 (18.5); on observed temperature and rain the
+  derived layers get Riyadh right, so it is the climate's own temperature.
+- Tropical highlands' seasons are too wide: the Brazilian highlands swing 14 °C (observed
+  4), the Altiplano 19 (6). The Cerrado leaves the tropical classes for it (a known gap in
+  `known_earth_climate`).
+- Lima 28 °C on the model's winds (observed 19): no stratus deck, a weak Humboldt current.
+- Reykjavik −4.6 °C on the model's winds (1.8 on observed winds, observed 4.7): too little
+  Atlantic air reaches it.
 
 ## 5. Monsoons and storm tracks [8e]
 - Done: the monsoon's pull follows a smooth heat low (three box blurs, close to a Gaussian,
   and a pull that eases off instead of a hard cap), so its winds no longer come in rectangles
   with straight edges; the summer inflow and winter outflow blend across the equator instead
   of meeting at a seam; an equinox or a locked world has no monsoon.
+- The divergence the winds carry is 2.5–3× ERA's at 850 hPa and correlates only 0.3–0.5
+  with it; the monsoon inflow converges into the desert heat lows. Fix this before the
+  climate takes moisture convergence from the winds (item 7).
 - The winter storm track: on observed winds the climate gives Phoenix 233 mm, the Great Basin
   436 and Tehran 339 (GPCP 344, 314, 446); on the model's winds 468, 626 and 548. The
   model's January winds over the dry subtropical land are 5 m/s westerlies where ERA has
@@ -329,6 +360,8 @@ Still needed:
 - The Brazil Current runs ~3 °C warm; the Kuroshio is slightly warm.
 - Upwelling that comes in one season (Somalia, Oman) cannot show in an annual anomaly.
 - Cyclones ignore wind shear, so the South Atlantic gets them.
+- On the model's winds the SST pattern correlates 0.49 with observed (0.97 on observed
+  winds): the Canary current runs −5.6 K (observed −3.0).
 
 ## 9. Bugs seen on Thumi — done
 - The straight-edged wedge in the ocean-floor age map was a plate with no ridge, aged from

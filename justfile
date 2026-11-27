@@ -35,6 +35,16 @@ sync:
 fmt:
     cargo fmt --all
 
+# A quick world (1024×512, about a minute): just quick 7
+quick seed="42": build
+    ./target/release/geoforge new {{world_dir}}/quick-{{seed}} --seed {{seed}} --width 1024
+    ./target/release/geoforge generate {{world_dir}}/quick-{{seed}} --render
+
+# A world from a real body (earth, mars, venus, mercury, moon, titan, europa, gas_giant, ice_giant): just body mars
+body name="earth" width="1024": build
+    ./target/release/geoforge new {{world_dir}}/{{name}} --archetype {{name}} --width {{width}}
+    ./target/release/geoforge generate {{world_dir}}/{{name}} --render
+
 # Make a world from a seed and generate every layer with previews: just world 42
 world seed="42" *flags="": build
     ./target/release/geoforge new {{world_dir}}/world-{{seed}} --seed {{seed}} {{flags}}
@@ -63,6 +73,22 @@ sky dir day="0": build
 # A report page with every map and its key, places, weather and sky: just report worlds/world-42
 report dir *flags="": build
     ./target/release/geoforge report {{dir}} {{flags}}
+
+# A world's numbers with Earth's beside them: just stats worlds/world-42
+stats dir: build
+    ./target/release/geoforge stats {{dir}}
+
+# What generate would do and why, and where each product comes from: just status worlds/world-42
+status dir: build
+    ./target/release/geoforge plan {{dir}}
+    ./target/release/geoforge status {{dir}}
+
+# Needs scripts/real-earth/fetch.sh's data in real-earth-data/, NCAR GeoCAT's GPCP and
+# ERA-Interim 2 m files in obs-data/, and Python with numpy, scipy, xarray, netCDF4, pillow
+# (scripts/real-earth/README.md). The page is OUT/page/index.html.
+# The Earth A/B page, every layer on Earth's real inputs beside the observed one: just ab
+ab out="target/earth-ab" width="1024": build
+    GEOFORGE=$PWD/target/release/geoforge scripts/real-earth/ab.sh {{out}} real-earth-data obs-data {{width}}
 
 # Export a layer to edit: just edit worlds/world-42 rough_elevation
 edit dir product: build
